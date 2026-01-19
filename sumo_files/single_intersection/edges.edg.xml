@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edges>
+  <!-- inbound to junction -->
+  <edge id="W2J" from="nW" to="J0" numLanes="1" speed="13.9"/>
+  <edge id="E2J" from="nE" to="J0" numLanes="1" speed="13.9"/>
+  <edge id="S2J" from="nS" to="J0" numLanes="1" speed="13.9"/>
+  <edge id="N2J" from="nN" to="J0" numLanes="1" speed="13.9"/>
+
+  <!-- outbound from junction -->
+  <edge id="J2E" from="J0" to="nE" numLanes="1" speed="13.9"/>
+  <edge id="J2W" from="J0" to="nW" numLanes="1" speed="13.9"/>
+  <edge id="J2N" from="J0" to="nN" numLanes="1" speed="13.9"/>
+  <edge id="J2S" from="J0" to="nS" numLanes="1" speed="13.9"/>
+</edges>
