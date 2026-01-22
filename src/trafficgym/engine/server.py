@@ -82,8 +82,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             print(f"[Error]: {e.__str__()}")
             raise e
         finally:
-            run.close()
-            await q.put(None)
+            self.run_tasks.pop(run_id)
+            # run.close()
+            # await q.put(None)
 
 async def serve(host: str = "127.0.0.1", port: int = 50051):
     server = grpc.aio.server()

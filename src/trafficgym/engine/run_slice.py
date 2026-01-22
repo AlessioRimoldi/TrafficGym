@@ -7,7 +7,7 @@ from ..api import engine_pb2, engine_pb2_grpc
 
 def raise_async_except(task):
     if task.cancelled():
-        logging.error(f"Task {task.get_name()} was cancelled")
+        logging.error(f"{task.get_name()} was cancelled")
     elif task.exception():
         try:
             task.result()
@@ -30,9 +30,10 @@ async def main():
         ))
         run_id = cr.run_id
 
-        await stub.StartRun(engine_pb2.StartRunRequest(run_id=run_id, max_steps=200))
+        await stub.StartRun(engine_pb2.StartRunRequest(run_id=run_id, max_steps=20))
 
         async def apply_once():
+            await asyncio.sleep(1) # wait for run to end
             print('Setting tls to 1')
             await stub.ApplyActions(engine_pb2.ActionBundle(
                 run_id=run_id,
@@ -41,7 +42,8 @@ async def main():
                     engine_pb2.Action(tls_set_phase=engine_pb2.TlsSetPhase(tls_id=tls_id, phase_index=1))
                 ],
             ))
-            await asyncio.sleep(1)
+            await stub.StartRun(engine_pb2.StartRunRequest(run_id=run_id, max_steps=50))
+            await asyncio.sleep(1) # wait for run to end
             print('Setting tls to 0')
             await stub.ApplyActions(engine_pb2.ActionBundle(
                 run_id=run_id,
@@ -50,6 +52,7 @@ async def main():
                     engine_pb2.Action(tls_set_phase=engine_pb2.TlsSetPhase(tls_id=tls_id, phase_index=0))
                 ],
             ))
+            await stub.StartRun(engine_pb2.StartRunRequest(run_id=run_id, max_steps=30))
 
         asyncio.create_task(apply_once()).add_done_callback(raise_async_except)
 
