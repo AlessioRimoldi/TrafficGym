@@ -11,6 +11,8 @@ else:
     sys.exit("please declare environment variable 'SUMO_HOME'")
 
 import libsumo
+import traci
+from typing import Literal
 
 @dataclass
 class RunConfig:
@@ -46,6 +48,7 @@ class RunState:
                 self.started = False
 
     def apply_tls_set_phase(self, tls_id: str, phase_index: int):
+        print(f'[INFO] Setting tls to {phase_index}')
         libsumo.trafficlight.setPhase(tls_id, int(phase_index))
 
     def tick(self) -> Tuple[int, float, Dict[str, float]]:
@@ -64,9 +67,12 @@ class RunState:
         if n > 0:
             mean_speed /= n
 
+        tlsStateIndex = float(libsumo.trafficlight.getPhase('TL0'))
+
         metrics = {
-            "sim.remaining_veh": remaining,
-            "edges.mean_speed_mps": mean_speed,
+            # "sim.remaining_veh": remaining,
+            # "edges.mean_speed_mps": mean_speed,
+            "tlsState": tlsStateIndex
         }
         self.last_metrics = metrics
         return self.step, sim_time_s, metrics

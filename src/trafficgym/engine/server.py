@@ -5,7 +5,14 @@ from typing import Dict
 import grpc
 
 from .kernel import RunConfig, RunState
-from trafficgym.api import engine_pb2, engine_pb2_grpc
+from ..api import engine_pb2, engine_pb2_grpc
+
+def raise_async_except(task):
+    if task.exception():
+        try:
+            task.result()
+        except Exception as e:
+            raise e
 
 class EngineService(engine_pb2_grpc.EngineServiceServicer):
     def __init__(self):
@@ -31,6 +38,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         if run_id not in self.run_tasks:
             task = asyncio.create_task(self._run_loop(run_id, int(request.max_steps or 1000)))
             self.run_tasks[run_id] = task
+            task.add_done_callback(raise_async_except)
         return engine_pb2.StartRunResponse(run_id=run_id)
 
     async def ApplyActions(self, request, context):
@@ -70,6 +78,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 )
                 await q.put(frame)
                 await asyncio.sleep(0)
+        except Exception as e:
+            print(f"[Error]: {e.__str__()}")
+            raise e
         finally:
             run.close()
             await q.put(None)
