@@ -44,13 +44,18 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return engine_pb2.RunResponse(run_id=run_id)
 
     async def CloseRun(self, request, context):
+        print("Receieved close request")
         run_id = request.run_id
         if run_id not in self.runs:
             await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+        run = self.runs[run_id]
+
         if run_id in self.run_tasks:
             print(f"Closing Run {run_id}, despite running task for that run")
-        self.runs[run_id].close()
+        run.close()
+        run.started = False
         await self.telemetry_queues[run_id].put(None)
+        return engine_pb2.CloseRunResponse(run_id=run_id)
 
     async def ApplyActions(self, request, context):
         run_id = request.run_id

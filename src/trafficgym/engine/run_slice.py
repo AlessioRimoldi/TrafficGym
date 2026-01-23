@@ -56,9 +56,16 @@ async def main():
 
         stream = stub.StreamTelemetry(engine_pb2.StreamTelemetryRequest(run_id=run_id))
         try:
+            # ended = False
             async for frame in stream:
-                kv = {m.key: m.value for m in frame.metrics}
-                print(frame.step, frame.sim_time_s, kv)
+                if frame is not None:
+                    kv = {m.key: m.value for m in frame.metrics}
+                    print(frame.step, frame.sim_time_s, kv)
+                    # if not ended and 'sim.remaining_veh' in kv and kv.get('sim.remaining_veh') == 0:
+                    #     await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
+                    #     action.cancel()
+                    #     ended = True
+                    #     print("Terminating run, all vehicles have left the simulation.")
         except Exception as e:
             print(f"[ERROR]: {e.__str__()}")
 
