@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x65ngine.proto\x12\x0esumo.engine.v1\"&\n\x08KeyValue\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01\"m\n\x0eTelemetryFrame\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\x12\n\nsim_time_s\x18\x03 \x01(\x01\x12)\n\x07metrics\x18\x04 \x03(\x0b\x32\x18.sumo.engine.v1.KeyValue\"2\n\x0bTlsSetPhase\x12\x0e\n\x06tls_id\x18\x01 \x01(\t\x12\x13\n\x0bphase_index\x18\x02 \x01(\x05\"I\n\x06\x41\x63tion\x12\x34\n\rtls_set_phase\x18\x01 \x01(\x0b\x32\x1b.sumo.engine.v1.TlsSetPhaseH\x00\x42\t\n\x07payload\"U\n\x0c\x41\x63tionBundle\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\'\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\x16.sumo.engine.v1.Action\"J\n\x08\x41rtifact\x12\x13\n\x0b\x61rtifact_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x0b\n\x03uri\x18\x03 \x01(\t\x12\x0e\n\x06sha256\x18\x04 \x01(\t\"U\n\x10\x43reateRunRequest\x12\x14\n\x0csumocfg_path\x18\x01 \x01(\t\x12\x13\n\x0bsumo_binary\x18\x02 \x01(\t\x12\x16\n\x0estep_length_ms\x18\x03 \x01(\x05\"V\n\x11\x43reateRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x31\n\x0finput_artifacts\x18\x02 \x03(\x0b\x32\x18.sumo.engine.v1.Artifact\"4\n\x0fStartRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tmax_steps\x18\x02 \x01(\x03\"\"\n\x10StartRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"&\n\x14\x41pplyActionsResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"(\n\x16StreamTelemetryRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t2\xe1\x02\n\rEngineService\x12P\n\tCreateRun\x12 .sumo.engine.v1.CreateRunRequest\x1a!.sumo.engine.v1.CreateRunResponse\x12M\n\x08StartRun\x12\x1f.sumo.engine.v1.StartRunRequest\x1a .sumo.engine.v1.StartRunResponse\x12R\n\x0c\x41pplyActions\x12\x1c.sumo.engine.v1.ActionBundle\x1a$.sumo.engine.v1.ApplyActionsResponse\x12[\n\x0fStreamTelemetry\x12&.sumo.engine.v1.StreamTelemetryRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x65ngine.proto\x12\x0esumo.engine.v1\"&\n\x08KeyValue\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01\"m\n\x0eTelemetryFrame\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\x12\n\nsim_time_s\x18\x03 \x01(\x01\x12)\n\x07metrics\x18\x04 \x03(\x0b\x32\x18.sumo.engine.v1.KeyValue\"2\n\x0bTlsSetPhase\x12\x0e\n\x06tls_id\x18\x01 \x01(\t\x12\x13\n\x0bphase_index\x18\x02 \x01(\x05\"I\n\x06\x41\x63tion\x12\x34\n\rtls_set_phase\x18\x01 \x01(\x0b\x32\x1b.sumo.engine.v1.TlsSetPhaseH\x00\x42\t\n\x07payload\"U\n\x0c\x41\x63tionBundle\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\'\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\x16.sumo.engine.v1.Action\"J\n\x08\x41rtifact\x12\x13\n\x0b\x61rtifact_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x0b\n\x03uri\x18\x03 \x01(\t\x12\x0e\n\x06sha256\x18\x04 \x01(\t\"U\n\x10\x43reateRunRequest\x12\x14\n\x0csumocfg_path\x18\x01 \x01(\t\x12\x13\n\x0bsumo_binary\x18\x02 \x01(\t\x12\x16\n\x0estep_length_ms\x18\x03 \x01(\x05\"V\n\x11\x43reateRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x31\n\x0finput_artifacts\x18\x02 \x03(\x0b\x32\x18.sumo.engine.v1.Artifact\"/\n\nRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tmax_steps\x18\x02 \x01(\x03\"\x1d\n\x0bRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"!\n\x0f\x43loseRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\"\n\x10\x43loseRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"&\n\x14\x41pplyActionsResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"(\n\x16StreamTelemetryRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t2\xa1\x03\n\rEngineService\x12P\n\tCreateRun\x12 .sumo.engine.v1.CreateRunRequest\x1a!.sumo.engine.v1.CreateRunResponse\x12>\n\x03Run\x12\x1a.sumo.engine.v1.RunRequest\x1a\x1b.sumo.engine.v1.RunResponse\x12M\n\x08\x43loseRun\x12\x1f.sumo.engine.v1.CloseRunRequest\x1a .sumo.engine.v1.CloseRunResponse\x12R\n\x0c\x41pplyActions\x12\x1c.sumo.engine.v1.ActionBundle\x1a$.sumo.engine.v1.ApplyActionsResponse\x12[\n\x0fStreamTelemetry\x12&.sumo.engine.v1.StreamTelemetryRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -47,14 +47,18 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CREATERUNREQUEST']._serialized_end=558
   _globals['_CREATERUNRESPONSE']._serialized_start=560
   _globals['_CREATERUNRESPONSE']._serialized_end=646
-  _globals['_STARTRUNREQUEST']._serialized_start=648
-  _globals['_STARTRUNREQUEST']._serialized_end=700
-  _globals['_STARTRUNRESPONSE']._serialized_start=702
-  _globals['_STARTRUNRESPONSE']._serialized_end=736
-  _globals['_APPLYACTIONSRESPONSE']._serialized_start=738
-  _globals['_APPLYACTIONSRESPONSE']._serialized_end=776
-  _globals['_STREAMTELEMETRYREQUEST']._serialized_start=778
-  _globals['_STREAMTELEMETRYREQUEST']._serialized_end=818
-  _globals['_ENGINESERVICE']._serialized_start=821
-  _globals['_ENGINESERVICE']._serialized_end=1174
+  _globals['_RUNREQUEST']._serialized_start=648
+  _globals['_RUNREQUEST']._serialized_end=695
+  _globals['_RUNRESPONSE']._serialized_start=697
+  _globals['_RUNRESPONSE']._serialized_end=726
+  _globals['_CLOSERUNREQUEST']._serialized_start=728
+  _globals['_CLOSERUNREQUEST']._serialized_end=761
+  _globals['_CLOSERUNRESPONSE']._serialized_start=763
+  _globals['_CLOSERUNRESPONSE']._serialized_end=797
+  _globals['_APPLYACTIONSRESPONSE']._serialized_start=799
+  _globals['_APPLYACTIONSRESPONSE']._serialized_end=837
+  _globals['_STREAMTELEMETRYREQUEST']._serialized_start=839
+  _globals['_STREAMTELEMETRYREQUEST']._serialized_end=879
+  _globals['_ENGINESERVICE']._serialized_start=882
+  _globals['_ENGINESERVICE']._serialized_end=1299
 # @@protoc_insertion_point(module_scope)

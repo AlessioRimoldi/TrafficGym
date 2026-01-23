@@ -31,15 +31,26 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self.telemetry_queues[run.run_id] = asyncio.Queue()
         return engine_pb2.CreateRunResponse(run_id=run.run_id, input_artifacts=[])
 
-    async def StartRun(self, request, context):
+    async def Run(self, request, context):
         run_id = request.run_id
         if run_id not in self.runs:
             await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
         if run_id not in self.run_tasks:
             task = asyncio.create_task(self._run_loop(run_id, int(request.max_steps or 1000)))
             self.run_tasks[run_id] = task
-            task.add_done_callback(raise_async_except)
-        return engine_pb2.StartRunResponse(run_id=run_id)
+            # task.add_done_callback(raise_async_except)
+            await task
+            raise_async_except(task)
+        return engine_pb2.RunResponse(run_id=run_id)
+
+    async def CloseRun(self, request, context):
+        run_id = request.run_id
+        if run_id not in self.runs:
+            await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+        if run_id in self.run_tasks:
+            print(f"Closing Run {run_id}, despite running task for that run")
+        self.runs[run_id].close()
+        await self.telemetry_queues[run_id].put(None)
 
     async def ApplyActions(self, request, context):
         run_id = request.run_id
@@ -50,6 +61,13 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             p = a.WhichOneof("payload")
             if p == "tls_set_phase":
                 run.apply_tls_set_phase(a.tls_set_phase.tls_id, a.tls_set_phase.phase_index)
+                frame = engine_pb2.TelemetryFrame(
+                    run_id=run_id, 
+                    step=self.runs[run_id].step,# EWWWWWWWWWWWW terrible code, will refactor
+                    sim_time_s=self.runs[run_id].step, # ditto
+                    metrics=[engine_pb2.KeyValue(key='TLS SET', value=float(a.tls_set_phase.phase_index))]
+                )
+                await self.telemetry_queues[run_id].put(frame)
         return engine_pb2.ApplyActionsResponse(run_id=run_id)
 
     async def StreamTelemetry(self, request, context):

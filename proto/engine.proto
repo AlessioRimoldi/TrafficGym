@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package sumo.engine.v1;
 
-message KeyValue{
+message KeyValue {
     string key = 1;
     double value = 2;
 }
@@ -49,13 +49,22 @@ message CreateRunResponse {
   repeated Artifact input_artifacts = 2;
 }
 
-message StartRunRequest {
+message RunRequest {
   string run_id = 1;
   int64 max_steps = 2;
 }
 
-message StartRunResponse {
+message RunResponse {
   string run_id = 1;
+}
+
+message CloseRunRequest {
+  string run_id = 1;
+}
+
+message CloseRunResponse {
+  string run_id = 1;
+  // maybe can return some analytics also?
 }
 
 message ApplyActionsResponse {
@@ -68,7 +77,8 @@ message StreamTelemetryRequest {
 
 service EngineService {
   rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
-  rpc StartRun(StartRunRequest) returns (StartRunResponse);
+  rpc Run(RunRequest) returns (RunResponse);
+  rpc CloseRun(CloseRunRequest) returns (CloseRunResponse);
   rpc ApplyActions(ActionBundle) returns (ApplyActionsResponse);
   rpc StreamTelemetry(StreamTelemetryRequest) returns (stream TelemetryFrame);
 }

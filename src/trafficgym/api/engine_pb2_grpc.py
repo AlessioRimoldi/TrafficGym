@@ -39,10 +39,15 @@ class EngineServiceStub(object):
                 request_serializer=engine__pb2.CreateRunRequest.SerializeToString,
                 response_deserializer=engine__pb2.CreateRunResponse.FromString,
                 _registered_method=True)
-        self.StartRun = channel.unary_unary(
-                '/sumo.engine.v1.EngineService/StartRun',
-                request_serializer=engine__pb2.StartRunRequest.SerializeToString,
-                response_deserializer=engine__pb2.StartRunResponse.FromString,
+        self.Run = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/Run',
+                request_serializer=engine__pb2.RunRequest.SerializeToString,
+                response_deserializer=engine__pb2.RunResponse.FromString,
+                _registered_method=True)
+        self.CloseRun = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/CloseRun',
+                request_serializer=engine__pb2.CloseRunRequest.SerializeToString,
+                response_deserializer=engine__pb2.CloseRunResponse.FromString,
                 _registered_method=True)
         self.ApplyActions = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/ApplyActions',
@@ -65,7 +70,13 @@ class EngineServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def StartRun(self, request, context):
+    def Run(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CloseRun(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -91,10 +102,15 @@ def add_EngineServiceServicer_to_server(servicer, server):
                     request_deserializer=engine__pb2.CreateRunRequest.FromString,
                     response_serializer=engine__pb2.CreateRunResponse.SerializeToString,
             ),
-            'StartRun': grpc.unary_unary_rpc_method_handler(
-                    servicer.StartRun,
-                    request_deserializer=engine__pb2.StartRunRequest.FromString,
-                    response_serializer=engine__pb2.StartRunResponse.SerializeToString,
+            'Run': grpc.unary_unary_rpc_method_handler(
+                    servicer.Run,
+                    request_deserializer=engine__pb2.RunRequest.FromString,
+                    response_serializer=engine__pb2.RunResponse.SerializeToString,
+            ),
+            'CloseRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.CloseRun,
+                    request_deserializer=engine__pb2.CloseRunRequest.FromString,
+                    response_serializer=engine__pb2.CloseRunResponse.SerializeToString,
             ),
             'ApplyActions': grpc.unary_unary_rpc_method_handler(
                     servicer.ApplyActions,
@@ -145,7 +161,7 @@ class EngineService(object):
             _registered_method=True)
 
     @staticmethod
-    def StartRun(request,
+    def Run(request,
             target,
             options=(),
             channel_credentials=None,
@@ -158,9 +174,36 @@ class EngineService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/sumo.engine.v1.EngineService/StartRun',
-            engine__pb2.StartRunRequest.SerializeToString,
-            engine__pb2.StartRunResponse.FromString,
+            '/sumo.engine.v1.EngineService/Run',
+            engine__pb2.RunRequest.SerializeToString,
+            engine__pb2.RunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CloseRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/CloseRun',
+            engine__pb2.CloseRunRequest.SerializeToString,
+            engine__pb2.CloseRunResponse.FromString,
             options,
             channel_credentials,
             insecure,

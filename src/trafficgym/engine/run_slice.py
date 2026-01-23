@@ -30,29 +30,27 @@ async def main():
         ))
         run_id = cr.run_id
 
-        await stub.StartRun(engine_pb2.StartRunRequest(run_id=run_id, max_steps=20))
-
         async def apply_once():
-            await asyncio.sleep(1) # wait for run to end
-            print('Setting tls to 1')
-            await stub.ApplyActions(engine_pb2.ActionBundle(
-                run_id=run_id,
-                step=0,
-                actions=[
-                    engine_pb2.Action(tls_set_phase=engine_pb2.TlsSetPhase(tls_id=tls_id, phase_index=1))
-                ],
-            ))
-            await stub.StartRun(engine_pb2.StartRunRequest(run_id=run_id, max_steps=50))
-            await asyncio.sleep(1) # wait for run to end
-            print('Setting tls to 0')
-            await stub.ApplyActions(engine_pb2.ActionBundle(
-                run_id=run_id,
-                step=0,
-                actions=[
-                    engine_pb2.Action(tls_set_phase=engine_pb2.TlsSetPhase(tls_id=tls_id, phase_index=0))
-                ],
-            ))
-            await stub.StartRun(engine_pb2.StartRunRequest(run_id=run_id, max_steps=30))
+            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_steps=20))
+            for i in range(50):
+                await stub.ApplyActions(engine_pb2.ActionBundle(
+                    run_id=run_id,
+                    step=0,
+                    actions=[
+                        engine_pb2.Action(tls_set_phase=engine_pb2.TlsSetPhase(tls_id=tls_id, phase_index=1))
+                    ],
+                ))
+                await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_steps=50))
+                await stub.ApplyActions(engine_pb2.ActionBundle(
+                    run_id=run_id,
+                    step=0,
+                    actions=[
+                        engine_pb2.Action(tls_set_phase=engine_pb2.TlsSetPhase(tls_id=tls_id, phase_index=0))
+                    ],
+                ))
+                await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_steps=30))
+
+            await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
 
         asyncio.create_task(apply_once()).add_done_callback(raise_async_except)
 
