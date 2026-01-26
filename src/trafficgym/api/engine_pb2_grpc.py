@@ -59,6 +59,16 @@ class EngineServiceStub(object):
                 request_serializer=engine__pb2.StreamTelemetryRequest.SerializeToString,
                 response_deserializer=engine__pb2.TelemetryFrame.FromString,
                 _registered_method=True)
+        self.Subscribe = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/Subscribe',
+                request_serializer=engine__pb2.SubscribeRequest.SerializeToString,
+                response_deserializer=engine__pb2.SubscribeResponse.FromString,
+                _registered_method=True)
+        self.Unsubscribe = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/Unsubscribe',
+                request_serializer=engine__pb2.UnsubscribeRequest.SerializeToString,
+                response_deserializer=engine__pb2.UnsubscribeResponse.FromString,
+                _registered_method=True)
 
 
 class EngineServiceServicer(object):
@@ -94,6 +104,18 @@ class EngineServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Subscribe(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Unsubscribe(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_EngineServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -121,6 +143,16 @@ def add_EngineServiceServicer_to_server(servicer, server):
                     servicer.StreamTelemetry,
                     request_deserializer=engine__pb2.StreamTelemetryRequest.FromString,
                     response_serializer=engine__pb2.TelemetryFrame.SerializeToString,
+            ),
+            'Subscribe': grpc.unary_unary_rpc_method_handler(
+                    servicer.Subscribe,
+                    request_deserializer=engine__pb2.SubscribeRequest.FromString,
+                    response_serializer=engine__pb2.SubscribeResponse.SerializeToString,
+            ),
+            'Unsubscribe': grpc.unary_unary_rpc_method_handler(
+                    servicer.Unsubscribe,
+                    request_deserializer=engine__pb2.UnsubscribeRequest.FromString,
+                    response_serializer=engine__pb2.UnsubscribeResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -258,6 +290,60 @@ class EngineService(object):
             '/sumo.engine.v1.EngineService/StreamTelemetry',
             engine__pb2.StreamTelemetryRequest.SerializeToString,
             engine__pb2.TelemetryFrame.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Subscribe(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/Subscribe',
+            engine__pb2.SubscribeRequest.SerializeToString,
+            engine__pb2.SubscribeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Unsubscribe(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/Unsubscribe',
+            engine__pb2.UnsubscribeRequest.SerializeToString,
+            engine__pb2.UnsubscribeResponse.FromString,
             options,
             channel_credentials,
             insecure,

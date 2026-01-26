@@ -1,11 +1,13 @@
 from __future__ import annotations
 import asyncio
 from typing import Dict
+from enum import Enum
 
 import grpc
 
 from .kernel import RunConfig, RunState
 from ..api import engine_pb2, engine_pb2_grpc
+from libsumo import DOMAINS
 
 def raise_async_except(task):
     if task.exception():
@@ -14,11 +16,80 @@ def raise_async_except(task):
         except Exception as e:
             raise e
 
+Domain = Enum("Domain", list(map(lambda x: x.__name__, DOMAINS)))
+
+class Subscription():
+    def __init__(self, domain: Domain, getterName: str, objectId: str | None = None, additionalParam: dict = {}, name: str | None = None):
+        self.name = name
+        self.domain = domain
+        self.getterName = getterName
+        self.objectId = objectId
+        self.additionalParam = additionalParam
+    
+    def fingerprint(self):
+        return f"{str(self.domain)}.{self.getterName}_{self.objectId}"
+    
+    def collect(self, run_state: RunState):
+        try:
+            collected = run_state.collectMetric(self.domain, self.getterName, self.objectId, self.additionalParam)
+        except Exception as e:
+            raise e
+            # return None
+        return collected
+        
+class SubscriptionManager():
+    subscriptions: dict[str, Subscription]
+    metrics: dict[str, list[any]]
+    def __init__(self, run_state: RunState, subscription_queues: list[asyncio.Queue]):
+        self.run_state = run_state
+        self.subscription_queues = subscription_queues
+
+        self.subscriptions = {}
+        self.metrics = {}
+
+        self.telemetryStep = 0
+
+    async def collect(self):
+        newMetrics = {}
+        for subscription in self.subscriptions.values():
+            collected = subscription.collect(self.run_state)
+
+            newMetrics[subscription.name or subscription.fingerprint()] = collected
+
+            history = self.metrics.get(subscription.fingerprint()) or []
+            history.append(collected)
+            self.metrics[subscription.fingerprint()] = history
+
+        q = self.subscription_queues[self.run_state.run_id]
+        frame = engine_pb2.TelemetryFrame(
+            run_id=self.run_state.run_id,
+            step=self.run_state.step,
+            sim_time_s=self.run_state.step, # temporary
+            metrics=[engine_pb2.KeyValue(key=k, value=float(v)) for k, v in newMetrics.items()],
+        )
+        await q.put(frame)
+
+    def subscribe(self, domain: Domain, getter_name: str, object_id: str | None = None, additional_params: dict = {}, name: str | None = None):
+        newSub = Subscription(domain, getter_name, object_id, additional_params, name)
+        if newSub.fingerprint() in self.subscriptions:
+            raise Exception("Subscription already exists")
+        
+        self.subscriptions[newSub.fingerprint()] = newSub
+        return newSub.name or newSub.fingerprint()
+
+    def unsubscribe(self, fingerprint):
+        if fingerprint not in self.subscriptions:
+            raise Exception("Unsubscribe failed")
+        
+        del self.subscriptions[fingerprint]
+
 class EngineService(engine_pb2_grpc.EngineServiceServicer):
     def __init__(self):
         self.runs: Dict[str, RunState] = {}
         self.telemetry_queues: Dict[str, asyncio.Queue] = {}
+        self.subscription_queues: Dict[str, asyncio.Queue] = {}
         self.run_tasks: Dict[str, asyncio.Task] = {}
+        self.subscription_manager: SubscriptionManager = {}
 
     async def CreateRun(self, request, context):
         cfg = RunConfig(
@@ -29,6 +100,11 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run = RunState(cfg)
         self.runs[run.run_id] = run
         self.telemetry_queues[run.run_id] = asyncio.Queue()
+        self.subscription_queues[run.run_id] = asyncio.Queue()
+
+        # self.subscription_manager = SubscriptionManager(run, self.subscription_queues)
+        self.subscription_manager = SubscriptionManager(run, self.telemetry_queues)
+
         return engine_pb2.CreateRunResponse(run_id=run.run_id, input_artifacts=[])
 
     async def Run(self, request, context):
@@ -75,11 +151,31 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 await self.telemetry_queues[run_id].put(frame)
         return engine_pb2.ApplyActionsResponse(run_id=run_id)
 
+    async def Subscribe(self, request, context):
+        additional_parameters = {p.name: p.value for p in request.additional_parameters}
+        fingerprint = self.subscription_manager.subscribe(request.domain, request.getter_name, request.object_id, additional_parameters, request.name)
+
+        return engine_pb2.SubscribeResponse(subscription_name_or_fingerprint=fingerprint)
+
+    async def Unsubscribe(self, request, context):
+        await context.abort(grpc.StatusCode.UNIMPLEMENTED, "unsubscription not implemented")
+
     async def StreamTelemetry(self, request, context):
         run_id = request.run_id
         if run_id not in self.telemetry_queues:
             await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
         q = self.telemetry_queues[run_id]
+        while True:
+            frame = await q.get()
+            if frame is None:
+                return
+            yield frame
+
+    async def StreamSubscriptions(self, request, context):
+        run_id = request.run_id
+        if run_id not in self.subscription_queues:
+            await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+        q = self.subscription_queues[run_id]
         while True:
             frame = await q.get()
             if frame is None:
@@ -93,6 +189,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             run.start(max_steps=max_steps)
             for _ in range(max_steps):
                 step, sim_time_s, metrics = run.tick()
+                await self.subscription_manager.collect()
                 frame = engine_pb2.TelemetryFrame(
                     run_id=run_id,
                     step=step,

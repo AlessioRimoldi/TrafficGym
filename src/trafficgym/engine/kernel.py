@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import sys, os
 from typing import Dict, List, Optional, Tuple
 import uuid
+from enum import Enum
 
 if 'SUMO_HOME' in os.environ:
     tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
@@ -11,8 +12,8 @@ else:
     sys.exit("please declare environment variable 'SUMO_HOME'")
 
 import libsumo
-import traci
-from typing import Literal
+
+Domain = Enum("Domain", list(map(lambda x: x.__name__, libsumo.DOMAINS)))
 
 @dataclass
 class RunConfig:
@@ -70,8 +71,27 @@ class RunState:
 
         metrics = {
             "sim.remaining_veh": remaining,
-            # "edges.mean_speed_mps": mean_speed,
-            "tlsState": tlsStateIndex
+            "edges.mean_speed_mps": mean_speed,
+            # "tlsState": tlsStateIndex
         }
         self.last_metrics = metrics
         return self.step, sim_time_s, metrics
+
+    def collectMetric(self, domain: Domain, getter_name: str, object_id: str, additional_param: dict):
+        domain_handle = getattr(libsumo, domain)
+        getterHandle = getattr(domain_handle, getter_name)
+
+        if object_id == '':
+            return getterHandle(**additional_param)
+        else:
+            return getterHandle(object_id, **additional_param)
+
+        # try:
+        #     return getterHandle()
+        # except:
+        #     try:
+        #         return getterHandle(objectId, additionalParam)
+        #     except Exception as e:
+        #         raise e
+                # return None
+        

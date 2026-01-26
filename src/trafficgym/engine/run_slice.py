@@ -25,14 +25,18 @@ async def main():
 
         cr = await stub.CreateRun(engine_pb2.CreateRunRequest(
             sumocfg_path=sumocfg_path,
-            sumo_binary="sumo",
+            sumo_binary="sumo-gui",
             step_length_ms=1000,
         ))
         run_id = cr.run_id
 
         async def apply_once():
+            await stub.Subscribe(engine_pb2.SubscribeRequest(run_id=run_id, domain="trafficlight", getter_name="getPhase", object_id=tls_id))
+            await stub.Subscribe(engine_pb2.SubscribeRequest(run_id=run_id, domain="lane", getter_name="getLastStepVehicleNumber", object_id=':J0_0_0'))
+            # await stub.Subscribe(engine_pb2.SubscribeRequest(run_id=run_id, domain="vehicle", getter_name="getIDList"))
+            # await stub.Subscribe(engine_pb2.SubscribeRequest(name="My Favorite Traffic Signal", run_id=run_id, domain="trafficlight", getter_name="getPhase", object_id=tls_id))
             await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_steps=20))
-            for i in range(50):
+            for i in range(20):
                 await stub.ApplyActions(engine_pb2.ActionBundle(
                     run_id=run_id,
                     step=0,
