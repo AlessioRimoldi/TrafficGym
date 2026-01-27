@@ -38,11 +38,16 @@ class Subscription:
         additional_param: dict | None = None,
         name: str | None = None,
     ):
-        self.name = name
+        self.__name = name
         self.domain = domain
         self.getter_name = getter_name
         self.object_id = object_id
-        self.additionalParam = additional_param or {}
+        self.additional_param = additional_param or {}
+
+    @property
+    def name(self):
+        """Returns the name of the subscription if set, otherwise the fingerprint"""
+        return self.__name or self.fingerprint()
 
     def fingerprint(self):
         return f"{str(self.domain)}.{self.getter_name}_{self.object_id}"
@@ -62,7 +67,7 @@ class Subscription:
                 self.domain,
                 self.getter_name,
                 self.object_id,
-                self.additionalParam,
+                self.additional_param,
             )
         except AttributeError as e:
             raise InvalidGetter("Unknown getter") from e
@@ -99,7 +104,7 @@ class SubscriptionManager:
             except Exception as e:
                 raise e
 
-            self.newMetrics[subscription.name or subscription.fingerprint()] = (
+            self.newMetrics[subscription.name] = (
                 collected
             )
 
@@ -150,7 +155,7 @@ class SubscriptionManager:
             raise Exception("Subscription already exists")
 
         self.subscriptions[newSub.fingerprint()] = newSub
-        return newSub.name or newSub.fingerprint()
+        return newSub.name
 
     def unsubscribe(self, fingerprint):
         if fingerprint not in self.subscriptions:
@@ -311,9 +316,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     errors = []
                     for sub, exception in failed_getters_and_exceptions:
                         errors.append(engine_pb2.KeyValue(
-                            key=f"Failed to collect for subscription {sub.name or sub.fingerprint()}",
+                            key=f"Failed to collect for {sub.name}",
                             string_value=f"{exception}: {exception.__cause__}"
                         ))
+                        logging.warning(f"Subscription collection failed for {sub.name}")
 
                     frame = engine_pb2.TelemetryFrame(
                         run_id=run_id,
