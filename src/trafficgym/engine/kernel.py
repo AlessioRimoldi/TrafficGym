@@ -4,12 +4,14 @@ import sys, os
 from typing import Dict, List, Optional, Tuple
 import uuid
 from enum import Enum
+import logging
 
-if 'SUMO_HOME' in os.environ:
-    tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
-    sys.path.append(tools)        
-else:   
-    sys.exit("please declare environment variable 'SUMO_HOME'")
+if "SUMO_HOME" in os.environ:
+    tools = os.path.join(os.environ["SUMO_HOME"], "tools")
+    sys.path.append(tools)
+else:
+    logging.critical("please declare environment variable 'SUMO_HOME'")
+    sys.exit(1)
 
 import libsumo
 
@@ -20,6 +22,7 @@ class RunConfig:
     sumocfg_path: str
     sumo_binary: str
     step_length_ms: int
+
 
 class RunState:
     def __init__(self, cfg: RunConfig):
@@ -34,7 +37,13 @@ class RunState:
     def start(self, max_steps: int):
         if self.started:
             return
-        cmd = [self.cfg.sumo_binary, "-c", self.cfg.sumocfg_path, "--step-length", str(self.cfg.step_length_ms / 1000.0)]
+        cmd = [
+            self.cfg.sumo_binary,
+            "-c",
+            self.cfg.sumocfg_path,
+            "--step-length",
+            str(self.cfg.step_length_ms / 1000.0),
+        ]
         libsumo.start(cmd)
         self.edge_ids = list(libsumo.edge.getIDList())
         self.started = True
@@ -67,7 +76,7 @@ class RunState:
         if n > 0:
             mean_speed /= n
 
-        tlsStateIndex = float(libsumo.trafficlight.getPhase('TL0'))
+        tlsStateIndex = float(libsumo.trafficlight.getPhase("TL0"))
 
         metrics = {
             "sim.remaining_veh": remaining,
@@ -77,11 +86,17 @@ class RunState:
         self.last_metrics = metrics
         return self.step, sim_time_s, metrics
 
-    def collectMetric(self, domain: Domain, getter_name: str, object_id: str, additional_param: dict):
+    def collectMetric(
+        self,
+        domain: Domain,
+        getter_name: str,
+        object_id: str,
+        additional_param: dict,
+    ):
         domain_handle = getattr(libsumo, domain)
         getterHandle = getattr(domain_handle, getter_name)
 
-        if object_id == '':
+        if object_id == "":
             return getterHandle(**additional_param)
         else:
             return getterHandle(object_id, **additional_param)
@@ -93,5 +108,4 @@ class RunState:
         #         return getterHandle(objectId, additionalParam)
         #     except Exception as e:
         #         raise e
-                # return None
-        
+        # return None
