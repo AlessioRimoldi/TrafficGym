@@ -122,7 +122,7 @@ async def main():
             engine_pb2.StreamRequest(run_id=run_id)
         )
 
-        async def handle_stream(stream):
+        async def handle_stream(stream, prefix=''):
             async for frame in stream:
                 kv = {}
                 for m in frame.metrics:
@@ -133,12 +133,12 @@ async def main():
                         kv[m.key] = m.double_value
 
                 # print('T: ', frame.step, frame.sim_time_s, kv)
-                print('T: ', frame.step, kv)
+                print(prefix, frame.step, kv)
 
         try:
             await asyncio.gather(
-                handle_stream(telemetry_stream),
-                handle_stream(subscription_stream)
+                handle_stream(telemetry_stream, 'T: '),
+                handle_stream(subscription_stream, 'S: ')
             )
         except Exception as e:
             logging.error(str(e))
