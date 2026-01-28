@@ -23,9 +23,19 @@ message TlsSetPhase {
   int32 phase_index = 2;
 }
 
+message GenericSetter {
+  string domain = 1;
+  string setter_name = 2;
+  string object_id = 3;
+  string value = 4;
+  repeated Parameter additional_parameters = 5;
+}
+
 message Action {
+  reserved 1;
+  reserved "tls_set_phase";
   oneof payload {
-    TlsSetPhase tls_set_phase = 1;
+    GenericSetter setter = 2;
   }
 }
 

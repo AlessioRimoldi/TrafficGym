@@ -2,7 +2,6 @@ from __future__ import annotations
 import asyncio
 from typing import Dict
 from enum import Enum
-import logging
 
 import grpc
 
@@ -10,7 +9,10 @@ from .kernel import RunConfig, RunState
 from ..api import engine_pb2, engine_pb2_grpc
 from libsumo import DOMAINS
 
-class InvalidGetter(Exception):
+import logging
+
+
+class InvalidGetterError(Exception):
     def __init__(self, message_or_exception: str | Exception):
         if isinstance(message_or_exception, Exception):
             self.original = message_or_exception
@@ -20,6 +22,7 @@ class InvalidGetter(Exception):
             message = message_or_exception
 
         super().__init__(message)
+
 
 def raise_async_except(task, context):
     if task.exception() is not None:
@@ -54,26 +57,26 @@ class Subscription:
 
     def collect(self, run_state: RunState):
         if self.getter_name.startswith("_"):
-            raise InvalidGetter(
+            raise InvalidGetterError(
                 "Dunder names are blocked from being collected."
             )
-        if not self.getter_name.startswith('get'):
-            raise InvalidGetter(
+        if not self.getter_name.startswith("get"):
+            raise InvalidGetterError(
                 "Collection only possible for functions beginning with 'get'."
             )
-        
+
         try:
-            collected = run_state.collectMetric(
+            collected = run_state.collect_metric(
                 self.domain,
                 self.getter_name,
                 self.object_id,
                 self.additional_param,
             )
         except AttributeError as e:
-            raise InvalidGetter("Unknown getter") from e
+            raise InvalidGetterError("Unknown getter") from e
             # in future, we can check the getter and name exist before calling
             # and also send the client the available getters before they exec.
-        
+
         return collected
 
 
@@ -98,15 +101,13 @@ class SubscriptionManager:
         for subscription in self.subscriptions.values():
             try:
                 collected = subscription.collect(self.run_state)
-            except InvalidGetter as e:
+            except InvalidGetterError as e:
                 failed_collects.append((subscription, e))
                 collected = None
             except Exception as e:
                 raise e
 
-            self.newMetrics[subscription.name] = (
-                collected
-            )
+            self.newMetrics[subscription.name] = collected
 
             history = self.metrics.get(subscription.fingerprint()) or []
             history.append(collected)
@@ -114,7 +115,7 @@ class SubscriptionManager:
 
         return failed_collects
 
-    async def queueLastCollect(self):
+    async def queue_recent_collect(self):
         q = self.subscription_queues[self.run_state.run_id]
         frame = engine_pb2.TelemetryFrame(
             run_id=self.run_state.run_id,
@@ -139,10 +140,11 @@ class SubscriptionManager:
             domain, getter_name, object_id, additional_params, name
         )
         if newSub.fingerprint() in self.subscriptions:
-            obj_message = ('_' + object_id) if object_id is not None else ''
+            obj_message = ("_" + object_id) if object_id is not None else ""
             param_message = (
-                f'with additional parameters {additional_params}'
-                if additional_params is not None else ''
+                f"with additional parameters {additional_params}"
+                if additional_params is not None
+                else ""
             )
 
             logging.warning(
@@ -177,6 +179,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self.subscription_manager: SubscriptionManager = {}
 
     async def CreateRun(self, request, context):
+        logging.debug(f"CreateRun: {request}")
         cfg = RunConfig(
             sumocfg_path=request.sumocfg_path,
             sumo_binary=request.sumo_binary or "sumo",
@@ -197,6 +200,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         )
 
     async def Run(self, request, context):
+        logging.debug(f"Run: {request}")
         run_id = request.run_id
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
@@ -211,7 +215,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return engine_pb2.RunResponse(run_id=run_id)
 
     async def CloseRun(self, request, context):
-        logging.info("Received close request")
+        logging.debug(f"CloseRun: {request}")
         run_id = request.run_id
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
@@ -219,13 +223,17 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run = self.runs[run_id]
 
         if run_id in self.run_tasks:
-            logging.warning(f"Closing Run {run_id}, despite running task for that run")
+            logging.warning(
+                f"Closing Run {run_id}, despite running task for that run"
+            )
         run.close()
         run.started = False
         await self.telemetry_queues[run_id].put(None)
         return engine_pb2.CloseRunResponse(run_id=run_id)
 
     async def ApplyActions(self, request, context):
+        logging.debug(f"ApplyAction: {request}")
+        application_results = []
         run_id = request.run_id
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
@@ -233,27 +241,51 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run = self.runs[run_id]
         for a in request.actions:
             p = a.WhichOneof("payload")
-            if p == "tls_set_phase":
-                run.apply_tls_set_phase(
-                    a.tls_set_phase.tls_id, a.tls_set_phase.phase_index
+            if p == "setter":
+                try:
+                    run.invoke_setter(
+                        a.setter.domain,
+                        a.setter.setter_name,
+                        a.setter.object_id,
+                        a.setter.value,
+                        a.setter.additional_parameters or {},
+                    )
+                except (AttributeError, TypeError) as e:
+                    logging.warning(
+                        f"Received a malformed setter request: {a.setter.domain}."
+                        f"{a.setter.setter_name}({a.setter.object_id}, "
+                        f"{a.setter.value}, {a.setter.additional_parameters})"
+                    )
+                    # await context.abort(
+                    #     grpc.StatusCode.INVALID_ARGUMENT,
+                    #     "Setter not found or request malformed.",
+                    # )
+                    application_results.append(
+                        engine_pb2.KeyValue(key="Setter Failure", string_value=str(e))
+                    )
+
+                application_results.append(
+                    engine_pb2.KeyValue(
+                        key="Setter Success",
+                        string_value=(
+                            f"Called {a.setter.domain}.{a.setter.setter_name}"
+                            f"({a.setter.object_id}, {a.setter.value}, "
+                            f"{a.setter.additional_parameters})"
+                        ),
+                    )
                 )
-                frame = engine_pb2.TelemetryFrame(
-                    run_id=run_id,
-                    step=self.runs[
-                        run_id
-                    ].step,  # EWWWWWWWWWWWW terrible code, will refactor
-                    # sim_time_s=self.runs[run_id].step,  # ditto
-                    metrics=[
-                        engine_pb2.KeyValue(
-                            key="TLS SET",
-                            double_value=float(a.tls_set_phase.phase_index),
-                        )
-                    ],
-                )
-                await self.telemetry_queues[run_id].put(frame)
+
+        frame = engine_pb2.TelemetryFrame(
+            run_id=run_id,
+            step=run.step,  # EWWWWWWWWWWWW terrible code, will refactor
+            # sim_time_s=run.step,  # ditto
+            metrics=application_results
+        )
+        await self.telemetry_queues[run_id].put(frame)
         return engine_pb2.ApplyActionsResponse(run_id=run_id)
 
     async def Subscribe(self, request, context):
+        logging.debug(f"Subscribe: {request}")
         additional_parameters = {
             p.name: p.value for p in request.additional_parameters
         }
@@ -275,6 +307,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     #     )
 
     async def StreamTelemetry(self, request, context):
+        logging.debug(f"StreamTelemetry: {request}")
         run_id = request.run_id
         if run_id not in self.telemetry_queues:
             await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
@@ -286,6 +319,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             yield frame
 
     async def StreamSubscriptions(self, request, context):
+        logging.debug(f"StreeamSubscription: {request}")
         run_id = request.run_id
         if run_id not in self.subscription_queues:
             await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
@@ -305,27 +339,35 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 step, sim_time_s, metrics = run.tick()
 
                 try:
-                    failed_getters_and_exceptions = await self.subscription_manager.collect()
-                    await self.subscription_manager.queueLastCollect()
+                    failed_getters_and_exceptions = (
+                        await self.subscription_manager.collect()
+                    )
+                    await self.subscription_manager.queue_recent_collect()
                 except Exception as e:
-                    logging.warning(f"Failed to collect subscribed metrics: {str(e)}")
+                    logging.warning(
+                        f"Failed to collect subscribed metrics: {str(e)}"
+                    )
 
                     raise e
 
                 if len(failed_getters_and_exceptions) > 0:
                     errors = []
                     for sub, exception in failed_getters_and_exceptions:
-                        errors.append(engine_pb2.KeyValue(
-                            key=f"Failed to collect for {sub.name}",
-                            string_value=f"{exception}: {exception.__cause__}"
-                        ))
-                        logging.warning(f"Subscription collection failed for {sub.name}")
+                        errors.append(
+                            engine_pb2.KeyValue(
+                                key=f"Failed to collect for {sub.name}",
+                                string_value=f"{exception}: {exception.__cause__}",
+                            )
+                        )
+                        logging.warning(
+                            f"Subscription collection failed for {sub.name}"
+                        )
 
                     frame = engine_pb2.TelemetryFrame(
                         run_id=run_id,
                         step=step,
                         # sim_time_s=sim_time_s,
-                        metrics=errors
+                        metrics=errors,
                     )
                     await q.put(frame)
 
@@ -358,6 +400,10 @@ async def serve(host: str = "127.0.0.1", port: int = 50051):
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO
+    )
+
     asyncio.run(serve())
 
 

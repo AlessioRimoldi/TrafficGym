@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fsrc/trafficgym/api/engine.proto\x12\x0esumo.engine.v1\"P\n\x08KeyValue\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x16\n\x0c\x64ouble_value\x18\x02 \x01(\x01H\x00\x12\x16\n\x0cstring_value\x18\x03 \x01(\tH\x00\x42\x07\n\x05value\"Y\n\x0eTelemetryFrame\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12)\n\x07metrics\x18\x04 \x03(\x0b\x32\x18.sumo.engine.v1.KeyValue\"2\n\x0bTlsSetPhase\x12\x0e\n\x06tls_id\x18\x01 \x01(\t\x12\x13\n\x0bphase_index\x18\x02 \x01(\x05\"I\n\x06\x41\x63tion\x12\x34\n\rtls_set_phase\x18\x01 \x01(\x0b\x32\x1b.sumo.engine.v1.TlsSetPhaseH\x00\x42\t\n\x07payload\"U\n\x0c\x41\x63tionBundle\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\'\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\x16.sumo.engine.v1.Action\"J\n\x08\x41rtifact\x12\x13\n\x0b\x61rtifact_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x0b\n\x03uri\x18\x03 \x01(\t\x12\x0e\n\x06sha256\x18\x04 \x01(\t\"U\n\x10\x43reateRunRequest\x12\x14\n\x0csumocfg_path\x18\x01 \x01(\t\x12\x13\n\x0bsumo_binary\x18\x02 \x01(\t\x12\x16\n\x0estep_length_ms\x18\x03 \x01(\x05\"V\n\x11\x43reateRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x31\n\x0finput_artifacts\x18\x02 \x03(\x0b\x32\x18.sumo.engine.v1.Artifact\"/\n\nRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tmax_steps\x18\x02 \x01(\x03\"\x1d\n\x0bRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"!\n\x0f\x43loseRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\"\n\x10\x43loseRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"&\n\x14\x41pplyActionsResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\x1f\n\rStreamRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"(\n\tParameter\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"\xc3\x01\n\x10SubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\x13\n\x0bgetter_name\x18\x03 \x01(\t\x12\x16\n\tobject_id\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x38\n\x15\x61\x64\x64itional_parameters\x18\x05 \x03(\x0b\x32\x19.sumo.engine.v1.Parameter\x12\x11\n\x04name\x18\x06 \x01(\tH\x01\x88\x01\x01\x42\x0c\n\n_object_idB\x07\n\x05_name\"=\n\x11SubscribeResponse\x12(\n subscription_name_or_fingerprint\x18\x01 \x01(\t\"$\n\x12UnsubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"%\n\x13UnsubscribeResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t2\x9a\x05\n\rEngineService\x12P\n\tCreateRun\x12 .sumo.engine.v1.CreateRunRequest\x1a!.sumo.engine.v1.CreateRunResponse\x12>\n\x03Run\x12\x1a.sumo.engine.v1.RunRequest\x1a\x1b.sumo.engine.v1.RunResponse\x12M\n\x08\x43loseRun\x12\x1f.sumo.engine.v1.CloseRunRequest\x1a .sumo.engine.v1.CloseRunResponse\x12R\n\x0c\x41pplyActions\x12\x1c.sumo.engine.v1.ActionBundle\x1a$.sumo.engine.v1.ApplyActionsResponse\x12R\n\x0fStreamTelemetry\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12V\n\x13StreamSubscriptions\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12P\n\tSubscribe\x12 .sumo.engine.v1.SubscribeRequest\x1a!.sumo.engine.v1.SubscribeResponse\x12V\n\x0bUnsubscribe\x12\".sumo.engine.v1.UnsubscribeRequest\x1a#.sumo.engine.v1.UnsubscribeResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fsrc/trafficgym/api/engine.proto\x12\x0esumo.engine.v1\"P\n\x08KeyValue\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x16\n\x0c\x64ouble_value\x18\x02 \x01(\x01H\x00\x12\x16\n\x0cstring_value\x18\x03 \x01(\tH\x00\x42\x07\n\x05value\"Y\n\x0eTelemetryFrame\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12)\n\x07metrics\x18\x04 \x03(\x0b\x32\x18.sumo.engine.v1.KeyValue\"2\n\x0bTlsSetPhase\x12\x0e\n\x06tls_id\x18\x01 \x01(\t\x12\x13\n\x0bphase_index\x18\x02 \x01(\x05\"\x90\x01\n\rGenericSetter\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x13\n\x0bsetter_name\x18\x02 \x01(\t\x12\x11\n\tobject_id\x18\x03 \x01(\t\x12\r\n\x05value\x18\x04 \x01(\t\x12\x38\n\x15\x61\x64\x64itional_parameters\x18\x05 \x03(\x0b\x32\x19.sumo.engine.v1.Parameter\"Y\n\x06\x41\x63tion\x12/\n\x06setter\x18\x02 \x01(\x0b\x32\x1d.sumo.engine.v1.GenericSetterH\x00\x42\t\n\x07payloadJ\x04\x08\x01\x10\x02R\rtls_set_phase\"U\n\x0c\x41\x63tionBundle\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\'\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\x16.sumo.engine.v1.Action\"J\n\x08\x41rtifact\x12\x13\n\x0b\x61rtifact_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x0b\n\x03uri\x18\x03 \x01(\t\x12\x0e\n\x06sha256\x18\x04 \x01(\t\"U\n\x10\x43reateRunRequest\x12\x14\n\x0csumocfg_path\x18\x01 \x01(\t\x12\x13\n\x0bsumo_binary\x18\x02 \x01(\t\x12\x16\n\x0estep_length_ms\x18\x03 \x01(\x05\"V\n\x11\x43reateRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x31\n\x0finput_artifacts\x18\x02 \x03(\x0b\x32\x18.sumo.engine.v1.Artifact\"/\n\nRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tmax_steps\x18\x02 \x01(\x03\"\x1d\n\x0bRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"!\n\x0f\x43loseRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\"\n\x10\x43loseRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"&\n\x14\x41pplyActionsResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\x1f\n\rStreamRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"(\n\tParameter\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"\xc3\x01\n\x10SubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\x13\n\x0bgetter_name\x18\x03 \x01(\t\x12\x16\n\tobject_id\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x38\n\x15\x61\x64\x64itional_parameters\x18\x05 \x03(\x0b\x32\x19.sumo.engine.v1.Parameter\x12\x11\n\x04name\x18\x06 \x01(\tH\x01\x88\x01\x01\x42\x0c\n\n_object_idB\x07\n\x05_name\"=\n\x11SubscribeResponse\x12(\n subscription_name_or_fingerprint\x18\x01 \x01(\t\"$\n\x12UnsubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"%\n\x13UnsubscribeResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t2\x9a\x05\n\rEngineService\x12P\n\tCreateRun\x12 .sumo.engine.v1.CreateRunRequest\x1a!.sumo.engine.v1.CreateRunResponse\x12>\n\x03Run\x12\x1a.sumo.engine.v1.RunRequest\x1a\x1b.sumo.engine.v1.RunResponse\x12M\n\x08\x43loseRun\x12\x1f.sumo.engine.v1.CloseRunRequest\x1a .sumo.engine.v1.CloseRunResponse\x12R\n\x0c\x41pplyActions\x12\x1c.sumo.engine.v1.ActionBundle\x1a$.sumo.engine.v1.ApplyActionsResponse\x12R\n\x0fStreamTelemetry\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12V\n\x13StreamSubscriptions\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12P\n\tSubscribe\x12 .sumo.engine.v1.SubscribeRequest\x1a!.sumo.engine.v1.SubscribeResponse\x12V\n\x0bUnsubscribe\x12\".sumo.engine.v1.UnsubscribeRequest\x1a#.sumo.engine.v1.UnsubscribeResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -37,38 +37,40 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TELEMETRYFRAME']._serialized_end=222
   _globals['_TLSSETPHASE']._serialized_start=224
   _globals['_TLSSETPHASE']._serialized_end=274
-  _globals['_ACTION']._serialized_start=276
-  _globals['_ACTION']._serialized_end=349
-  _globals['_ACTIONBUNDLE']._serialized_start=351
-  _globals['_ACTIONBUNDLE']._serialized_end=436
-  _globals['_ARTIFACT']._serialized_start=438
-  _globals['_ARTIFACT']._serialized_end=512
-  _globals['_CREATERUNREQUEST']._serialized_start=514
-  _globals['_CREATERUNREQUEST']._serialized_end=599
-  _globals['_CREATERUNRESPONSE']._serialized_start=601
-  _globals['_CREATERUNRESPONSE']._serialized_end=687
-  _globals['_RUNREQUEST']._serialized_start=689
-  _globals['_RUNREQUEST']._serialized_end=736
-  _globals['_RUNRESPONSE']._serialized_start=738
-  _globals['_RUNRESPONSE']._serialized_end=767
-  _globals['_CLOSERUNREQUEST']._serialized_start=769
-  _globals['_CLOSERUNREQUEST']._serialized_end=802
-  _globals['_CLOSERUNRESPONSE']._serialized_start=804
-  _globals['_CLOSERUNRESPONSE']._serialized_end=838
-  _globals['_APPLYACTIONSRESPONSE']._serialized_start=840
-  _globals['_APPLYACTIONSRESPONSE']._serialized_end=878
-  _globals['_STREAMREQUEST']._serialized_start=880
-  _globals['_STREAMREQUEST']._serialized_end=911
-  _globals['_PARAMETER']._serialized_start=913
-  _globals['_PARAMETER']._serialized_end=953
-  _globals['_SUBSCRIBEREQUEST']._serialized_start=956
-  _globals['_SUBSCRIBEREQUEST']._serialized_end=1151
-  _globals['_SUBSCRIBERESPONSE']._serialized_start=1153
-  _globals['_SUBSCRIBERESPONSE']._serialized_end=1214
-  _globals['_UNSUBSCRIBEREQUEST']._serialized_start=1216
-  _globals['_UNSUBSCRIBEREQUEST']._serialized_end=1252
-  _globals['_UNSUBSCRIBERESPONSE']._serialized_start=1254
-  _globals['_UNSUBSCRIBERESPONSE']._serialized_end=1291
-  _globals['_ENGINESERVICE']._serialized_start=1294
-  _globals['_ENGINESERVICE']._serialized_end=1960
+  _globals['_GENERICSETTER']._serialized_start=277
+  _globals['_GENERICSETTER']._serialized_end=421
+  _globals['_ACTION']._serialized_start=423
+  _globals['_ACTION']._serialized_end=512
+  _globals['_ACTIONBUNDLE']._serialized_start=514
+  _globals['_ACTIONBUNDLE']._serialized_end=599
+  _globals['_ARTIFACT']._serialized_start=601
+  _globals['_ARTIFACT']._serialized_end=675
+  _globals['_CREATERUNREQUEST']._serialized_start=677
+  _globals['_CREATERUNREQUEST']._serialized_end=762
+  _globals['_CREATERUNRESPONSE']._serialized_start=764
+  _globals['_CREATERUNRESPONSE']._serialized_end=850
+  _globals['_RUNREQUEST']._serialized_start=852
+  _globals['_RUNREQUEST']._serialized_end=899
+  _globals['_RUNRESPONSE']._serialized_start=901
+  _globals['_RUNRESPONSE']._serialized_end=930
+  _globals['_CLOSERUNREQUEST']._serialized_start=932
+  _globals['_CLOSERUNREQUEST']._serialized_end=965
+  _globals['_CLOSERUNRESPONSE']._serialized_start=967
+  _globals['_CLOSERUNRESPONSE']._serialized_end=1001
+  _globals['_APPLYACTIONSRESPONSE']._serialized_start=1003
+  _globals['_APPLYACTIONSRESPONSE']._serialized_end=1041
+  _globals['_STREAMREQUEST']._serialized_start=1043
+  _globals['_STREAMREQUEST']._serialized_end=1074
+  _globals['_PARAMETER']._serialized_start=1076
+  _globals['_PARAMETER']._serialized_end=1116
+  _globals['_SUBSCRIBEREQUEST']._serialized_start=1119
+  _globals['_SUBSCRIBEREQUEST']._serialized_end=1314
+  _globals['_SUBSCRIBERESPONSE']._serialized_start=1316
+  _globals['_SUBSCRIBERESPONSE']._serialized_end=1377
+  _globals['_UNSUBSCRIBEREQUEST']._serialized_start=1379
+  _globals['_UNSUBSCRIBEREQUEST']._serialized_end=1415
+  _globals['_UNSUBSCRIBERESPONSE']._serialized_start=1417
+  _globals['_UNSUBSCRIBERESPONSE']._serialized_end=1454
+  _globals['_ENGINESERVICE']._serialized_start=1457
+  _globals['_ENGINESERVICE']._serialized_end=2123
 # @@protoc_insertion_point(module_scope)

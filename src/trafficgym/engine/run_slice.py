@@ -13,7 +13,10 @@ def raise_async_except(task):
         exception = task.exception()
         if isinstance(exception, grpc.RpcError):
             if exception.code() == grpc.StatusCode.UNKNOWN:
-                logging.critical("An unknown gRPC error occurred, check server console.")
+                logging.error(
+                    "An unknown gRPC error occurred, check server console."
+                )
+                # raise exception
             elif exception.code() == grpc.StatusCode.UNAVAILABLE:
                 logging.critical("Lost connection to the server.")
             else:
@@ -70,7 +73,7 @@ async def main():
                     name="My Favorite Traffic Signal",
                     run_id=run_id,
                     domain="trafficlight",
-                    getter_name="getPhase",
+                    getter_name="getRedYellowGreenState",
                     object_id=tls_id,
                 )
             )
@@ -81,9 +84,20 @@ async def main():
                         run_id=run_id,
                         step=0,
                         actions=[
+                            # engine_pb2.Action(
+                            #     setter=engine_pb2.GenericSetter(
+                            #         domain="trafficlight",
+                            #         setter_name="setPhase",
+                            #         object_id=tls_id,
+                            #         value="1",
+                            #     )
+                            # ),
                             engine_pb2.Action(
-                                tls_set_phase=engine_pb2.TlsSetPhase(
-                                    tls_id=tls_id, phase_index=1
+                                setter=engine_pb2.GenericSetter(
+                                    domain="trafficlight",
+                                    setter_name="setRedYellowGreenState",
+                                    object_id=tls_id,
+                                    value="rGrG",
                                 )
                             )
                         ],
@@ -97,9 +111,20 @@ async def main():
                         run_id=run_id,
                         step=0,
                         actions=[
+                            # engine_pb2.Action(
+                            #     setter=engine_pb2.GenericSetter(
+                            #         domain="trafficlight",
+                            #         setter_name="setPhase",
+                            #         object_id=tls_id,
+                            #         value="0",
+                            #     )
+                            # ),
                             engine_pb2.Action(
-                                tls_set_phase=engine_pb2.TlsSetPhase(
-                                    tls_id=tls_id, phase_index=0
+                                setter=engine_pb2.GenericSetter(
+                                    domain="trafficlight",
+                                    setter_name="setRedYellowGreenState",
+                                    object_id=tls_id,
+                                    value="GrGr",
                                 )
                             )
                         ],
@@ -111,8 +136,9 @@ async def main():
 
             await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
 
-        asyncio.create_task(apply_once())\
-            .add_done_callback(raise_async_except) # crash hard for now
+        asyncio.create_task(apply_once()).add_done_callback(
+            raise_async_except
+        )  # crash hard for now
 
         telemetry_stream = stub.StreamTelemetry(
             engine_pb2.StreamRequest(run_id=run_id)
@@ -122,7 +148,7 @@ async def main():
             engine_pb2.StreamRequest(run_id=run_id)
         )
 
-        async def handle_stream(stream, prefix=''):
+        async def handle_stream(stream, prefix=""):
             async for frame in stream:
                 kv = {}
                 for m in frame.metrics:
@@ -137,8 +163,8 @@ async def main():
 
         try:
             await asyncio.gather(
-                handle_stream(telemetry_stream, 'T: '),
-                handle_stream(subscription_stream, 'S: ')
+                handle_stream(telemetry_stream, "T: "),
+                handle_stream(subscription_stream, "S: "),
             )
         except Exception as e:
             logging.error(str(e))

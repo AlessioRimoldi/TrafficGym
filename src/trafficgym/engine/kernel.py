@@ -17,6 +17,7 @@ import libsumo
 
 Domain = Enum("Domain", list(map(lambda x: x.__name__, libsumo.DOMAINS)))
 
+
 @dataclass
 class RunConfig:
     sumocfg_path: str
@@ -60,6 +61,26 @@ class RunState:
     def apply_tls_set_phase(self, tls_id: str, phase_index: int):
         libsumo.trafficlight.setPhase(tls_id, int(phase_index))
 
+    def invoke_setter(
+        self,
+        domain: Domain,
+        setter_name: str,
+        object_id: str,
+        value: str,
+        additional_parameters: dict,
+    ):
+        domain_handle = getattr(libsumo, domain)
+        setter_handle = getattr(domain_handle, setter_name)
+
+        if object_id == "":
+            # not sure if there are any setters which do not need an object id
+            return setter_handle(value, **additional_parameters)
+        else:
+            try:
+                return setter_handle(object_id, value, **additional_parameters)
+            except TypeError:
+                return setter_handle(object_id, int(value), **additional_parameters)
+
     def tick(self) -> Tuple[int, float, Dict[str, float]]:
         libsumo.simulationStep()
         self.step += 1
@@ -86,20 +107,20 @@ class RunState:
         self.last_metrics = metrics
         return self.step, sim_time_s, metrics
 
-    def collectMetric(
+    def collect_metric(
         self,
         domain: Domain,
         getter_name: str,
         object_id: str,
-        additional_param: dict,
+        additional_parameters: dict,
     ):
         domain_handle = getattr(libsumo, domain)
-        getterHandle = getattr(domain_handle, getter_name)
+        getter_handle = getattr(domain_handle, getter_name)
 
         if object_id == "":
-            return getterHandle(**additional_param)
+            return getter_handle(**additional_parameters)
         else:
-            return getterHandle(object_id, **additional_param)
+            return getter_handle(object_id, **additional_parameters)
 
         # try:
         #     return getterHandle()
