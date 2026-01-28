@@ -261,14 +261,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     #     "Setter not found or request malformed.",
                     # )
                     application_results.append(
-                        engine_pb2.KeyValue(key="Setter Failure", string_value=str(e))
+                        engine_pb2.KeyValue(key="Error", string_value=f"Setter: {str(e)}")
                     )
 
                 application_results.append(
                     engine_pb2.KeyValue(
-                        key="Setter Success",
+                        key="Info",
                         string_value=(
-                            f"Called {a.setter.domain}.{a.setter.setter_name}"
+                            f"Setter Called {a.setter.domain}.{a.setter.setter_name}"
                             f"({a.setter.object_id}, {a.setter.value}, "
                             f"{a.setter.additional_parameters})"
                         ),
@@ -355,8 +355,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     for sub, exception in failed_getters_and_exceptions:
                         errors.append(
                             engine_pb2.KeyValue(
-                                key=f"Failed to collect for {sub.name}",
-                                string_value=f"{exception}: {exception.__cause__}",
+                                key=f"Error",
+                                string_value=f"Failed to collect for {sub.name}: {exception}: {exception.__cause__}",
                             )
                         )
                         logging.warning(

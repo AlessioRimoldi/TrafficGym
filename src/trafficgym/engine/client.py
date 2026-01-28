@@ -5,6 +5,8 @@ import logging
 
 from ..api import engine_pb2, engine_pb2_grpc
 
+errors = []
+warnings = []
 
 def raise_async_except(task):
     if task.cancelled():
@@ -46,7 +48,7 @@ async def main():
         )
         run_id = cr.run_id
 
-        async def apply_once():
+        async def scenario():
             # await stub.Subscribe(
             #     engine_pb2.SubscribeRequest(
             #         run_id=run_id,
@@ -75,6 +77,15 @@ async def main():
                     domain="trafficlight",
                     getter_name="getRedYellowGreenState",
                     object_id=tls_id,
+                )
+            )
+            await stub.Subscribe(
+                engine_pb2.SubscribeRequest(
+                    name="All vehicles IDs on the west edge heading east",
+                    run_id=run_id,
+                    domain="edge",
+                    getter_name="getLastStepVehicleIDs",
+                    object_id="W2J",
                 )
             )
             await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_steps=20))
@@ -135,8 +146,9 @@ async def main():
                 )
 
             await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
+            logging.info(f"Execution terminated with {len(errors)} error(s) and {len(warnings)} warning(s).")
 
-        asyncio.create_task(apply_once()).add_done_callback(
+        asyncio.create_task(scenario()).add_done_callback(
             raise_async_except
         )  # crash hard for now
 
@@ -157,6 +169,11 @@ async def main():
                         kv[m.key] = m.string_value
                     elif field == "double_value":
                         kv[m.key] = m.double_value
+                    
+                    if m.key == "Error":
+                        errors += kv[m.key]
+                    elif m.key == "Warning":
+                        warnings += kv[m.key]
 
                 # print('T: ', frame.step, frame.sim_time_s, kv)
                 print(prefix, frame.step, kv)
@@ -171,4 +188,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO
+    )
+
     asyncio.run(main())
