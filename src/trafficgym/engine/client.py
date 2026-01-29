@@ -6,12 +6,15 @@ import logging
 from collections import deque, defaultdict
 import random
 
-from ..api import engine_pb2, engine_pb2_grpc
+from ..api import engine_pb2, engine_pb2_grpc # type: ignore[import]
+
+from typing import AsyncIterator
 
 import sys
 
 errors: list[str] = []
 warnings: list[str] = []
+
 
 def raise_async_except(task):
     if task.cancelled():
@@ -20,45 +23,46 @@ def raise_async_except(task):
         exception = task.exception()
         if isinstance(exception, grpc.RpcError):
             if exception.code() == grpc.StatusCode.UNKNOWN:
-                logging.error(
+                logging.critical(
                     "An unknown gRPC error occurred, check server console."
                 )
-                sys.exit(-1) 
+                sys.exit(-1)
                 # raise exception
             elif exception.code() == grpc.StatusCode.UNAVAILABLE:
                 logging.critical("Lost connection to the server.")
-                sys.exit() 
+                sys.exit()
             else:
                 raise exception
         else:
             logging.error(f"An exception occurred: {exception}")
             raise exception
 
+
 async def set_signal(stub, run_id, signal_id, state):
     return stub.ApplyActions(
-                        engine_pb2.ActionBundle(
-                            run_id=run_id,
-                            step=0,
-                            actions=[
-                                # engine_pb2.Action(
-                                #     setter=engine_pb2.GenericSetter(
-                                #         domain="trafficlight",
-                                #         setter_name="setPhase",
-                                #         object_id=tls_id,
-                                #         value="1",
-                                #     )
-                                # ),
-                                engine_pb2.Action(
-                                    setter=engine_pb2.GenericSetter(
-                                        domain="trafficlight",
-                                        setter_name="setRedYellowGreenState",
-                                        object_id=signal_id,
-                                        value=state,
-                                    )
-                                )
-                            ],
-                        )
+        engine_pb2.ActionBundle(
+            run_id=run_id,
+            step=0,
+            actions=[
+                # engine_pb2.Action(
+                #     setter=engine_pb2.GenericSetter(
+                #         domain="trafficlight",
+                #         setter_name="setPhase",
+                #         object_id=tls_id,
+                #         value="1",
+                #     )
+                # ),
+                engine_pb2.Action(
+                    setter=engine_pb2.GenericSetter(
+                        domain="trafficlight",
+                        setter_name="setRedYellowGreenState",
+                        object_id=signal_id,
+                        value=state,
                     )
+                )
+            ],
+        )
+    )
 
 
 async def main():
@@ -82,7 +86,7 @@ async def main():
         )
         run_id = cr.run_id
 
-        subscriptions_store = defaultdict(lambda: deque(maxlen=10))
+        subscriptions_store: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=10))
 
         async def scenario():
             eastbound_veh_ids = "eastbound_veh_ids"
@@ -126,24 +130,24 @@ async def main():
                     object_id="W2J",
                 )
             )
-            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_steps=20))
+            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=20))
             for _ in range(1):
-                await set_signal(stub, run_id, tls_id, 'rGrG')
+                await set_signal(stub, run_id, tls_id, "rGrG")
                 await stub.Run(
-                    engine_pb2.RunRequest(run_id=run_id, max_steps=30)
+                    engine_pb2.RunRequest(run_id=run_id, max_time=30)
                 )
-                await set_signal(stub, run_id, tls_id, 'GrGr')
+                await set_signal(stub, run_id, tls_id, "GrGr")
                 await stub.Run(
-                    engine_pb2.RunRequest(run_id=run_id, max_steps=30)
+                    engine_pb2.RunRequest(run_id=run_id, max_time=30)
                 )
 
-            await set_signal(stub, run_id, tls_id, 'rGrG')
+            await set_signal(stub, run_id, tls_id, "rGrG")
 
             # Get list of vehicles heading east on the western edge.
             deq = subscriptions_store.get(eastbound_veh_ids)
-            if not deq: # checks for None and empty queue
+            if not deq:  # checks for None and empty queue
                 raise RuntimeError("Expected data!")
-            
+
             tup = eval(deq[-1])
 
             chosen_veh_id = random.choice(tup)
@@ -151,104 +155,109 @@ async def main():
             logging.info(chosen_veh_id)
 
             await stub.ApplyActions(
-                        engine_pb2.ActionBundle(
-                            run_id=run_id,
-                            step=0,
-                            actions=[
-                                engine_pb2.Action(
-                                    setter=engine_pb2.GenericSetter(
-                                        domain="vehicle",
-                                        setter_name="setSpeed",
-                                        object_id=chosen_veh_id,
-                                        value="0",
-                                    )
-                                ),
-                                engine_pb2.Action(
-                                    setter=engine_pb2.GenericSetter(
-                                        domain="vehicle",
-                                        setter_name="setSignals",
-                                        object_id=chosen_veh_id,
-                                        value=str(1 << 2),
-                                    )
-                                )
-                            ],
-                        )
-                    )
+                engine_pb2.ActionBundle(
+                    run_id=run_id,
+                    step=0,
+                    actions=[
+                        engine_pb2.Action(
+                            setter=engine_pb2.GenericSetter(
+                                domain="vehicle",
+                                setter_name="setSpeed",
+                                object_id=chosen_veh_id,
+                                value="0",
+                            )
+                        ),
+                        engine_pb2.Action(
+                            setter=engine_pb2.GenericSetter(
+                                domain="vehicle",
+                                setter_name="setSignals",
+                                object_id=chosen_veh_id,
+                                value=str((1 << 2) + (1 << 10)),
+                                # emergency signal and door right open
+                            )
+                        ),
+                    ],
+                )
+            )
 
             logging.info(f"Selected and stopped {chosen_veh_id}.")
 
-            await stub.Run(
-                engine_pb2.RunRequest(run_id=run_id, max_steps=30)
-            )
+            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=30))
 
             await stub.ApplyActions(
-                        engine_pb2.ActionBundle(
-                            run_id=run_id,
-                            step=0,
-                            actions=[
-                                engine_pb2.Action(
-                                    setter=engine_pb2.GenericSetter(
-                                        domain="vehicle",
-                                        setter_name="setSpeed",
-                                        object_id=chosen_veh_id,
-                                        value="-1",
-                                    )
-                                ),
-                                engine_pb2.Action(
-                                    setter=engine_pb2.GenericSetter(
-                                        domain="vehicle",
-                                        setter_name="setSignals",
-                                        object_id=chosen_veh_id,
-                                        value="-1",
-                                    )
-                                )
-                            ],
-                        )
-                    )
+                engine_pb2.ActionBundle(
+                    run_id=run_id,
+                    step=0,
+                    actions=[
+                        engine_pb2.Action(
+                            setter=engine_pb2.GenericSetter(
+                                domain="vehicle",
+                                setter_name="setSpeed",
+                                object_id=chosen_veh_id,
+                                value="-1",
+                            )
+                        ),
+                        engine_pb2.Action(
+                            setter=engine_pb2.GenericSetter(
+                                domain="vehicle",
+                                setter_name="setSignals",
+                                object_id=chosen_veh_id,
+                                value="-1",
+                            )
+                        ),
+                    ],
+                )
+            )
 
             for _ in range(5):
-                await set_signal(stub, run_id, tls_id, 'rGrG')
+                await set_signal(stub, run_id, tls_id, "rGrG")
                 await stub.Run(
-                    engine_pb2.RunRequest(run_id=run_id, max_steps=50)
+                    engine_pb2.RunRequest(run_id=run_id, max_time=50)
                 )
-                await set_signal(stub, run_id, tls_id, 'GrGr')
+                await set_signal(stub, run_id, tls_id, "GrGr")
                 await stub.Run(
-                    engine_pb2.RunRequest(run_id=run_id, max_steps=30)
+                    engine_pb2.RunRequest(run_id=run_id, max_time=30)
                 )
 
             await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
-            logging.info(f"Execution terminated with {len(errors)} error(s) and {len(warnings)} warning(s).")
 
         asyncio.create_task(scenario()).add_done_callback(
             raise_async_except
         )  # crash hard for now
 
-        telemetry_stream = stub.StreamTelemetry(
-            engine_pb2.StreamRequest(run_id=run_id)
+        telemetry_stream: AsyncIterator[engine_pb2.TelemetryFrame] = (
+            stub.StreamTelemetry(engine_pb2.StreamRequest(run_id=run_id))
         )
 
-        subscription_stream = stub.StreamSubscriptions(
-            engine_pb2.StreamRequest(run_id=run_id)
+        subscription_stream: AsyncIterator[engine_pb2.TelemetryFrame] = (
+            stub.StreamSubscriptions(engine_pb2.StreamRequest(run_id=run_id))
         )
 
-        async def handle_stream(stream, prefix="", store: dict[str, deque[float | str]] | None=None, print_filter: list[str] | None=None):
+        async def handle_stream(
+            stream: AsyncIterator[engine_pb2.TelemetryFrame],
+            prefix="",
+            store: dict[str, deque[str]] | None = None,
+            print_filter: list[str] | None = None,
+        ):
             async for frame in stream:
                 kv = {}
                 for m in frame.metrics:
                     field = m.WhichOneof("value")
                     if field == "string_value":
-                        value = str(m.string_value)
+                        value = m.string_value
                     elif field == "double_value":
-                        value = float(m.double_value)
+                        value = str(m.double_value)
                     else:
-                        logging.warning(f"Stream frame value is not a string or a float!")
+                        logging.warning(
+                            f"Stream frame value is not a string or a float!"
+                        )
                         continue
 
                     if m.key == "Error":
-                        errors.append(str(value))
+                        errors.append(value)
                         continue
                     elif m.key == "Warning":
-                        warnings.append(str(value))
+                        warnings.append(value)
                         continue
 
                     if store is not None:
@@ -257,23 +266,35 @@ async def main():
                     if print_filter is None or m.key in print_filter:
                         kv[m.key] = value
 
-                # print('T: ', frame.step, frame.sim_time_s, kv)
                 if kv:
-                    print(prefix, frame.step, kv)
+                    print(prefix, frame.step, f"{frame.sim_time_s}s", kv)
 
         try:
             await asyncio.gather(
-                handle_stream(telemetry_stream, "T: ", None, ["Info", "Error", "Warning"]),
-                handle_stream(subscription_stream, "S: ", subscriptions_store, []),
+                handle_stream(
+                    stream=telemetry_stream,
+                    prefix="T: ",
+                    store=None,
+                    print_filter=["Info", "Error", "Warning"]
+                ),
+                handle_stream(
+                    stream=subscription_stream,
+                    prefix="S: ",
+                    store=subscriptions_store,
+                    print_filter=[]
+                ),
             )
         except Exception as e:
             logging.error(str(e))
+            errors.append(str(e))
 
+
+        logging.info(
+            f"Execution terminated with {len(errors)} error(s) and {len(warnings)} warning(s)."
+        )
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO
-    )
+    logging.basicConfig(level=logging.INFO)
 
     asyncio.run(main())
 

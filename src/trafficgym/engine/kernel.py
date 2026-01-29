@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import sys, os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import uuid
 from enum import Enum
 import logging
@@ -13,9 +13,9 @@ else:
     logging.critical("please declare environment variable 'SUMO_HOME'")
     sys.exit(1)
 
-import libsumo
+import libsumo # type: ignore[import]
 
-Domain = Enum("Domain", list(map(lambda x: x.__name__, libsumo.DOMAINS)))
+# Domain = Enum("Domain", list(map(lambda x: x.__name__, libsumo.DOMAINS)))
 
 
 @dataclass
@@ -29,11 +29,11 @@ class RunState:
     def __init__(self, cfg: RunConfig):
         self.cfg = cfg
         self.run_id = str(uuid.uuid4())
-        self.started = False
-        self.step = 0
-        self.edge_ids: List[str] = []
-        self.last_metrics: Dict[str, float] = {}
-        self.max_steps: Optional[int] = None
+        self.started: bool = False
+        self.step: int = 0
+        self.edge_ids: list[str] = []
+        self.last_metrics: dict[str, float] = {}
+        self.max_steps: int | None = None
 
     def start(self, max_steps: int):
         if self.started:
@@ -63,11 +63,12 @@ class RunState:
 
     def invoke_setter(
         self,
-        domain: Domain,
+        # domain: Domain,
+        domain: str,
         setter_name: str,
         object_id: str,
         value: str,
-        additional_parameters: dict,
+        additional_parameters: dict[str, Any],
     ):
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
@@ -79,7 +80,9 @@ class RunState:
             try:
                 return setter_handle(object_id, value, **additional_parameters)
             except TypeError:
-                return setter_handle(object_id, int(value), **additional_parameters)
+                return setter_handle(
+                    object_id, int(value), **additional_parameters
+                )
 
     def tick(self) -> Tuple[int, float, Dict[str, float]]:
         libsumo.simulationStep()
@@ -109,11 +112,12 @@ class RunState:
 
     def collect_metric(
         self,
-        domain: Domain,
+        # domain: Domain,
+        domain: str,
         getter_name: str,
         object_id: str,
-        additional_parameters: dict,
-    ):
+        additional_parameters: dict[str, Any],
+    ) -> Any:
         domain_handle = getattr(libsumo, domain)
         getter_handle = getattr(domain_handle, getter_name)
 

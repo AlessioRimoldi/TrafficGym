@@ -6,8 +6,11 @@ from enum import Enum
 import grpc
 
 from .kernel import RunConfig, RunState
-from ..api import engine_pb2, engine_pb2_grpc
-from libsumo import DOMAINS
+from ..api import engine_pb2, engine_pb2_grpc # type: ignore[import]
+# from libsumo import DOMAINS
+from typing import Any, Callable
+
+from functools import partial
 
 import logging
 
@@ -18,7 +21,6 @@ class InvalidGetterError(Exception):
             self.original = message_or_exception
             message = str(message_or_exception)
         else:
-            self.original = None
             message = message_or_exception
 
         super().__init__(message)
@@ -29,23 +31,24 @@ def raise_async_except(task, context):
         context.abort(grpc.StatusCode.UNKNOWN, "An Exception Occured")
 
 
-Domain = Enum("Domain", list(map(lambda x: x.__name__, DOMAINS)))
+# Domain = Enum("Domain", list(map(lambda x: x.__name__, DOMAINS)))
 
 
 class Subscription:
     def __init__(
         self,
-        domain: Domain,
+        # domain: Domain,
+        domain: str,
         getter_name: str,
-        object_id: str | None = None,
-        additional_param: dict | None = None,
+        object_id: str,
+        additional_parameters: dict[str, Any],
         name: str | None = None,
     ):
         self.__name = name
         self.domain = domain
-        self.getter_name = getter_name
+        self.getter_name: str = getter_name
         self.object_id = object_id
-        self.additional_param = additional_param or {}
+        self.additional_parameters = additional_parameters
 
     @property
     def name(self):
@@ -70,7 +73,7 @@ class Subscription:
                 self.domain,
                 self.getter_name,
                 self.object_id,
-                self.additional_param,
+                self.additional_parameters,
             )
         except AttributeError as e:
             raise InvalidGetterError("Unknown getter") from e
@@ -82,10 +85,15 @@ class Subscription:
 
 class SubscriptionManager:
     subscriptions: dict[str, Subscription]
-    metrics: dict[str, list[any]]
+    metrics: dict[str, list[Any]]
 
     def __init__(
-        self, run_state: RunState, subscription_queues: list[asyncio.Queue]
+        self,
+        run_state: RunState,
+        subscription_queues: dict[
+            str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
+        ],
+        frame_builder: Callable[[list[engine_pb2.KeyValue]], engine_pb2.TelemetryFrame]
     ):
         self.run_state = run_state
         self.subscription_queues = subscription_queues
@@ -94,6 +102,7 @@ class SubscriptionManager:
         self.metrics = {}
 
         self.telemetryStep = 0
+        self._frame_builder = frame_builder
 
     async def collect(self):
         self.newMetrics = {}
@@ -117,22 +126,18 @@ class SubscriptionManager:
 
     async def queue_recent_collect(self):
         q = self.subscription_queues[self.run_state.run_id]
-        frame = engine_pb2.TelemetryFrame(
-            run_id=self.run_state.run_id,
-            step=self.run_state.step,
-            # sim_time_s=self.run_state.step,  # temporary
-            metrics=[
+        frame = self._frame_builder([
                 engine_pb2.KeyValue(key=k, string_value=str(v))
                 for k, v in self.newMetrics.items()
-            ],
-        )
+            ])
         await q.put(frame)
 
     def subscribe(
         self,
-        domain: Domain,
+        # domain: Domain,
+        domain: str,
         getter_name: str,
-        object_id: str | None = None,
+        object_id: str,
         additional_params: dict = {},
         name: str | None = None,
     ):
@@ -172,13 +177,34 @@ class SubscriptionManager:
 
 class EngineService(engine_pb2_grpc.EngineServiceServicer):
     def __init__(self):
-        self.runs: Dict[str, RunState] = {}
-        self.telemetry_queues: Dict[str, asyncio.Queue] = {}
-        self.subscription_queues: Dict[str, asyncio.Queue] = {}
-        self.run_tasks: Dict[str, asyncio.Task] = {}
-        self.subscription_manager: SubscriptionManager = {}
+        self.runs: dict[str, RunState] = {}
+        self.telemetry_queues: dict[
+            str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
+        ] = {}
+        self.subscription_queues: dict[
+            str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
+        ] = {}
+        self.run_tasks: dict[str, asyncio.Task] = {}
+        self.subscription_manager: SubscriptionManager | None = None
 
-    async def CreateRun(self, request, context):
+    def _build_frame(self, metrics: list[engine_pb2.KeyValue], run_id: str):
+        if run_id not in self.runs:
+            raise RuntimeError("Run ID not found")
+
+        run = self.runs[run_id]
+
+        return engine_pb2.TelemetryFrame(
+            run_id=run_id,
+            step=run.step,
+            sim_time_s=run.step / run.cfg.step_length_ms,
+            metrics=metrics
+        )
+
+    async def CreateRun(
+        self,
+        request: engine_pb2.CreateRunRequest,
+        context: grpc.ServicerContext,
+    ):
         logging.debug(f"CreateRun: {request}")
         cfg = RunConfig(
             sumocfg_path=request.sumocfg_path,
@@ -190,36 +216,54 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self.telemetry_queues[run.run_id] = asyncio.Queue()
         self.subscription_queues[run.run_id] = asyncio.Queue()
 
-        # self.subscription_manager = SubscriptionManager(run, self.subscription_queues)
+        part = partial(self._build_frame, run_id=run.run_id)
         self.subscription_manager = SubscriptionManager(
-            run, self.subscription_queues
+            run, self.subscription_queues, part
         )
 
         return engine_pb2.CreateRunResponse(
             run_id=run.run_id, input_artifacts=[]
         )
 
-    async def Run(self, request, context):
+    async def Run(
+        self, request: engine_pb2.RunRequest, context: grpc.ServicerContext
+    ):
         logging.debug(f"Run: {request}")
         run_id = request.run_id
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
-            await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            return
         if run_id not in self.run_tasks:
-            task = asyncio.create_task(
-                self._run_loop(run_id, int(request.max_steps or 1000))
-            )
+            max_run: str | None = request.WhichOneof("max_run")
+            if max_run == "max_steps":
+                max_steps = request.max_steps
+            elif max_run == "max_time":
+                max_steps = int(
+                    1000
+                    * request.max_time
+                    / self.runs[run_id].cfg.step_length_ms
+                )
+            else:
+                max_steps = int(
+                    1000 * 1000 / self.runs[run_id].cfg.step_length_ms
+                )
+
+            task = asyncio.create_task(self._run_loop(run_id, max_steps))
             self.run_tasks[run_id] = task
             await task
             raise_async_except(task, context)
         return engine_pb2.RunResponse(run_id=run_id)
 
-    async def CloseRun(self, request, context):
+    async def CloseRun(
+        self, request: engine_pb2.CloseRunRequest, context: grpc.ServicerContext
+    ):
         logging.debug(f"CloseRun: {request}")
         run_id = request.run_id
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
-            await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            return
         run = self.runs[run_id]
 
         if run_id in self.run_tasks:
@@ -232,24 +276,31 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         await self.subscription_queues[run_id].put(None)
         return engine_pb2.CloseRunResponse(run_id=run_id)
 
-    async def ApplyActions(self, request, context):
+    async def ApplyActions(
+        self, request: engine_pb2.ActionBundle, context: grpc.ServicerContext
+    ):
         logging.debug(f"ApplyAction: {request}")
-        application_results = []
+        application_results: list[engine_pb2.KeyValue] = []
         run_id = request.run_id
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
-            await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            return
         run = self.runs[run_id]
         for a in request.actions:
-            p = a.WhichOneof("payload")
+            p: str | None = a.WhichOneof("payload")
             if p == "setter":
+                additional_parameters: dict[str, str] = {
+                    param.name: param.value
+                    for param in a.setter.additional_parameters
+                }
                 try:
                     run.invoke_setter(
                         a.setter.domain,
                         a.setter.setter_name,
                         a.setter.object_id,
                         a.setter.value,
-                        a.setter.additional_parameters or {},
+                        additional_parameters,
                     )
                 except (AttributeError, TypeError) as e:
                     logging.warning(
@@ -262,7 +313,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     #     "Setter not found or request malformed.",
                     # )
                     application_results.append(
-                        engine_pb2.KeyValue(key="Error", string_value=f"Setter: {str(e)}")
+                        engine_pb2.KeyValue(
+                            key="Error", string_value=f"Setter: {str(e)}"
+                        )
                     )
 
                 application_results.append(
@@ -276,16 +329,21 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     )
                 )
 
-        frame = engine_pb2.TelemetryFrame(
+        frame = self._build_frame(
             run_id=run_id,
-            step=run.step,  # EWWWWWWWWWWWW terrible code, will refactor
-            # sim_time_s=run.step,  # ditto
             metrics=application_results
         )
         await self.telemetry_queues[run_id].put(frame)
         return engine_pb2.ApplyActionsResponse(run_id=run_id)
 
-    async def Subscribe(self, request, context):
+    async def Subscribe(
+        self,
+        request: engine_pb2.SubscribeRequest,
+        context: grpc.ServicerContext,
+    ):
+        if self.subscription_manager is None:
+            context.abort(grpc.StatusCode.ABORTED, "Subscription Manager not initialised.")
+            return
         logging.debug(f"Subscribe: {request}")
         additional_parameters = {
             p.name: p.value for p in request.additional_parameters
@@ -307,11 +365,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     #         grpc.StatusCode.UNIMPLEMENTED, "unsubscription not implemented"
     #     )
 
-    async def StreamTelemetry(self, request, context):
+    async def StreamTelemetry(
+        self, request: engine_pb2.StreamRequest, context: grpc.ServicerContext
+    ):
         logging.debug(f"StreamTelemetry: {request}")
         run_id = request.run_id
         if run_id not in self.telemetry_queues:
-            await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            return
         q = self.telemetry_queues[run_id]
         while True:
             frame = await q.get()
@@ -319,11 +380,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 return
             yield frame
 
-    async def StreamSubscriptions(self, request, context):
+    async def StreamSubscriptions(
+        self, request: engine_pb2.StreamRequest, context: grpc.ServicerContext
+    ):
         logging.debug(f"StreeamSubscription: {request}")
         run_id = request.run_id
         if run_id not in self.subscription_queues:
-            await context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
+            return
         q = self.subscription_queues[run_id]
         while True:
             frame = await q.get()
@@ -334,6 +398,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     async def _run_loop(self, run_id: str, max_steps: int):
         run = self.runs[run_id]
         q = self.telemetry_queues[run_id]
+
+        if self.subscription_manager is None:
+            raise RuntimeError("Subscription manager not initialised.")
+
         try:
             run.start(max_steps=max_steps)
             for _ in range(max_steps):
@@ -349,7 +417,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         f"Failed to collect subscribed metrics: {str(e)}"
                     )
 
-                    raise e
+                    # for the moment, crash when problem collecting subscriptions
+                    # raise e
 
                 if len(failed_getters_and_exceptions) > 0:
                     errors = []
@@ -364,18 +433,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                             f"Subscription collection failed for {sub.name}"
                         )
 
-                    frame = engine_pb2.TelemetryFrame(
+                    frame = self._build_frame(
                         run_id=run_id,
-                        step=step,
-                        # sim_time_s=sim_time_s,
                         metrics=errors,
                     )
                     await q.put(frame)
 
-                frame = engine_pb2.TelemetryFrame(
+                frame = self._build_frame(
                     run_id=run_id,
-                    step=step,
-                    # sim_time_s=sim_time_s,
                     metrics=[
                         engine_pb2.KeyValue(key=k, double_value=float(v))
                         for k, v in metrics.items()
@@ -401,9 +466,7 @@ async def serve(host: str = "127.0.0.1", port: int = 50051):
 
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO
-    )
+    logging.basicConfig(level=logging.INFO)
 
     asyncio.run(serve())
 
