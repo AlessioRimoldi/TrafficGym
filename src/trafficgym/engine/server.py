@@ -229,6 +229,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run.close()
         run.started = False
         await self.telemetry_queues[run_id].put(None)
+        await self.subscription_queues[run_id].put(None)
         return engine_pb2.CloseRunResponse(run_id=run_id)
 
     async def ApplyActions(self, request, context):
