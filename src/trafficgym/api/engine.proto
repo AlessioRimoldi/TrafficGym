@@ -1,13 +1,14 @@
 syntax = "proto3";
 
+import "google/protobuf/struct.proto";
+
 package sumo.engine.v1;
 
 message KeyValue {
     string key = 1;
-    oneof value {
-      double double_value = 2;
-      string string_value = 3;
-    }
+    reserved 2;
+    reserved 3;
+    google.protobuf.Value value = 4;
 }
 
 message TelemetryFrame {
@@ -120,6 +121,39 @@ message UnsubscribeResponse {
   string run_id = 1;
 }
 
+message RegisterInterruptRequest {
+  string run_id = 1;
+  string trigger_metric_name = 2;
+  google.protobuf.Value trigger_metric_value = 3;
+}
+
+message InterruptEvent {
+  string interrupt_id = 1;
+  string event_id = 2;
+  // maybe following fields optional?
+  google.protobuf.Value observed_value = 3;
+}
+
+message AcknowledgeInterruptRequest {
+  string run_id = 1;
+  string interrupt_id = 2;
+  string event_id = 3;
+  ActionBundle actions = 4;
+}
+
+message AcknowledgeInterruptResponse {
+
+}
+
+message CancelInterruptRequest {
+  string run_id = 1;
+  string interrupt_id = 2;
+}
+
+message CancelInterruptResponse {
+
+}
+
 service EngineService {
   rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
   rpc Run(RunRequest) returns (RunResponse);
@@ -129,5 +163,8 @@ service EngineService {
   rpc StreamSubscriptions(StreamRequest) returns (stream TelemetryFrame);
   rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
   rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
+  rpc RegisterInterrupt(RegisterInterruptRequest) returns (stream InterruptEvent);
+  rpc AcknowledgeInterrupt(AcknowledgeInterruptRequest) returns (AcknowledgeInterruptResponse);
+  rpc CancelInterrupt(CancelInterruptRequest) returns (CancelInterruptResponse);
 }
 

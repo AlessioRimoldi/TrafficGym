@@ -6,9 +6,11 @@ from enum import Enum
 import grpc
 
 from .kernel import RunConfig, RunState
-from ..api import engine_pb2, engine_pb2_grpc # type: ignore[import]
+from ..api import engine_pb2, engine_pb2_grpc
+from google.protobuf.struct_pb2 import Value
+
 # from libsumo import DOMAINS
-from typing import Any, Callable
+from typing import Any, Callable, AsyncIterator
 
 from functools import partial
 
@@ -26,7 +28,7 @@ class InvalidGetterError(Exception):
         super().__init__(message)
 
 
-def raise_async_except(task, context):
+def raise_async_except(task: asyncio.Task[Any], context: grpc.ServicerContext) -> None:
     if task.exception() is not None:
         context.abort(grpc.StatusCode.UNKNOWN, "An Exception Occured")
 
@@ -51,14 +53,14 @@ class Subscription:
         self.additional_parameters = additional_parameters
 
     @property
-    def name(self):
+    def name(self) -> str:
         """Returns the name of the subscription if set, otherwise the fingerprint"""
         return self.__name or self.fingerprint()
 
-    def fingerprint(self):
+    def fingerprint(self) -> str:
         return f"{str(self.domain)}.{self.getter_name}_{self.object_id}"
 
-    def collect(self, run_state: RunState):
+    def collect(self, run_state: RunState) -> str:
         if self.getter_name.startswith("_"):
             raise InvalidGetterError(
                 "Dunder names are blocked from being collected."
@@ -93,7 +95,9 @@ class SubscriptionManager:
         subscription_queues: dict[
             str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
         ],
-        frame_builder: Callable[[list[engine_pb2.KeyValue]], engine_pb2.TelemetryFrame]
+        frame_builder: Callable[
+            [list[engine_pb2.KeyValue]], engine_pb2.TelemetryFrame
+        ],
     ):
         self.run_state = run_state
         self.subscription_queues = subscription_queues
@@ -104,7 +108,7 @@ class SubscriptionManager:
         self.telemetryStep = 0
         self._frame_builder = frame_builder
 
-    async def collect(self):
+    async def collect(self) -> list[tuple[Subscription, Exception]]:
         self.newMetrics = {}
         failed_collects: list[tuple[Subscription, Exception]] = []
         for subscription in self.subscriptions.values():
@@ -124,12 +128,14 @@ class SubscriptionManager:
 
         return failed_collects
 
-    async def queue_recent_collect(self):
+    async def queue_recent_collect(self) -> None:
         q = self.subscription_queues[self.run_state.run_id]
-        frame = self._frame_builder([
-                engine_pb2.KeyValue(key=k, string_value=str(v))
+        frame = self._frame_builder(
+            [
+                engine_pb2.KeyValue(key=k, value=Value(string_value=str(v)))
                 for k, v in self.newMetrics.items()
-            ])
+            ]
+        )
         await q.put(frame)
 
     def subscribe(
@@ -138,9 +144,11 @@ class SubscriptionManager:
         domain: str,
         getter_name: str,
         object_id: str,
-        additional_params: dict = {},
+        additional_params: dict[str, str] | None = None,
         name: str | None = None,
-    ):
+    ) -> str:
+        if not additional_params:
+            additional_params = {}
         newSub = Subscription(
             domain, getter_name, object_id, additional_params, name
         )
@@ -164,7 +172,7 @@ class SubscriptionManager:
         self.subscriptions[newSub.fingerprint()] = newSub
         return newSub.name
 
-    def unsubscribe(self, fingerprint):
+    def unsubscribe(self, fingerprint: str) -> None:
         if fingerprint not in self.subscriptions:
             logging.warning(
                 f"Received a request to unsubscribe from {fingerprint}, "
@@ -176,7 +184,7 @@ class SubscriptionManager:
 
 
 class EngineService(engine_pb2_grpc.EngineServiceServicer):
-    def __init__(self):
+    def __init__(self) -> None:
         self.runs: dict[str, RunState] = {}
         self.telemetry_queues: dict[
             str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
@@ -184,10 +192,13 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self.subscription_queues: dict[
             str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
         ] = {}
-        self.run_tasks: dict[str, asyncio.Task] = {}
+        self.run_tasks: dict[str, asyncio.Task[Any]] = {}
         self.subscription_manager: SubscriptionManager | None = None
 
-    def _build_frame(self, metrics: list[engine_pb2.KeyValue], run_id: str):
+    def _build_frame(
+            self,
+            metrics: list[engine_pb2.KeyValue], run_id: str
+        ) -> engine_pb2.TelemetryFrame:
         if run_id not in self.runs:
             raise RuntimeError("Run ID not found")
 
@@ -197,14 +208,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             run_id=run_id,
             step=run.step,
             sim_time_s=run.step / run.cfg.step_length_ms,
-            metrics=metrics
+            metrics=metrics,
         )
 
     async def CreateRun(
         self,
         request: engine_pb2.CreateRunRequest,
         context: grpc.ServicerContext,
-    ):
+    ) -> engine_pb2.CreateRunResponse:
         logging.debug(f"CreateRun: {request}")
         cfg = RunConfig(
             sumocfg_path=request.sumocfg_path,
@@ -227,7 +238,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
     async def Run(
         self, request: engine_pb2.RunRequest, context: grpc.ServicerContext
-    ):
+    ) -> engine_pb2.RunResponse:
         logging.debug(f"Run: {request}")
         run_id = request.run_id
         if run_id not in self.runs:
@@ -257,7 +268,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
     async def CloseRun(
         self, request: engine_pb2.CloseRunRequest, context: grpc.ServicerContext
-    ):
+    ) -> engine_pb2.CloseRunResponse:
         logging.debug(f"CloseRun: {request}")
         run_id = request.run_id
         if run_id not in self.runs:
@@ -278,7 +289,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
     async def ApplyActions(
         self, request: engine_pb2.ActionBundle, context: grpc.ServicerContext
-    ):
+    ) -> engine_pb2.ApplyActionsResponse:
         logging.debug(f"ApplyAction: {request}")
         application_results: list[engine_pb2.KeyValue] = []
         run_id = request.run_id
@@ -314,25 +325,23 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     # )
                     application_results.append(
                         engine_pb2.KeyValue(
-                            key="Error", string_value=f"Setter: {str(e)}"
+                            key="Error",
+                            value=Value(string_value=f"Setter: {str(e)}"),
                         )
                     )
 
                 application_results.append(
                     engine_pb2.KeyValue(
                         key="Info",
-                        string_value=(
-                            f"Setter Called {a.setter.domain}.{a.setter.setter_name}"
+                        value=Value(
+                            string_value=f"Setter Called {a.setter.domain}.{a.setter.setter_name}"
                             f"({a.setter.object_id}, {a.setter.value}, "
                             f"{a.setter.additional_parameters})"
                         ),
                     )
                 )
 
-        frame = self._build_frame(
-            run_id=run_id,
-            metrics=application_results
-        )
+        frame = self._build_frame(run_id=run_id, metrics=application_results)
         await self.telemetry_queues[run_id].put(frame)
         return engine_pb2.ApplyActionsResponse(run_id=run_id)
 
@@ -340,9 +349,11 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self,
         request: engine_pb2.SubscribeRequest,
         context: grpc.ServicerContext,
-    ):
+    ) -> engine_pb2.SubscribeResponse:
         if self.subscription_manager is None:
-            context.abort(grpc.StatusCode.ABORTED, "Subscription Manager not initialised.")
+            context.abort(
+                grpc.StatusCode.ABORTED, "Subscription Manager not initialised."
+            )
             return
         logging.debug(f"Subscribe: {request}")
         additional_parameters = {
@@ -367,7 +378,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
     async def StreamTelemetry(
         self, request: engine_pb2.StreamRequest, context: grpc.ServicerContext
-    ):
+    ) -> AsyncIterator[engine_pb2.TelemetryFrame]:
         logging.debug(f"StreamTelemetry: {request}")
         run_id = request.run_id
         if run_id not in self.telemetry_queues:
@@ -382,7 +393,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
     async def StreamSubscriptions(
         self, request: engine_pb2.StreamRequest, context: grpc.ServicerContext
-    ):
+    ) -> AsyncIterator[engine_pb2.TelemetryFrame]:
         logging.debug(f"StreeamSubscription: {request}")
         run_id = request.run_id
         if run_id not in self.subscription_queues:
@@ -395,7 +406,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 return
             yield frame
 
-    async def _run_loop(self, run_id: str, max_steps: int):
+    async def _run_loop(self, run_id: str, max_steps: int) -> None:
         run = self.runs[run_id]
         q = self.telemetry_queues[run_id]
 
@@ -426,7 +437,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         errors.append(
                             engine_pb2.KeyValue(
                                 key=f"Error",
-                                string_value=f"Failed to collect for {sub.name}: {exception}: {exception.__cause__}",
+                                value=Value(
+                                    string_value=f"Failed to collect for {sub.name}: "
+                                    f"{exception}: {exception.__cause__}"
+                                ),
                             )
                         )
                         logging.warning(
@@ -442,7 +456,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 frame = self._build_frame(
                     run_id=run_id,
                     metrics=[
-                        engine_pb2.KeyValue(key=k, double_value=float(v))
+                        engine_pb2.KeyValue(
+                            key=k, value=Value(number_value=float(v))
+                        )
                         for k, v in metrics.items()
                     ],
                 )
@@ -457,7 +473,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             # await q.put(None)
 
 
-async def serve(host: str = "127.0.0.1", port: int = 50051):
+async def serve(host: str = "127.0.0.1", port: int = 50051) -> None:
     server = grpc.aio.server()
     engine_pb2_grpc.add_EngineServiceServicer_to_server(EngineService(), server)
     server.add_insecure_port(f"{host}:{port}")
@@ -465,7 +481,7 @@ async def serve(host: str = "127.0.0.1", port: int = 50051):
     await server.wait_for_termination()
 
 
-def main():
+def main() -> None:
     logging.basicConfig(level=logging.INFO)
 
     asyncio.run(serve())

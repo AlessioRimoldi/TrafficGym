@@ -6,9 +6,9 @@ import logging
 from collections import deque, defaultdict
 import random
 
-from ..api import engine_pb2, engine_pb2_grpc # type: ignore[import]
+from ..api import engine_pb2, engine_pb2_grpc
 
-from typing import AsyncIterator
+from typing import AsyncIterable
 
 import sys
 
@@ -16,11 +16,12 @@ errors: list[str] = []
 warnings: list[str] = []
 
 
-def raise_async_except(task):
+def raise_async_except(task: asyncio.Task[object]) -> None:
+    exception = task.exception()
     if task.cancelled():
         logging.error(f"{task.get_name()} was cancelled")
-    elif task.exception() is not None:
-        exception = task.exception()
+
+    elif exception is not None:
         if isinstance(exception, grpc.RpcError):
             if exception.code() == grpc.StatusCode.UNKNOWN:
                 logging.critical(
@@ -38,20 +39,17 @@ def raise_async_except(task):
             raise exception
 
 
-async def set_signal(stub, run_id, signal_id, state):
+async def set_signal(
+    stub: engine_pb2_grpc.EngineServiceStub,
+    run_id: str,
+    signal_id: str,
+    state: str,
+) -> engine_pb2.ApplyActionsResponse:
     return stub.ApplyActions(
         engine_pb2.ActionBundle(
             run_id=run_id,
             step=0,
             actions=[
-                # engine_pb2.Action(
-                #     setter=engine_pb2.GenericSetter(
-                #         domain="trafficlight",
-                #         setter_name="setPhase",
-                #         object_id=tls_id,
-                #         value="1",
-                #     )
-                # ),
                 engine_pb2.Action(
                     setter=engine_pb2.GenericSetter(
                         domain="trafficlight",
@@ -65,7 +63,7 @@ async def set_signal(stub, run_id, signal_id, state):
     )
 
 
-async def main():
+async def main() -> None:
     sumocfg_path = (
         "/home/diego/documents/"
         # "/home/r/Code"
@@ -86,9 +84,11 @@ async def main():
         )
         run_id = cr.run_id
 
-        subscriptions_store: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=10))
+        subscriptions_store: dict[str, deque[str]] = defaultdict(
+            lambda: deque(maxlen=10)
+        )
 
-        async def scenario():
+        async def scenario() -> None:
             eastbound_veh_ids = "eastbound_veh_ids"
 
             # await stub.Subscribe(
@@ -150,7 +150,7 @@ async def main():
 
             tup = eval(deq[-1])
 
-            chosen_veh_id = random.choice(tup)
+            chosen_veh_id = str(random.choice(tup))
 
             logging.info(chosen_veh_id)
 
@@ -225,28 +225,29 @@ async def main():
             raise_async_except
         )  # crash hard for now
 
-        telemetry_stream: AsyncIterator[engine_pb2.TelemetryFrame] = (
+        telemetry_stream: AsyncIterable[engine_pb2.TelemetryFrame] = (
             stub.StreamTelemetry(engine_pb2.StreamRequest(run_id=run_id))
         )
 
-        subscription_stream: AsyncIterator[engine_pb2.TelemetryFrame] = (
+        subscription_stream: AsyncIterable[engine_pb2.TelemetryFrame] = (
             stub.StreamSubscriptions(engine_pb2.StreamRequest(run_id=run_id))
         )
 
         async def handle_stream(
-            stream: AsyncIterator[engine_pb2.TelemetryFrame],
-            prefix="",
+            stream: AsyncIterable[engine_pb2.TelemetryFrame],
+            prefix: str = "",
             store: dict[str, deque[str]] | None = None,
             print_filter: list[str] | None = None,
-        ):
+        ) -> None:
             async for frame in stream:
                 kv = {}
                 for m in frame.metrics:
-                    field = m.WhichOneof("value")
+                    # value = m.value.SerializeToString()
+                    field = m.value.WhichOneof("kind")
                     if field == "string_value":
-                        value = m.string_value
-                    elif field == "double_value":
-                        value = str(m.double_value)
+                        value = m.value.string_value
+                    elif field == "number_value":
+                        value = str(m.value.number_value)
                     else:
                         logging.warning(
                             f"Stream frame value is not a string or a float!"
@@ -275,23 +276,23 @@ async def main():
                     stream=telemetry_stream,
                     prefix="T: ",
                     store=None,
-                    print_filter=["Info", "Error", "Warning"]
+                    print_filter=["Info", "Error", "Warning"],
                 ),
                 handle_stream(
                     stream=subscription_stream,
                     prefix="S: ",
                     store=subscriptions_store,
-                    print_filter=[]
+                    print_filter=[],
                 ),
             )
         except Exception as e:
             logging.error(str(e))
             errors.append(str(e))
 
-
         logging.info(
             f"Execution terminated with {len(errors)} error(s) and {len(warnings)} warning(s)."
         )
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

@@ -13,7 +13,7 @@ else:
     logging.critical("please declare environment variable 'SUMO_HOME'")
     sys.exit(1)
 
-import libsumo # type: ignore[import]
+import libsumo  # type: ignore[import-untyped]
 
 # Domain = Enum("Domain", list(map(lambda x: x.__name__, libsumo.DOMAINS)))
 
@@ -35,7 +35,7 @@ class RunState:
         self.last_metrics: dict[str, float] = {}
         self.max_steps: int | None = None
 
-    def start(self, max_steps: int):
+    def start(self, max_steps: int) -> None:
         if self.started:
             return
         cmd = [
@@ -51,14 +51,14 @@ class RunState:
         self.max_steps = max_steps
         self.step = 0
 
-    def close(self):
+    def close(self) -> None:
         if self.started:
             try:
                 libsumo.close()
             finally:
                 self.started = False
 
-    def apply_tls_set_phase(self, tls_id: str, phase_index: int):
+    def apply_tls_set_phase(self, tls_id: str, phase_index: int) -> None:
         libsumo.trafficlight.setPhase(tls_id, int(phase_index))
 
     def invoke_setter(
@@ -69,18 +69,18 @@ class RunState:
         object_id: str,
         value: str,
         additional_parameters: dict[str, Any],
-    ):
+    ) -> None:
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
 
         if object_id == "":
             # not sure if there are any setters which do not need an object id
-            return setter_handle(value, **additional_parameters)
+            setter_handle(value, **additional_parameters)
         else:
             try:
-                return setter_handle(object_id, value, **additional_parameters)
+                setter_handle(object_id, value, **additional_parameters)
             except TypeError:
-                return setter_handle(
+                setter_handle(
                     object_id, int(value), **additional_parameters
                 )
 
@@ -117,14 +117,14 @@ class RunState:
         getter_name: str,
         object_id: str,
         additional_parameters: dict[str, Any],
-    ) -> Any:
+    ) -> str:
         domain_handle = getattr(libsumo, domain)
         getter_handle = getattr(domain_handle, getter_name)
 
         if object_id == "":
-            return getter_handle(**additional_parameters)
+            return str(getter_handle(**additional_parameters))
         else:
-            return getter_handle(object_id, **additional_parameters)
+            return str(getter_handle(object_id, **additional_parameters))
 
         # try:
         #     return getterHandle()
