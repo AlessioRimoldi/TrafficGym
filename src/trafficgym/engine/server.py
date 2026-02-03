@@ -213,7 +213,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return engine_pb2.TelemetryFrame(
             run_id=run_id,
             step=run.step,
-            sim_time_s=run.step / run.cfg.step_length_ms,
+            sim_time_s=run.step * run.cfg.step_length_ms / 1000,
             metrics=metrics,
         )
 
@@ -528,13 +528,13 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 new_name = request.new_interrupt_conditions.name
                 new_value = request.new_interrupt_conditions.value.string_value
                 # new_value = request.new_interrupt_conditions.value
-                if new_name != '':
+                if new_name != "":
                     acknowledged_interrupt.trigger_metric_name = new_name
                     logging.debug(
                         f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
                         f"trigger name to {new_name}."
                     )
-                if new_value != '':
+                if new_value != "":
                     acknowledged_interrupt.trigger_metric_value = new_value
                     logging.debug(
                         f"Updated interrupt {acknowledged_interrupt.interrupt_id} "

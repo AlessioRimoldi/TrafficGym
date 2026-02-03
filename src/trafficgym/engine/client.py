@@ -91,9 +91,9 @@ async def main() -> None:
         cr = await stub.CreateRun(
             engine_pb2.CreateRunRequest(
                 sumocfg_path=sumocfg_path,
-                # sumo_binary="sumo",
-                sumo_binary="sumo-gui",
-                step_length_ms=10,
+                sumo_binary="sumo",
+                # sumo_binary="sumo-gui",
+                step_length_ms=1000,
             )
         )
         run_id = cr.run_id
@@ -165,12 +165,12 @@ async def main() -> None:
                 prefix="S: ",
                 store=subscriptions_store,
                 # print_filter=None,
-                # print_filter=[],
-                print_filter=[
-                    "trafficlight.getRedYellowGreenState_TL0",
-                    "trafficlight.getSpentDuration_TL0",
-                    "simulation.getTime_",
-                ],
+                print_filter=[],
+                # print_filter=[
+                #     "trafficlight.getRedYellowGreenState_TL0",
+                #     "trafficlight.getSpentDuration_TL0",
+                #     "simulation.getTime_",
+                # ],
             ),
         )
 
@@ -216,9 +216,7 @@ async def main() -> None:
                     run_id=run_id,
                     trigger_metric=engine_pb2.MetricNameAndValue(
                         name=time_subscription_name,
-                        value=Value(
-                            number_value=(durations[0] + inital_step)
-                        ),
+                        value=Value(number_value=(durations[0] + inital_step)),
                     ),
                 )
             )
@@ -233,12 +231,16 @@ async def main() -> None:
                     logging.debug(
                         f"TLS Program interrupt triggered. Event: {interrupt_event.event_id}"
                     )
-                    i += 1 # start at 1 because we have already initialised state 0
+                    i += 1  # start at 1 because we have already initialised state 0
 
                     try:
-                        observed_value = int(float(interrupt_event.observed_value.string_value))
+                        observed_value = int(
+                            float(interrupt_event.observed_value.string_value)
+                        )
                     except:
-                        logging.warning(f"Failed to read interrupt observed value")
+                        logging.warning(
+                            f"Failed to read interrupt observed value"
+                        )
                         observed_value = 0
 
                     logging.debug("ACKING THE INTERRUPT")
@@ -255,9 +257,7 @@ async def main() -> None:
                                             domain="trafficlight",
                                             setter_name="setRedYellowGreenState",
                                             object_id=tls_id,
-                                            value=phases[
-                                                i % len(phases)
-                                            ],
+                                            value=phases[i % len(phases)],
                                         )
                                     )
                                 ],
@@ -265,9 +265,12 @@ async def main() -> None:
                             new_interrupt_conditions=engine_pb2.MetricNameAndValue(
                                 name=time_subscription_name,
                                 value=Value(
-                                    string_value=str(float(
-                                        durations[i % len(phases)] + observed_value 
-                                    ))
+                                    string_value=str(
+                                        float(
+                                            durations[i % len(phases)]
+                                            + observed_value
+                                        )
+                                    )
                                 ),
                             ),
                         )
@@ -423,7 +426,7 @@ async def main() -> None:
                 tls_id,
                 ["rGrG", "ryry", "GrGr", "yryr"],
                 [30, 3, 30, 3],
-                0
+                0,
             )
             # )
 
@@ -503,7 +506,15 @@ async def main() -> None:
                 )
             )
 
-            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=100))
+            run_response: engine_pb2.RunResponse = await stub.Run(
+                engine_pb2.RunRequest(run_id=run_id, max_time=100)
+            )
+            new_step = run_response.new_step
+
+            logging.debug(
+                f"Will wait until telemetry reception for step {new_step}"
+            )
+            await asyncio.wait_for(wait_for_step(deq, new_step), 10)
 
             tls_program.cancel()
 
@@ -533,7 +544,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     asyncio.run(main())
 
