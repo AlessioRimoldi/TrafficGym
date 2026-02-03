@@ -76,6 +76,7 @@ message RunRequest {
 
 message RunResponse {
   string run_id = 1;
+  uint64 new_step = 5;
 }
 
 message CloseRunRequest {
@@ -121,10 +122,18 @@ message UnsubscribeResponse {
   string run_id = 1;
 }
 
+message MetricNameAndValue {
+  string name = 1;
+  google.protobuf.Value value = 2;
+}
+
 message RegisterInterruptRequest {
   string run_id = 1;
-  string trigger_metric_name = 2;
-  google.protobuf.Value trigger_metric_value = 3;
+  reserved "trigger_metric_name", "trigger_metric_value";
+  reserved 2, 3;
+  // string trigger_metric_name = 2;
+  // google.protobuf.Value trigger_metric_value = 3;
+  MetricNameAndValue trigger_metric = 4;
 }
 
 message InterruptEvent {
@@ -139,10 +148,7 @@ message AcknowledgeInterruptRequest {
   string interrupt_id = 2;
   string event_id = 3;
   ActionBundle actions = 4;
-}
-
-message AcknowledgeInterruptResponse {
-
+  MetricNameAndValue new_interrupt_conditions = 5;
 }
 
 message CancelInterruptRequest {
@@ -151,7 +157,7 @@ message CancelInterruptRequest {
 }
 
 message CancelInterruptResponse {
-
+  string interrupt_id = 1;
 }
 
 service EngineService {
@@ -164,7 +170,7 @@ service EngineService {
   rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
   rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
   rpc RegisterInterrupt(RegisterInterruptRequest) returns (stream InterruptEvent);
-  rpc AcknowledgeInterrupt(AcknowledgeInterruptRequest) returns (AcknowledgeInterruptResponse);
+  rpc AcknowledgeInterrupt(AcknowledgeInterruptRequest) returns (ApplyActionsResponse);
   rpc CancelInterrupt(CancelInterruptRequest) returns (CancelInterruptResponse);
 }
 

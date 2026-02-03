@@ -82,7 +82,7 @@ class EngineServiceStub(object):
         self.AcknowledgeInterrupt = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/AcknowledgeInterrupt',
                 request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptResponse.FromString,
+                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
                 _registered_method=True)
         self.CancelInterrupt = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/CancelInterrupt',
@@ -211,7 +211,7 @@ def add_EngineServiceServicer_to_server(servicer, server):
             'AcknowledgeInterrupt': grpc.unary_unary_rpc_method_handler(
                     servicer.AcknowledgeInterrupt,
                     request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptResponse.SerializeToString,
+                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
             ),
             'CancelInterrupt': grpc.unary_unary_rpc_method_handler(
                     servicer.CancelInterrupt,
@@ -488,7 +488,7 @@ class EngineService(object):
             target,
             '/sumo.engine.v1.EngineService/AcknowledgeInterrupt',
             src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptResponse.FromString,
+            src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fsrc/trafficgym/api/engine.proto\x12\x0esumo.engine.v1\x1a\x1cgoogle/protobuf/struct.proto\"J\n\x08KeyValue\x12\x0b\n\x03key\x18\x01 \x01(\t\x12%\n\x05value\x18\x04 \x01(\x0b\x32\x16.google.protobuf.ValueJ\x04\x08\x02\x10\x03J\x04\x08\x03\x10\x04\"m\n\x0eTelemetryFrame\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\x12\n\nsim_time_s\x18\x03 \x01(\x01\x12)\n\x07metrics\x18\x04 \x03(\x0b\x32\x18.sumo.engine.v1.KeyValue\"2\n\x0bTlsSetPhase\x12\x0e\n\x06tls_id\x18\x01 \x01(\t\x12\x13\n\x0bphase_index\x18\x02 \x01(\x05\"\x90\x01\n\rGenericSetter\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x13\n\x0bsetter_name\x18\x02 \x01(\t\x12\x11\n\tobject_id\x18\x03 \x01(\t\x12\r\n\x05value\x18\x04 \x01(\t\x12\x38\n\x15\x61\x64\x64itional_parameters\x18\x05 \x03(\x0b\x32\x19.sumo.engine.v1.Parameter\"Y\n\x06\x41\x63tion\x12/\n\x06setter\x18\x02 \x01(\x0b\x32\x1d.sumo.engine.v1.GenericSetterH\x00\x42\t\n\x07payloadJ\x04\x08\x01\x10\x02R\rtls_set_phase\"U\n\x0c\x41\x63tionBundle\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\'\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\x16.sumo.engine.v1.Action\"J\n\x08\x41rtifact\x12\x13\n\x0b\x61rtifact_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x0b\n\x03uri\x18\x03 \x01(\t\x12\x0e\n\x06sha256\x18\x04 \x01(\t\"U\n\x10\x43reateRunRequest\x12\x14\n\x0csumocfg_path\x18\x01 \x01(\t\x12\x13\n\x0bsumo_binary\x18\x02 \x01(\t\x12\x16\n\x0estep_length_ms\x18\x03 \x01(\x05\"V\n\x11\x43reateRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x31\n\x0finput_artifacts\x18\x02 \x03(\x0b\x32\x18.sumo.engine.v1.Artifact\"V\n\nRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x13\n\tmax_steps\x18\x03 \x01(\x05H\x00\x12\x12\n\x08max_time\x18\x04 \x01(\x02H\x00\x42\t\n\x07max_runJ\x04\x08\x02\x10\x03\"\x1d\n\x0bRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"!\n\x0f\x43loseRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\"\n\x10\x43loseRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"&\n\x14\x41pplyActionsResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\x1f\n\rStreamRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"(\n\tParameter\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"\xc3\x01\n\x10SubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\x13\n\x0bgetter_name\x18\x03 \x01(\t\x12\x16\n\tobject_id\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x38\n\x15\x61\x64\x64itional_parameters\x18\x05 \x03(\x0b\x32\x19.sumo.engine.v1.Parameter\x12\x11\n\x04name\x18\x06 \x01(\tH\x01\x88\x01\x01\x42\x0c\n\n_object_idB\x07\n\x05_name\"=\n\x11SubscribeResponse\x12(\n subscription_name_or_fingerprint\x18\x01 \x01(\t\"$\n\x12UnsubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"%\n\x13UnsubscribeResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"}\n\x18RegisterInterruptRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x1b\n\x13trigger_metric_name\x18\x02 \x01(\t\x12\x34\n\x14trigger_metric_value\x18\x03 \x01(\x0b\x32\x16.google.protobuf.Value\"h\n\x0eInterruptEvent\x12\x14\n\x0cinterrupt_id\x18\x01 \x01(\t\x12\x10\n\x08\x65vent_id\x18\x02 \x01(\t\x12.\n\x0eobserved_value\x18\x03 \x01(\x0b\x32\x16.google.protobuf.Value\"\x84\x01\n\x1b\x41\x63knowledgeInterruptRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0cinterrupt_id\x18\x02 \x01(\t\x12\x10\n\x08\x65vent_id\x18\x03 \x01(\t\x12-\n\x07\x61\x63tions\x18\x04 \x01(\x0b\x32\x1c.sumo.engine.v1.ActionBundle\"\x1e\n\x1c\x41\x63knowledgeInterruptResponse\">\n\x16\x43\x61ncelInterruptRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0cinterrupt_id\x18\x02 \x01(\t\"\x19\n\x17\x43\x61ncelInterruptResponse2\xd2\x07\n\rEngineService\x12P\n\tCreateRun\x12 .sumo.engine.v1.CreateRunRequest\x1a!.sumo.engine.v1.CreateRunResponse\x12>\n\x03Run\x12\x1a.sumo.engine.v1.RunRequest\x1a\x1b.sumo.engine.v1.RunResponse\x12M\n\x08\x43loseRun\x12\x1f.sumo.engine.v1.CloseRunRequest\x1a .sumo.engine.v1.CloseRunResponse\x12R\n\x0c\x41pplyActions\x12\x1c.sumo.engine.v1.ActionBundle\x1a$.sumo.engine.v1.ApplyActionsResponse\x12R\n\x0fStreamTelemetry\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12V\n\x13StreamSubscriptions\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12P\n\tSubscribe\x12 .sumo.engine.v1.SubscribeRequest\x1a!.sumo.engine.v1.SubscribeResponse\x12V\n\x0bUnsubscribe\x12\".sumo.engine.v1.UnsubscribeRequest\x1a#.sumo.engine.v1.UnsubscribeResponse\x12_\n\x11RegisterInterrupt\x12(.sumo.engine.v1.RegisterInterruptRequest\x1a\x1e.sumo.engine.v1.InterruptEvent0\x01\x12q\n\x14\x41\x63knowledgeInterrupt\x12+.sumo.engine.v1.AcknowledgeInterruptRequest\x1a,.sumo.engine.v1.AcknowledgeInterruptResponse\x12\x62\n\x0f\x43\x61ncelInterrupt\x12&.sumo.engine.v1.CancelInterruptRequest\x1a\'.sumo.engine.v1.CancelInterruptResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fsrc/trafficgym/api/engine.proto\x12\x0esumo.engine.v1\x1a\x1cgoogle/protobuf/struct.proto\"J\n\x08KeyValue\x12\x0b\n\x03key\x18\x01 \x01(\t\x12%\n\x05value\x18\x04 \x01(\x0b\x32\x16.google.protobuf.ValueJ\x04\x08\x02\x10\x03J\x04\x08\x03\x10\x04\"m\n\x0eTelemetryFrame\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\x12\n\nsim_time_s\x18\x03 \x01(\x01\x12)\n\x07metrics\x18\x04 \x03(\x0b\x32\x18.sumo.engine.v1.KeyValue\"2\n\x0bTlsSetPhase\x12\x0e\n\x06tls_id\x18\x01 \x01(\t\x12\x13\n\x0bphase_index\x18\x02 \x01(\x05\"\x90\x01\n\rGenericSetter\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\x12\x13\n\x0bsetter_name\x18\x02 \x01(\t\x12\x11\n\tobject_id\x18\x03 \x01(\t\x12\r\n\x05value\x18\x04 \x01(\t\x12\x38\n\x15\x61\x64\x64itional_parameters\x18\x05 \x03(\x0b\x32\x19.sumo.engine.v1.Parameter\"Y\n\x06\x41\x63tion\x12/\n\x06setter\x18\x02 \x01(\x0b\x32\x1d.sumo.engine.v1.GenericSetterH\x00\x42\t\n\x07payloadJ\x04\x08\x01\x10\x02R\rtls_set_phase\"U\n\x0c\x41\x63tionBundle\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0c\n\x04step\x18\x02 \x01(\x03\x12\'\n\x07\x61\x63tions\x18\x03 \x03(\x0b\x32\x16.sumo.engine.v1.Action\"J\n\x08\x41rtifact\x12\x13\n\x0b\x61rtifact_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x0b\n\x03uri\x18\x03 \x01(\t\x12\x0e\n\x06sha256\x18\x04 \x01(\t\"U\n\x10\x43reateRunRequest\x12\x14\n\x0csumocfg_path\x18\x01 \x01(\t\x12\x13\n\x0bsumo_binary\x18\x02 \x01(\t\x12\x16\n\x0estep_length_ms\x18\x03 \x01(\x05\"V\n\x11\x43reateRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x31\n\x0finput_artifacts\x18\x02 \x03(\x0b\x32\x18.sumo.engine.v1.Artifact\"V\n\nRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x13\n\tmax_steps\x18\x03 \x01(\x05H\x00\x12\x12\n\x08max_time\x18\x04 \x01(\x02H\x00\x42\t\n\x07max_runJ\x04\x08\x02\x10\x03\"/\n\x0bRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x10\n\x08new_step\x18\x05 \x01(\x04\"!\n\x0f\x43loseRunRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\"\n\x10\x43loseRunResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"&\n\x14\x41pplyActionsResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"\x1f\n\rStreamRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"(\n\tParameter\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"\xc3\x01\n\x10SubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0e\n\x06\x64omain\x18\x02 \x01(\t\x12\x13\n\x0bgetter_name\x18\x03 \x01(\t\x12\x16\n\tobject_id\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x38\n\x15\x61\x64\x64itional_parameters\x18\x05 \x03(\x0b\x32\x19.sumo.engine.v1.Parameter\x12\x11\n\x04name\x18\x06 \x01(\tH\x01\x88\x01\x01\x42\x0c\n\n_object_idB\x07\n\x05_name\"=\n\x11SubscribeResponse\x12(\n subscription_name_or_fingerprint\x18\x01 \x01(\t\"$\n\x12UnsubscribeRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"%\n\x13UnsubscribeResponse\x12\x0e\n\x06run_id\x18\x01 \x01(\t\"I\n\x12MetricNameAndValue\x12\x0c\n\x04name\x18\x01 \x01(\t\x12%\n\x05value\x18\x02 \x01(\x0b\x32\x16.google.protobuf.Value\"\x9d\x01\n\x18RegisterInterruptRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12:\n\x0etrigger_metric\x18\x04 \x01(\x0b\x32\".sumo.engine.v1.MetricNameAndValueJ\x04\x08\x02\x10\x03J\x04\x08\x03\x10\x04R\x13trigger_metric_nameR\x14trigger_metric_value\"h\n\x0eInterruptEvent\x12\x14\n\x0cinterrupt_id\x18\x01 \x01(\t\x12\x10\n\x08\x65vent_id\x18\x02 \x01(\t\x12.\n\x0eobserved_value\x18\x03 \x01(\x0b\x32\x16.google.protobuf.Value\"\xca\x01\n\x1b\x41\x63knowledgeInterruptRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0cinterrupt_id\x18\x02 \x01(\t\x12\x10\n\x08\x65vent_id\x18\x03 \x01(\t\x12-\n\x07\x61\x63tions\x18\x04 \x01(\x0b\x32\x1c.sumo.engine.v1.ActionBundle\x12\x44\n\x18new_interrupt_conditions\x18\x05 \x01(\x0b\x32\".sumo.engine.v1.MetricNameAndValue\">\n\x16\x43\x61ncelInterruptRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x0cinterrupt_id\x18\x02 \x01(\t\"/\n\x17\x43\x61ncelInterruptResponse\x12\x14\n\x0cinterrupt_id\x18\x01 \x01(\t2\xca\x07\n\rEngineService\x12P\n\tCreateRun\x12 .sumo.engine.v1.CreateRunRequest\x1a!.sumo.engine.v1.CreateRunResponse\x12>\n\x03Run\x12\x1a.sumo.engine.v1.RunRequest\x1a\x1b.sumo.engine.v1.RunResponse\x12M\n\x08\x43loseRun\x12\x1f.sumo.engine.v1.CloseRunRequest\x1a .sumo.engine.v1.CloseRunResponse\x12R\n\x0c\x41pplyActions\x12\x1c.sumo.engine.v1.ActionBundle\x1a$.sumo.engine.v1.ApplyActionsResponse\x12R\n\x0fStreamTelemetry\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12V\n\x13StreamSubscriptions\x12\x1d.sumo.engine.v1.StreamRequest\x1a\x1e.sumo.engine.v1.TelemetryFrame0\x01\x12P\n\tSubscribe\x12 .sumo.engine.v1.SubscribeRequest\x1a!.sumo.engine.v1.SubscribeResponse\x12V\n\x0bUnsubscribe\x12\".sumo.engine.v1.UnsubscribeRequest\x1a#.sumo.engine.v1.UnsubscribeResponse\x12_\n\x11RegisterInterrupt\x12(.sumo.engine.v1.RegisterInterruptRequest\x1a\x1e.sumo.engine.v1.InterruptEvent0\x01\x12i\n\x14\x41\x63knowledgeInterrupt\x12+.sumo.engine.v1.AcknowledgeInterruptRequest\x1a$.sumo.engine.v1.ApplyActionsResponse\x12\x62\n\x0f\x43\x61ncelInterrupt\x12&.sumo.engine.v1.CancelInterruptRequest\x1a\'.sumo.engine.v1.CancelInterruptResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -53,37 +53,37 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_RUNREQUEST']._serialized_start=896
   _globals['_RUNREQUEST']._serialized_end=982
   _globals['_RUNRESPONSE']._serialized_start=984
-  _globals['_RUNRESPONSE']._serialized_end=1013
-  _globals['_CLOSERUNREQUEST']._serialized_start=1015
-  _globals['_CLOSERUNREQUEST']._serialized_end=1048
-  _globals['_CLOSERUNRESPONSE']._serialized_start=1050
-  _globals['_CLOSERUNRESPONSE']._serialized_end=1084
-  _globals['_APPLYACTIONSRESPONSE']._serialized_start=1086
-  _globals['_APPLYACTIONSRESPONSE']._serialized_end=1124
-  _globals['_STREAMREQUEST']._serialized_start=1126
-  _globals['_STREAMREQUEST']._serialized_end=1157
-  _globals['_PARAMETER']._serialized_start=1159
-  _globals['_PARAMETER']._serialized_end=1199
-  _globals['_SUBSCRIBEREQUEST']._serialized_start=1202
-  _globals['_SUBSCRIBEREQUEST']._serialized_end=1397
-  _globals['_SUBSCRIBERESPONSE']._serialized_start=1399
-  _globals['_SUBSCRIBERESPONSE']._serialized_end=1460
-  _globals['_UNSUBSCRIBEREQUEST']._serialized_start=1462
-  _globals['_UNSUBSCRIBEREQUEST']._serialized_end=1498
-  _globals['_UNSUBSCRIBERESPONSE']._serialized_start=1500
-  _globals['_UNSUBSCRIBERESPONSE']._serialized_end=1537
-  _globals['_REGISTERINTERRUPTREQUEST']._serialized_start=1539
-  _globals['_REGISTERINTERRUPTREQUEST']._serialized_end=1664
-  _globals['_INTERRUPTEVENT']._serialized_start=1666
-  _globals['_INTERRUPTEVENT']._serialized_end=1770
-  _globals['_ACKNOWLEDGEINTERRUPTREQUEST']._serialized_start=1773
-  _globals['_ACKNOWLEDGEINTERRUPTREQUEST']._serialized_end=1905
-  _globals['_ACKNOWLEDGEINTERRUPTRESPONSE']._serialized_start=1907
-  _globals['_ACKNOWLEDGEINTERRUPTRESPONSE']._serialized_end=1937
-  _globals['_CANCELINTERRUPTREQUEST']._serialized_start=1939
-  _globals['_CANCELINTERRUPTREQUEST']._serialized_end=2001
-  _globals['_CANCELINTERRUPTRESPONSE']._serialized_start=2003
-  _globals['_CANCELINTERRUPTRESPONSE']._serialized_end=2028
-  _globals['_ENGINESERVICE']._serialized_start=2031
-  _globals['_ENGINESERVICE']._serialized_end=3009
+  _globals['_RUNRESPONSE']._serialized_end=1031
+  _globals['_CLOSERUNREQUEST']._serialized_start=1033
+  _globals['_CLOSERUNREQUEST']._serialized_end=1066
+  _globals['_CLOSERUNRESPONSE']._serialized_start=1068
+  _globals['_CLOSERUNRESPONSE']._serialized_end=1102
+  _globals['_APPLYACTIONSRESPONSE']._serialized_start=1104
+  _globals['_APPLYACTIONSRESPONSE']._serialized_end=1142
+  _globals['_STREAMREQUEST']._serialized_start=1144
+  _globals['_STREAMREQUEST']._serialized_end=1175
+  _globals['_PARAMETER']._serialized_start=1177
+  _globals['_PARAMETER']._serialized_end=1217
+  _globals['_SUBSCRIBEREQUEST']._serialized_start=1220
+  _globals['_SUBSCRIBEREQUEST']._serialized_end=1415
+  _globals['_SUBSCRIBERESPONSE']._serialized_start=1417
+  _globals['_SUBSCRIBERESPONSE']._serialized_end=1478
+  _globals['_UNSUBSCRIBEREQUEST']._serialized_start=1480
+  _globals['_UNSUBSCRIBEREQUEST']._serialized_end=1516
+  _globals['_UNSUBSCRIBERESPONSE']._serialized_start=1518
+  _globals['_UNSUBSCRIBERESPONSE']._serialized_end=1555
+  _globals['_METRICNAMEANDVALUE']._serialized_start=1557
+  _globals['_METRICNAMEANDVALUE']._serialized_end=1630
+  _globals['_REGISTERINTERRUPTREQUEST']._serialized_start=1633
+  _globals['_REGISTERINTERRUPTREQUEST']._serialized_end=1790
+  _globals['_INTERRUPTEVENT']._serialized_start=1792
+  _globals['_INTERRUPTEVENT']._serialized_end=1896
+  _globals['_ACKNOWLEDGEINTERRUPTREQUEST']._serialized_start=1899
+  _globals['_ACKNOWLEDGEINTERRUPTREQUEST']._serialized_end=2101
+  _globals['_CANCELINTERRUPTREQUEST']._serialized_start=2103
+  _globals['_CANCELINTERRUPTREQUEST']._serialized_end=2165
+  _globals['_CANCELINTERRUPTRESPONSE']._serialized_start=2167
+  _globals['_CANCELINTERRUPTRESPONSE']._serialized_end=2214
+  _globals['_ENGINESERVICE']._serialized_start=2217
+  _globals['_ENGINESERVICE']._serialized_end=3187
 # @@protoc_insertion_point(module_scope)

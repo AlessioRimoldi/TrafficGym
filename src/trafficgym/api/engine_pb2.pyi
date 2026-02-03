@@ -259,13 +259,16 @@ class RunResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     RUN_ID_FIELD_NUMBER: _builtins.int
+    NEW_STEP_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
+    new_step: _builtins.int
     def __init__(
         self,
         *,
         run_id: _builtins.str = ...,
+        new_step: _builtins.int = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["new_step", b"new_step", "run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RunResponse: _TypeAlias = RunResponse  # noqa: Y015
@@ -445,26 +448,49 @@ class UnsubscribeResponse(_message.Message):
 Global___UnsubscribeResponse: _TypeAlias = UnsubscribeResponse  # noqa: Y015
 
 @_typing.final
+class MetricNameAndValue(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    VALUE_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    @_builtins.property
+    def value(self) -> _struct_pb2.Value: ...
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        value: _struct_pb2.Value | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "value", b"value"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___MetricNameAndValue: _TypeAlias = MetricNameAndValue  # noqa: Y015
+
+@_typing.final
 class RegisterInterruptRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     RUN_ID_FIELD_NUMBER: _builtins.int
-    TRIGGER_METRIC_NAME_FIELD_NUMBER: _builtins.int
-    TRIGGER_METRIC_VALUE_FIELD_NUMBER: _builtins.int
+    TRIGGER_METRIC_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
-    trigger_metric_name: _builtins.str
     @_builtins.property
-    def trigger_metric_value(self) -> _struct_pb2.Value: ...
+    def trigger_metric(self) -> Global___MetricNameAndValue:
+        """string trigger_metric_name = 2;
+        google.protobuf.Value trigger_metric_value = 3;
+        """
+
     def __init__(
         self,
         *,
         run_id: _builtins.str = ...,
-        trigger_metric_name: _builtins.str = ...,
-        trigger_metric_value: _struct_pb2.Value | None = ...,
+        trigger_metric: Global___MetricNameAndValue | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["trigger_metric_value", b"trigger_metric_value"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["trigger_metric", b"trigger_metric"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["run_id", b"run_id", "trigger_metric_name", b"trigger_metric_name", "trigger_metric_value", b"trigger_metric_value"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["run_id", b"run_id", "trigger_metric", b"trigger_metric"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RegisterInterruptRequest: _TypeAlias = RegisterInterruptRequest  # noqa: Y015
@@ -504,11 +530,14 @@ class AcknowledgeInterruptRequest(_message.Message):
     INTERRUPT_ID_FIELD_NUMBER: _builtins.int
     EVENT_ID_FIELD_NUMBER: _builtins.int
     ACTIONS_FIELD_NUMBER: _builtins.int
+    NEW_INTERRUPT_CONDITIONS_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
     interrupt_id: _builtins.str
     event_id: _builtins.str
     @_builtins.property
     def actions(self) -> Global___ActionBundle: ...
+    @_builtins.property
+    def new_interrupt_conditions(self) -> Global___MetricNameAndValue: ...
     def __init__(
         self,
         *,
@@ -516,23 +545,14 @@ class AcknowledgeInterruptRequest(_message.Message):
         interrupt_id: _builtins.str = ...,
         event_id: _builtins.str = ...,
         actions: Global___ActionBundle | None = ...,
+        new_interrupt_conditions: Global___MetricNameAndValue | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["actions", b"actions"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["actions", b"actions", "new_interrupt_conditions", b"new_interrupt_conditions"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["actions", b"actions", "event_id", b"event_id", "interrupt_id", b"interrupt_id", "run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["actions", b"actions", "event_id", b"event_id", "interrupt_id", b"interrupt_id", "new_interrupt_conditions", b"new_interrupt_conditions", "run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___AcknowledgeInterruptRequest: _TypeAlias = AcknowledgeInterruptRequest  # noqa: Y015
-
-@_typing.final
-class AcknowledgeInterruptResponse(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
-
-Global___AcknowledgeInterruptResponse: _TypeAlias = AcknowledgeInterruptResponse  # noqa: Y015
 
 @_typing.final
 class CancelInterruptRequest(_message.Message):
@@ -557,8 +577,14 @@ Global___CancelInterruptRequest: _TypeAlias = CancelInterruptRequest  # noqa: Y0
 class CancelInterruptResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    INTERRUPT_ID_FIELD_NUMBER: _builtins.int
+    interrupt_id: _builtins.str
     def __init__(
         self,
+        *,
+        interrupt_id: _builtins.str = ...,
     ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["interrupt_id", b"interrupt_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CancelInterruptResponse: _TypeAlias = CancelInterruptResponse  # noqa: Y015

@@ -1,9 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import sys, os
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, Tuple, Any
+from google.protobuf.struct_pb2 import Value
+import asyncio
 import uuid
-from enum import Enum
 import logging
 
 if "SUMO_HOME" in os.environ:
@@ -15,7 +16,35 @@ else:
 
 import libsumo  # type: ignore[import-untyped]
 
+_original_setPhase = libsumo.trafficlight.setRedYellowGreenState
+
+
+def logging_setPhase(tls_id: str, phase: str) -> Any:
+    print(
+        f"[setPhase] tls={tls_id}, phase={phase}, simTime={libsumo.simulation.getTime()}"
+    )
+    return _original_setPhase(tls_id, phase)
+
+
+libsumo.trafficlight.setRedYellowGreenState = logging_setPhase
+
 # Domain = Enum("Domain", list(map(lambda x: x.__name__, libsumo.DOMAINS)))
+
+
+@dataclass
+class InterruptEvent:
+    event_id = str(uuid.uuid4())
+    observed_value: Value
+
+
+@dataclass
+class Interrupt:
+    trigger_metric_name: str
+    # trigger_metric_value: Value
+    trigger_metric_value: str
+    interrupt_id = str(uuid.uuid4())
+    interrupt_requests: asyncio.Queue[InterruptEvent | None]
+    active_interrupt_event: InterruptEvent | None = None
 
 
 @dataclass
@@ -34,8 +63,10 @@ class RunState:
         self.edge_ids: list[str] = []
         self.last_metrics: dict[str, float] = {}
         self.max_steps: int | None = None
+        self.interrupts: dict[str, Interrupt] = {}
 
-    def start(self, max_steps: int) -> None:
+    # def start(self, max_steps: int) -> None:
+    def start(self) -> None:
         if self.started:
             return
         cmd = [
@@ -48,7 +79,7 @@ class RunState:
         libsumo.start(cmd)
         self.edge_ids = list(libsumo.edge.getIDList())
         self.started = True
-        self.max_steps = max_steps
+        # self.max_steps = max_steps # will fix later
         self.step = 0
 
     def close(self) -> None:
@@ -58,8 +89,8 @@ class RunState:
             finally:
                 self.started = False
 
-    def apply_tls_set_phase(self, tls_id: str, phase_index: int) -> None:
-        libsumo.trafficlight.setPhase(tls_id, int(phase_index))
+    # def apply_tls_set_phase(self, tls_id: str, phase_index: int) -> None:
+    # libsumo.trafficlight.setPhase(tls_id, int(phase_index))
 
     def invoke_setter(
         self,
@@ -75,14 +106,25 @@ class RunState:
 
         if object_id == "":
             # not sure if there are any setters which do not need an object id
+            # TODO this whole trying each type will be improved in the future
             setter_handle(value, **additional_parameters)
         else:
             try:
                 setter_handle(object_id, value, **additional_parameters)
             except TypeError:
-                setter_handle(
-                    object_id, int(value), **additional_parameters
-                )
+                try:
+                    setter_handle(
+                        object_id, float(value), **additional_parameters
+                    )
+                except TypeError:
+                    setter_handle(
+                        object_id, int(value), **additional_parameters
+                    )
+
+        logging.debug(
+            f"Invoked setter: {domain}.{setter_name}_"
+            f"{object_id}, {additional_parameters}"
+        )
 
     def tick(self) -> Tuple[int, float, Dict[str, float]]:
         libsumo.simulationStep()
@@ -100,12 +142,9 @@ class RunState:
         if n > 0:
             mean_speed /= n
 
-        tlsStateIndex = float(libsumo.trafficlight.getPhase("TL0"))
-
         metrics = {
             "sim.remaining_veh": remaining,
             "edges.mean_speed_mps": mean_speed,
-            # "tlsState": tlsStateIndex
         }
         self.last_metrics = metrics
         return self.step, sim_time_s, metrics

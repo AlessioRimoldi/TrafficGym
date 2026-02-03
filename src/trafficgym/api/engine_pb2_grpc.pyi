@@ -40,7 +40,7 @@ class EngineServiceStub:
     Subscribe: _grpc.UnaryUnaryMultiCallable[_engine_pb2.SubscribeRequest, _engine_pb2.SubscribeResponse]
     Unsubscribe: _grpc.UnaryUnaryMultiCallable[_engine_pb2.UnsubscribeRequest, _engine_pb2.UnsubscribeResponse]
     RegisterInterrupt: _grpc.UnaryStreamMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.InterruptEvent]
-    AcknowledgeInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.AcknowledgeInterruptResponse]
+    AcknowledgeInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.ApplyActionsResponse]
     CancelInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.CancelInterruptRequest, _engine_pb2.CancelInterruptResponse]
 
 @_typing.type_check_only
@@ -55,7 +55,7 @@ class EngineServiceAsyncStub(EngineServiceStub):
     Subscribe: _aio.UnaryUnaryMultiCallable[_engine_pb2.SubscribeRequest, _engine_pb2.SubscribeResponse]  # type: ignore[assignment]
     Unsubscribe: _aio.UnaryUnaryMultiCallable[_engine_pb2.UnsubscribeRequest, _engine_pb2.UnsubscribeResponse]  # type: ignore[assignment]
     RegisterInterrupt: _aio.UnaryStreamMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.InterruptEvent]  # type: ignore[assignment]
-    AcknowledgeInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.AcknowledgeInterruptResponse]  # type: ignore[assignment]
+    AcknowledgeInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.ApplyActionsResponse]  # type: ignore[assignment]
     CancelInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.CancelInterruptRequest, _engine_pb2.CancelInterruptResponse]  # type: ignore[assignment]
 
 class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -127,7 +127,7 @@ class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
         self,
         request: _engine_pb2.AcknowledgeInterruptRequest,
         context: _ServicerContext,
-    ) -> _typing.Union[_engine_pb2.AcknowledgeInterruptResponse, _abc.Awaitable[_engine_pb2.AcknowledgeInterruptResponse]]: ...
+    ) -> _typing.Union[_engine_pb2.ApplyActionsResponse, _abc.Awaitable[_engine_pb2.ApplyActionsResponse]]: ...
 
     @_abc_1.abstractmethod
     def CancelInterrupt(

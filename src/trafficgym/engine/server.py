@@ -1,11 +1,9 @@
 from __future__ import annotations
 import asyncio
-from typing import Dict
-from enum import Enum
 
 import grpc
 
-from .kernel import RunConfig, RunState
+from .kernel import RunConfig, RunState, Interrupt, InterruptEvent
 from ..api import engine_pb2, engine_pb2_grpc
 from google.protobuf.struct_pb2 import Value
 
@@ -28,7 +26,9 @@ class InvalidGetterError(Exception):
         super().__init__(message)
 
 
-def raise_async_except(task: asyncio.Task[Any], context: grpc.ServicerContext) -> None:
+def raise_async_except(
+    task: asyncio.Task[Any], context: grpc.ServicerContext
+) -> None:
     if task.exception() is not None:
         context.abort(grpc.StatusCode.UNKNOWN, "An Exception Occured")
 
@@ -87,7 +87,7 @@ class Subscription:
 
 class SubscriptionManager:
     subscriptions: dict[str, Subscription]
-    metrics: dict[str, list[Any]]
+    metrics: dict[str, list[str | None]]
 
     def __init__(
         self,
@@ -137,6 +137,13 @@ class SubscriptionManager:
             ]
         )
         await q.put(frame)
+
+    def lookup_recent_collection(self, fingerprint: str) -> str | None:
+        history = self.metrics.get(fingerprint)
+        if not history:
+            return None
+        else:
+            return history[-1]
 
     def subscribe(
         self,
@@ -196,9 +203,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self.subscription_manager: SubscriptionManager | None = None
 
     def _build_frame(
-            self,
-            metrics: list[engine_pb2.KeyValue], run_id: str
-        ) -> engine_pb2.TelemetryFrame:
+        self, metrics: list[engine_pb2.KeyValue], run_id: str
+    ) -> engine_pb2.TelemetryFrame:
         if run_id not in self.runs:
             raise RuntimeError("Run ID not found")
 
@@ -232,6 +238,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             run, self.subscription_queues, part
         )
 
+        # need to start now so that we can setup simulation
+        # before vehicles start moving (tls etc...)
+        run.start()
+
         return engine_pb2.CreateRunResponse(
             run_id=run.run_id, input_artifacts=[]
         )
@@ -245,6 +255,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             logging.warning(f"Could not find run {run_id}.")
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
             return
+
         if run_id not in self.run_tasks:
             max_run: str | None = request.WhichOneof("max_run")
             if max_run == "max_steps":
@@ -264,7 +275,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             self.run_tasks[run_id] = task
             await task
             raise_async_except(task, context)
-        return engine_pb2.RunResponse(run_id=run_id)
+        return engine_pb2.RunResponse(
+            run_id=run_id, new_step=self.runs[run_id].step
+        )
 
     async def CloseRun(
         self, request: engine_pb2.CloseRunRequest, context: grpc.ServicerContext
@@ -345,37 +358,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         await self.telemetry_queues[run_id].put(frame)
         return engine_pb2.ApplyActionsResponse(run_id=run_id)
 
-    async def Subscribe(
-        self,
-        request: engine_pb2.SubscribeRequest,
-        context: grpc.ServicerContext,
-    ) -> engine_pb2.SubscribeResponse:
-        if self.subscription_manager is None:
-            context.abort(
-                grpc.StatusCode.ABORTED, "Subscription Manager not initialised."
-            )
-            return
-        logging.debug(f"Subscribe: {request}")
-        additional_parameters = {
-            p.name: p.value for p in request.additional_parameters
-        }
-        fingerprint = self.subscription_manager.subscribe(
-            request.domain,
-            request.getter_name,
-            request.object_id,
-            additional_parameters,
-            request.name,
-        )
-
-        return engine_pb2.SubscribeResponse(
-            subscription_name_or_fingerprint=fingerprint
-        )
-
-    # async def Unsubscribe(self, request, context):
-    #     await context.abort(
-    #         grpc.StatusCode.UNIMPLEMENTED, "unsubscription not implemented"
-    #     )
-
     async def StreamTelemetry(
         self, request: engine_pb2.StreamRequest, context: grpc.ServicerContext
     ) -> AsyncIterator[engine_pb2.TelemetryFrame]:
@@ -399,12 +381,202 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         if run_id not in self.subscription_queues:
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
             return
+
         q = self.subscription_queues[run_id]
         while True:
             frame = await q.get()
             if frame is None:
                 return
             yield frame
+
+    async def Subscribe(
+        self,
+        request: engine_pb2.SubscribeRequest,
+        context: grpc.ServicerContext,
+    ) -> engine_pb2.SubscribeResponse:
+        if self.subscription_manager is None:
+            context.abort(
+                grpc.StatusCode.ABORTED, "Subscription Manager not initialised."
+            )
+            return
+        logging.debug(f"Subscribe: {request}")
+        additional_parameters = {
+            p.name: p.value for p in request.additional_parameters
+        }
+
+        if request.name in map(
+            lambda x: x.name, self.subscription_manager.subscriptions.values()
+        ):
+            logging.warning(
+                f"Duplicate subscription name "
+                f"{request.name}. Rejected request."
+            )
+            await context.abort(
+                grpc.StatusCode.ALREADY_EXISTS,
+                f"Subscription with name {request.name} already exists.",
+            )
+
+        fingerprint = self.subscription_manager.subscribe(
+            request.domain,
+            request.getter_name,
+            request.object_id,
+            additional_parameters,
+            request.name,
+        )
+
+        return engine_pb2.SubscribeResponse(
+            subscription_name_or_fingerprint=fingerprint
+        )
+
+    async def Unsubscribe(
+        self,
+        request: engine_pb2.UnsubscribeRequest,
+        context: grpc.ServicerContext,
+    ) -> engine_pb2.UnsubscribeResponse:
+        await context.abort(
+            grpc.StatusCode.UNIMPLEMENTED, "unsubscription not implemented"
+        )
+
+    async def RegisterInterrupt(
+        self,
+        request: engine_pb2.RegisterInterruptRequest,
+        context: grpc.ServicerContext,
+    ) -> AsyncIterator[engine_pb2.InterruptEvent]:
+        """CAUTION: Comparaison value must use the same subfield as the
+        collected value, or the interrupt will never trigger
+        TODO Improve this!"""
+        run_id = request.run_id
+        if run_id not in self.runs:
+            yield context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, f"run ${run_id} not found."
+            )
+        run = self.runs[run_id]
+
+        interrupt_requests: asyncio.Queue[InterruptEvent | None] = (
+            asyncio.Queue()
+        )
+
+        value = request.trigger_metric.value.string_value
+        if value == "":
+            value = str(request.trigger_metric.value.number_value)
+
+        new_interrupt = Interrupt(
+            request.trigger_metric.name,
+            value,
+            interrupt_requests,
+        )
+
+        run.interrupts[new_interrupt.interrupt_id] = new_interrupt
+
+        while True:
+            frame = await interrupt_requests.get()
+            if frame is None:
+                return
+            new_interrupt.active_interrupt_event = InterruptEvent(
+                frame.observed_value
+            )
+            yield engine_pb2.InterruptEvent(
+                interrupt_id=new_interrupt.interrupt_id,
+                event_id=frame.event_id,
+                observed_value=frame.observed_value,
+            )
+            logging.debug("Issued Interrupt Event")
+
+    async def AcknowledgeInterrupt(
+        self,
+        request: engine_pb2.AcknowledgeInterruptRequest,
+        context: grpc.ServicerContext,
+    ) -> engine_pb2.ApplyActionsResponse:
+        run_id = request.run_id
+        if run_id not in self.runs:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, f"run ${run_id} not found."
+            )
+        run = self.runs[run_id]
+
+        if request.interrupt_id not in run.interrupts:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND,
+                f"Could not find interrupt {request.interrupt_id}",
+            )
+
+        acknowledged_interrupt = run.interrupts[request.interrupt_id]
+
+        if not acknowledged_interrupt.active_interrupt_event:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                f"Interrupt {acknowledged_interrupt.interrupt_id} "
+                f"is not interrupted",
+            )
+        elif (
+            acknowledged_interrupt.active_interrupt_event.event_id
+            != request.event_id
+        ):
+            expected_event_id = (
+                acknowledged_interrupt.active_interrupt_event.event_id
+            )
+            await context.abort(
+                grpc.StatusCode.ABORTED,
+                "The acknowledgment is for the wrong interrupt event! "
+                f"Expected {expected_event_id}, but got "
+                f"{request.event_id}",
+            )
+        else:
+            try:
+                acknowledged_interrupt.active_interrupt_event = None
+
+                new_name = request.new_interrupt_conditions.name
+                new_value = request.new_interrupt_conditions.value.string_value
+                # new_value = request.new_interrupt_conditions.value
+                if new_name != '':
+                    acknowledged_interrupt.trigger_metric_name = new_name
+                    logging.debug(
+                        f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
+                        f"trigger name to {new_name}."
+                    )
+                if new_value != '':
+                    acknowledged_interrupt.trigger_metric_value = new_value
+                    logging.debug(
+                        f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
+                        f"trigger value to {new_value}."
+                    )
+
+                acknowledged_interrupt.interrupt_requests.task_done()
+
+                return await self.ApplyActions(request.actions, context)
+                # logging.info(f"Interrupt action would occur here: {request.actions}")
+                # return engine_pb2.ApplyActionsResponse()
+            except Exception as e:
+                await context.abort(
+                    grpc.StatusCode.ABORTED, "Error executing interrupt."
+                )
+
+    async def CancelInterrupt(
+        self,
+        request: engine_pb2.CancelInterruptRequest,
+        context: grpc.ServicerContext,
+    ) -> engine_pb2.CancelInterruptResponse:
+
+        run_id = request.run_id
+        if run_id not in self.runs:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, f"run ${run_id} not found."
+            )
+        run = self.runs[run_id]
+
+        removed_interrupt = run.interrupts[request.interrupt_id]
+        del run.interrupts[request.interrupt_id]
+
+        if removed_interrupt:
+            await removed_interrupt.interrupt_requests.put(None)
+            return engine_pb2.CancelInterruptResponse(
+                interrupt_id=removed_interrupt.interrupt_id
+            )
+
+        await context.abort(
+            grpc.StatusCode.NOT_FOUND,
+            f"Interrupt with id {request.interrupt_id} not found.",
+        )
 
     async def _run_loop(self, run_id: str, max_steps: int) -> None:
         run = self.runs[run_id]
@@ -414,7 +586,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             raise RuntimeError("Subscription manager not initialised.")
 
         try:
-            run.start(max_steps=max_steps)
+            # run.start(max_steps=max_steps) # run already started in create run
             for _ in range(max_steps):
                 step, sim_time_s, metrics = run.tick()
 
@@ -423,6 +595,43 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         await self.subscription_manager.collect()
                     )
                     await self.subscription_manager.queue_recent_collect()
+
+                    # decision for now to run interrupts
+                    # after collecting subscriptions.
+                    for i in run.interrupts.values():
+                        recent_collection = (
+                            self.subscription_manager.lookup_recent_collection(
+                                i.trigger_metric_name
+                            )
+                        )
+                        # recent_collection = Value(
+                        #     string_value=(
+                        #         self.subscription_manager.lookup_recent_collection(
+                        #             i.trigger_metric_name
+                        #         )
+                        #     )
+                        # )
+                        assert isinstance(recent_collection, str)
+                        assert isinstance(i.trigger_metric_value, str)
+
+                        if recent_collection == i.trigger_metric_value:
+                            event = InterruptEvent(
+                                observed_value=Value(
+                                    string_value=recent_collection
+                                )
+                            )
+                            await i.interrupt_requests.put(event)
+
+                            # need to wait for interrupts to be processed before continuing
+                            try:
+                                await asyncio.wait_for(
+                                    i.interrupt_requests.join(), 1500
+                                )
+                            except TimeoutError:
+                                logging.warning(
+                                    f"Interrupt execution timed out!"
+                                )
+
                 except Exception as e:
                     logging.warning(
                         f"Failed to collect subscribed metrics: {str(e)}"
