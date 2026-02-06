@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-02-05T15:27:11.562128+01:00 by Eclipse SUMO netedit 1.25.0
+-->
+
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    <!-- Calibrators -->
+    <calibrator id="ca_0" edge="E8" pos="65.25"/>
+    <calibrator id="ca_1" edge="E5" pos="200.00"/>
+    <!-- StoppingPlaces -->
+    <parkingArea id="pa_0" lane="E3_0" startPos="9.18" endPos="159.18" angle="45.00" roadsideCapacity="25" length="10.00"/>
+    <!-- Detectors -->
+    <inductionLoop id="e1_0" lane="E2_1" pos="200.00" period="60.00" file="NUL"/>
+    <inductionLoop id="e1_1" lane="E2_0" pos="200.00" period="60.00" file="NUL"/>
+    <inductionLoop id="e1_2" lane="E4_0" pos="39.00" period="300.00" file="NUL"/>
+</additional>
