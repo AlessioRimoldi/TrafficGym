@@ -8,6 +8,7 @@ from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 import builtins as _builtins
 import sys
 import typing as _typing
@@ -18,6 +19,29 @@ else:
     from typing_extensions import TypeAlias as _TypeAlias
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class _Operation:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _OperationEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_Operation.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    EQU: _Operation.ValueType  # 0
+    NEQ: _Operation.ValueType  # 1
+    GRT: _Operation.ValueType  # 2
+    LST: _Operation.ValueType  # 3
+    GEQ: _Operation.ValueType  # 4
+    LEQ: _Operation.ValueType  # 5
+
+class Operation(_Operation, metaclass=_OperationEnumTypeWrapper): ...
+
+EQU: Operation.ValueType  # 0
+NEQ: Operation.ValueType  # 1
+GRT: Operation.ValueType  # 2
+LST: Operation.ValueType  # 3
+GEQ: Operation.ValueType  # 4
+LEQ: Operation.ValueType  # 5
+Global___Operation: _TypeAlias = Operation  # noqa: Y015
 
 @_typing.final
 class KeyValue(_message.Message):
@@ -98,7 +122,8 @@ class GenericSetter(_message.Message):
     domain: _builtins.str
     setter_name: _builtins.str
     object_id: _builtins.str
-    value: _builtins.str
+    @_builtins.property
+    def value(self) -> _struct_pb2.Value: ...
     @_builtins.property
     def additional_parameters(self) -> _containers.RepeatedCompositeFieldContainer[Global___Parameter]: ...
     def __init__(
@@ -107,9 +132,11 @@ class GenericSetter(_message.Message):
         domain: _builtins.str = ...,
         setter_name: _builtins.str = ...,
         object_id: _builtins.str = ...,
-        value: _builtins.str = ...,
+        value: _struct_pb2.Value | None = ...,
         additional_parameters: _abc.Iterable[Global___Parameter] | None = ...,
     ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["additional_parameters", b"additional_parameters", "domain", b"domain", "object_id", b"object_id", "setter_name", b"setter_name", "value", b"value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -345,13 +372,16 @@ class Parameter(_message.Message):
     NAME_FIELD_NUMBER: _builtins.int
     VALUE_FIELD_NUMBER: _builtins.int
     name: _builtins.str
-    value: _builtins.str
+    @_builtins.property
+    def value(self) -> _struct_pb2.Value: ...
     def __init__(
         self,
         *,
         name: _builtins.str = ...,
-        value: _builtins.str = ...,
+        value: _struct_pb2.Value | None = ...,
     ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "value", b"value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -403,14 +433,14 @@ Global___SubscribeRequest: _TypeAlias = SubscribeRequest  # noqa: Y015
 class SubscribeResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
-    SUBSCRIPTION_NAME_OR_FINGERPRINT_FIELD_NUMBER: _builtins.int
-    subscription_name_or_fingerprint: _builtins.str
+    FINGERPRINT_FIELD_NUMBER: _builtins.int
+    fingerprint: _builtins.str
     def __init__(
         self,
         *,
-        subscription_name_or_fingerprint: _builtins.str = ...,
+        fingerprint: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["subscription_name_or_fingerprint", b"subscription_name_or_fingerprint"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["fingerprint", b"fingerprint"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___SubscribeResponse: _TypeAlias = SubscribeResponse  # noqa: Y015
@@ -453,7 +483,9 @@ class MetricNameAndValue(_message.Message):
 
     NAME_FIELD_NUMBER: _builtins.int
     VALUE_FIELD_NUMBER: _builtins.int
+    OP_FIELD_NUMBER: _builtins.int
     name: _builtins.str
+    op: Global___Operation.ValueType
     @_builtins.property
     def value(self) -> _struct_pb2.Value: ...
     def __init__(
@@ -461,10 +493,11 @@ class MetricNameAndValue(_message.Message):
         *,
         name: _builtins.str = ...,
         value: _struct_pb2.Value | None = ...,
+        op: Global___Operation.ValueType = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "value", b"value"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "op", b"op", "value", b"value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___MetricNameAndValue: _TypeAlias = MetricNameAndValue  # noqa: Y015

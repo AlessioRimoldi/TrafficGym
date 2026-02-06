@@ -28,7 +28,7 @@ message GenericSetter {
   string domain = 1;
   string setter_name = 2;
   string object_id = 3;
-  string value = 4;
+  google.protobuf.Value value = 4;
   repeated Parameter additional_parameters = 5;
 }
 
@@ -98,7 +98,7 @@ message StreamRequest {
 
 message Parameter {
   string name = 1;
-  string value = 2;
+  google.protobuf.Value value = 2;
 }
 
 message SubscribeRequest {
@@ -111,7 +111,7 @@ message SubscribeRequest {
 }
 
 message SubscribeResponse {
-  string subscription_name_or_fingerprint = 1;
+  string fingerprint = 1;
 }
 
 message UnsubscribeRequest {
@@ -122,9 +122,20 @@ message UnsubscribeResponse {
   string run_id = 1;
 }
 
+enum Operation {
+  EQU = 0;
+  NEQ = 1;
+  GRT = 2;
+  LST = 3;
+  GEQ = 4;
+  LEQ = 5;
+}
+
 message MetricNameAndValue {
+  // TODO coalesce with Parameter, which shares name and value
   string name = 1;
   google.protobuf.Value value = 2;
+  Operation op = 3;
 }
 
 message RegisterInterruptRequest {

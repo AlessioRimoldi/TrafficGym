@@ -1,28 +1,70 @@
 from __future__ import annotations
 import asyncio
-import grpc
 import logging
 
 from collections import deque, defaultdict
 import random
 
+import grpc
+from grpc.aio import (
+    UnaryUnaryClientInterceptor,
+    UnaryStreamClientInterceptor,
+    UnaryUnaryCall,
+    UnaryStreamCall,
+    ClientCallDetails,
+    insecure_channel,
+    ClientInterceptor,
+)
+from google.protobuf.message import Message
+
 from ..api import engine_pb2, engine_pb2_grpc
 from google.protobuf.struct_pb2 import Value
 
 from dataclasses import dataclass
+from enum import Enum, auto
 
-from typing import AsyncIterable, Any
+from typing import AsyncIterable, Any, Callable, cast
 
 import sys
 
 errors: list[str] = []
 warnings: list[str] = []
 
+InterruptStream = AsyncIterable[engine_pb2.InterruptEvent | None]
+
+
+class UnaryUnaryInterceptor(UnaryUnaryClientInterceptor):  # type: ignore[type-arg]
+    async def intercept_unary_unary(
+        self,
+        continuation: Callable[
+            [ClientCallDetails, Message], UnaryUnaryCall[Any, Any]
+        ],
+        client_call_details: ClientCallDetails,
+        request: Message,
+    ) -> UnaryUnaryCall[Any, Any]:
+        logging.info(f"Sending UU Request: {type(request).__name__}")
+
+        return await continuation(client_call_details, request)  # type: ignore[no-any-return]
+
+
+class UnaryStreamInterceptor(UnaryStreamClientInterceptor):  # type: ignore[type-arg]
+    async def intercept_unary_stream(
+        self,
+        continuation: Callable[
+            [ClientCallDetails, Message], UnaryStreamCall[Any, Any]
+        ],
+        client_call_details: ClientCallDetails,
+        request: Message,
+    ) -> UnaryStreamCall[Any, Any]:
+        logging.info(f"Sending US Request: {type(request).__name__}")
+
+        return await continuation(client_call_details, request)  # type: ignore[no-any-return, misc]
+
 
 @dataclass
 class StoreEntry:
     step: int
-    value: str
+    value: Value
 
 
 async def handle_teardown(
@@ -68,7 +110,7 @@ async def set_signal(
                         domain="trafficlight",
                         setter_name="setRedYellowGreenState",
                         object_id=signal_id,
-                        value=state,
+                        value=Value(string_value=state),
                     )
                 )
             ],
@@ -80,20 +122,27 @@ async def main() -> None:
     sumocfg_path = (
         "/home/diego/documents/"
         # "/home/r/Code"
-        "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
+        # "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
+        "TrafficGym/sumo_files/service_station/service_station.sumocfg"
     )
 
     tls_id = "TL0"
 
-    async with grpc.aio.insecure_channel("127.0.0.1:50051") as channel:
+    async with insecure_channel(
+        "127.0.0.1:50051",
+        interceptors=[
+            cast(ClientInterceptor, UnaryUnaryInterceptor()),
+            cast(ClientInterceptor, UnaryStreamInterceptor()),
+        ],
+    ) as channel:
         stub = engine_pb2_grpc.EngineServiceStub(channel)
 
         cr = await stub.CreateRun(
             engine_pb2.CreateRunRequest(
                 sumocfg_path=sumocfg_path,
-                sumo_binary="sumo",
-                # sumo_binary="sumo-gui",
-                step_length_ms=1000,
+                # sumo_binary="sumo",
+                sumo_binary="sumo-gui",
+                step_length_ms=100,
             )
         )
         run_id = cr.run_id
@@ -114,23 +163,13 @@ async def main() -> None:
             async for frame in stream:
                 kv = {}
                 for m in frame.metrics:
-                    # value = m.value.SerializeToString()
-                    field = m.value.WhichOneof("kind")
-                    if field == "string_value":
-                        value = m.value.string_value
-                    elif field == "number_value":
-                        value = str(m.value.number_value)
-                    else:
-                        logging.warning(
-                            f"Stream frame value is not a string or a float!"
-                        )
-                        continue
+                    value = m.value
 
                     if m.key == "Error":
-                        errors.append(value)
+                        errors.append(value.string_value)
                         continue
                     elif m.key == "Warning":
-                        warnings.append(value)
+                        warnings.append(value.string_value)
                         continue
 
                     if store is not None:
@@ -140,7 +179,11 @@ async def main() -> None:
 
                     if print_filter is None or m.key in print_filter:
                         # if debug or print_filter is None or m.key in print_filter:
-                        kv[m.key] = value
+                        kv[m.key] = (
+                            value.string_value
+                            if value.string_value != ""
+                            else str(value.number_value)
+                        )
 
                 if kv:
                     print(prefix, frame.step, f"{frame.sim_time_s}s", kv)
@@ -180,6 +223,30 @@ async def main() -> None:
             while sub_store[-1].step < step:
                 await asyncio.sleep(0)
 
+        async def wait_for_interrupt(
+            stream: InterruptStream,
+        ) -> engine_pb2.InterruptEvent | None:
+            interrupt_id: str | None = None
+
+            try:
+                async for event in stream:
+                    if event is None:
+                        return None
+                    
+                    interrupt_id = event.interrupt_id
+                    return event
+            except asyncio.CancelledError:
+                if interrupt_id is not None:
+                    logging.info(f"Cancelling from wait_for_interrupt() {interrupt_id}")
+                    await stub.CancelInterrupt(
+                        engine_pb2.CancelInterruptRequest(
+                            run_id=run_id,
+                            interrupt_id=interrupt_id,
+                        )
+                    )
+
+            return None
+
         async def run_tls_program(
             run_id: str,
             tls_id: str,
@@ -204,9 +271,7 @@ async def main() -> None:
 
             await set_signal(stub, run_id, tls_id, phases[0])
 
-            time_subscription_name = (
-                get_time_subscription.subscription_name_or_fingerprint
-            )
+            time_subscription_name = get_time_subscription.fingerprint
 
             # for i in range(len(phases)):
             interrupt_event_stream: AsyncIterable[
@@ -234,13 +299,13 @@ async def main() -> None:
                     i += 1  # start at 1 because we have already initialised state 0
 
                     try:
-                        observed_value = int(
-                            float(interrupt_event.observed_value.string_value)
+                        observed_value = (
+                            interrupt_event.observed_value.number_value
                         )
                     except:
-                        logging.warning(
-                            f"Failed to read interrupt observed value"
-                        )
+                        message = "Failed to read interrupt observed value"
+                        logging.warning(message)
+                        warnings.append(message)
                         observed_value = 0
 
                     logging.debug("ACKING THE INTERRUPT")
@@ -257,7 +322,11 @@ async def main() -> None:
                                             domain="trafficlight",
                                             setter_name="setRedYellowGreenState",
                                             object_id=tls_id,
-                                            value=phases[i % len(phases)],
+                                            value=Value(
+                                                string_value=phases[
+                                                    i % len(phases)
+                                                ]
+                                            ),
                                         )
                                     )
                                 ],
@@ -265,11 +334,9 @@ async def main() -> None:
                             new_interrupt_conditions=engine_pb2.MetricNameAndValue(
                                 name=time_subscription_name,
                                 value=Value(
-                                    string_value=str(
-                                        float(
-                                            durations[i % len(phases)]
-                                            + observed_value
-                                        )
+                                    number_value=float(
+                                        durations[i % len(phases)]
+                                        + observed_value
                                     )
                                 ),
                             ),
@@ -278,6 +345,378 @@ async def main() -> None:
                     logging.debug("Interrput Acked")
 
             return asyncio.create_task(tls_program_async(), name="tls_program")
+
+        async def meter_controller() -> None:
+            high_traffic_interrupts: InterruptStream
+            low_traffic_interrupts: InterruptStream
+
+            class MeterState(Enum):
+                OFF = auto()
+                QUARTER = auto()
+                TENTH = auto()
+                CHOKE = auto()
+
+            meter_state: MeterState = MeterState.OFF
+
+            detector_nearside: engine_pb2.SubscribeResponse = (
+                await stub.Subscribe(
+                    engine_pb2.SubscribeRequest(
+                        name="occup_main_detector_nearside",
+                        run_id=run_id,
+                        domain="inductionloop",
+                        getter_name="getLastIntervalOccupancy",
+                        object_id="e1_1",
+                    )
+                )
+            )
+
+            await stub.ApplyActions(
+                engine_pb2.ActionBundle(
+                    run_id=run_id,
+                    actions=[
+                        engine_pb2.Action(
+                            setter=engine_pb2.GenericSetter(
+                                domain="trafficlight",
+                                setter_name="setProgram",
+                                object_id="TL0",
+                                value=Value(string_value="0"),
+                            )
+                        )
+                    ],
+                )
+            )
+             
+            interrupt_event: engine_pb2.InterruptEvent | None = None
+
+            while True:
+                if meter_state is MeterState.OFF:
+                    high_traffic_interrupts = stub.RegisterInterrupt(
+                        engine_pb2.RegisterInterruptRequest(
+                            run_id=run_id,
+                            trigger_metric=engine_pb2.MetricNameAndValue(
+                                name=detector_nearside.fingerprint,
+                                value=Value(number_value=15.0),
+                                op=engine_pb2.Operation.GEQ,
+                            ),
+                        )
+                    )
+
+                    interrupt_event = None
+
+                    async for event in high_traffic_interrupts:
+                        if not event:
+                            return
+                        interrupt_event = event
+                        logging.info("Setting meter to 1/4 mode")
+                        await stub.AcknowledgeInterrupt(
+                            engine_pb2.AcknowledgeInterruptRequest(
+                                run_id=run_id,
+                                interrupt_id=interrupt_event.interrupt_id,
+                                event_id=interrupt_event.event_id,
+                                actions=engine_pb2.ActionBundle(
+                                    run_id=run_id,
+                                    actions=[
+                                        engine_pb2.Action(
+                                            setter=engine_pb2.GenericSetter(
+                                                domain="trafficlight",
+                                                setter_name="setProgram",
+                                                object_id="TL0",
+                                                value=Value(
+                                                    string_value="1"
+                                                ),  # METER QUARTER
+                                            )
+                                        ),
+                                    ],
+                                ),
+                            )
+                        )
+                        meter_state = MeterState.QUARTER
+                        break
+
+                    # if interrupt_event is not None:
+                    #     # interrupt is already cancelled normally
+                    #     await stub.CancelInterrupt(
+                    #         request=engine_pb2.CancelInterruptRequest(
+                    #             run_id=run_id,
+                    #             interrupt_id=interrupt_event.interrupt_id,
+                    #         )
+                    #     )
+
+                elif meter_state is MeterState.QUARTER:
+                    high_traffic_interrupts = stub.RegisterInterrupt(
+                        engine_pb2.RegisterInterruptRequest(
+                            run_id=run_id,
+                            trigger_metric=engine_pb2.MetricNameAndValue(
+                                name=detector_nearside.fingerprint,
+                                value=Value(number_value=20.0),
+                                op=engine_pb2.Operation.GEQ,
+                            ),
+                        )
+                    )
+
+                    low_traffic_interrupts = stub.RegisterInterrupt(
+                        engine_pb2.RegisterInterruptRequest(
+                            run_id=run_id,
+                            trigger_metric=engine_pb2.MetricNameAndValue(
+                                name=detector_nearside.fingerprint,
+                                value=Value(number_value=10.0),
+                                op=engine_pb2.Operation.LEQ,
+                            ),
+                        )
+                    )
+
+                    high_traffic_task = asyncio.create_task(
+                        wait_for_interrupt(high_traffic_interrupts)
+                    )
+                    low_traffic_task = asyncio.create_task(
+                        wait_for_interrupt(low_traffic_interrupts)
+                    )
+
+                    done, pending = await asyncio.wait(
+                        {high_traffic_task, low_traffic_task},
+                        return_when="FIRST_COMPLETED",
+                    )
+
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            logging.debug(f"Cancelled {task}")
+
+                    finished = done.pop()
+
+                    interrupt_event = finished.result()
+                    if interrupt_event is None:
+                        return
+                    
+                    if finished is high_traffic_task:
+                        logging.info("Setting meter to 1/10 mode")
+                        await stub.AcknowledgeInterrupt(
+                            engine_pb2.AcknowledgeInterruptRequest(
+                                run_id=run_id,
+                                interrupt_id=interrupt_event.interrupt_id,
+                                event_id=interrupt_event.event_id,
+                                actions=engine_pb2.ActionBundle(
+                                    run_id=run_id,
+                                    actions=[
+                                        engine_pb2.Action(
+                                            setter=engine_pb2.GenericSetter(
+                                                domain="trafficlight",
+                                                setter_name="setProgram",
+                                                object_id="TL0",
+                                                value=Value(
+                                                    string_value="2"
+                                                ),  # METER TENTHS
+                                            )
+                                        ),
+                                    ],
+                                ),
+                            )
+                        )
+                        meter_state = MeterState.TENTH
+
+                    else:
+                        logging.info("Setting meter OFF")
+                        await stub.AcknowledgeInterrupt(
+                            engine_pb2.AcknowledgeInterruptRequest(
+                                run_id=run_id,
+                                interrupt_id=interrupt_event.interrupt_id,
+                                event_id=interrupt_event.event_id,
+                                actions=engine_pb2.ActionBundle(
+                                    run_id=run_id,
+                                    actions=[
+                                        engine_pb2.Action(
+                                            setter=engine_pb2.GenericSetter(
+                                                domain="trafficlight",
+                                                setter_name="setProgram",
+                                                object_id="TL0",
+                                                value=Value(
+                                                    string_value="0"
+                                                ),  # METER OFF
+                                            )
+                                        ),
+                                    ],
+                                ),
+                            )
+                        )
+                        meter_state = MeterState.OFF
+
+
+                elif meter_state is MeterState.TENTH:
+                    high_traffic_interrupts = stub.RegisterInterrupt(
+                        engine_pb2.RegisterInterruptRequest(
+                            run_id=run_id,
+                            trigger_metric=engine_pb2.MetricNameAndValue(
+                                name=detector_nearside.fingerprint,
+                                value=Value(number_value=30.0),
+                                op=engine_pb2.Operation.GEQ,
+                            ),
+                        )
+                    )
+
+                    low_traffic_interrupts = stub.RegisterInterrupt(
+                        engine_pb2.RegisterInterruptRequest(
+                            run_id=run_id,
+                            trigger_metric=engine_pb2.MetricNameAndValue(
+                                name=detector_nearside.fingerprint,
+                                value=Value(number_value=15.0),
+                                op=engine_pb2.Operation.LEQ,
+                            ),
+                        )
+                    )
+
+                    interrupt_event = None
+
+                    high_traffic_task = asyncio.create_task(
+                        wait_for_interrupt(high_traffic_interrupts)
+                    )
+                    low_traffic_task = asyncio.create_task(
+                        wait_for_interrupt(low_traffic_interrupts)
+                    )
+
+                    done, pending = await asyncio.wait(
+                        {high_traffic_task, low_traffic_task},
+                        return_when="FIRST_COMPLETED",
+                    )
+
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            logging.debug(f"Cancelled {task}")
+
+                    finished = done.pop()
+
+                    interrupt_event = finished.result()
+                    if interrupt_event is None:
+                        return
+                    
+                    if finished is high_traffic_task:
+                        logging.info("Setting meter to CHOKE mode")
+                        await stub.AcknowledgeInterrupt(
+                            engine_pb2.AcknowledgeInterruptRequest(
+                                run_id=run_id,
+                                interrupt_id=interrupt_event.interrupt_id,
+                                event_id=interrupt_event.event_id,
+                                actions=engine_pb2.ActionBundle(
+                                    run_id=run_id,
+                                    actions=[
+                                        engine_pb2.Action(
+                                            setter=engine_pb2.GenericSetter(
+                                                domain="trafficlight",
+                                                setter_name="setProgram",
+                                                object_id="TL0",
+                                                value=Value(
+                                                    string_value="3"
+                                                ),  # METER CHOKE
+                                            )
+                                        ),
+                                    ],
+                                ),
+                            )
+                        )
+                        meter_state = MeterState.CHOKE
+
+                    else:
+                        logging.info("Setting meter to 1/4 mode")
+                        await stub.AcknowledgeInterrupt(
+                            engine_pb2.AcknowledgeInterruptRequest(
+                                run_id=run_id,
+                                interrupt_id=interrupt_event.interrupt_id,
+                                event_id=interrupt_event.event_id,
+                                actions=engine_pb2.ActionBundle(
+                                    run_id=run_id,
+                                    actions=[
+                                        engine_pb2.Action(
+                                            setter=engine_pb2.GenericSetter(
+                                                domain="trafficlight",
+                                                setter_name="setProgram",
+                                                object_id="TL0",
+                                                value=Value(
+                                                    string_value="1"
+                                                ),  # METER QUARTER
+                                            )
+                                        ),
+                                    ],
+                                ),
+                            )
+                        )
+                        meter_state = MeterState.QUARTER
+
+                elif meter_state is MeterState.CHOKE:
+                    low_traffic_interrupts = stub.RegisterInterrupt(
+                        engine_pb2.RegisterInterruptRequest(
+                            run_id=run_id,
+                            trigger_metric=engine_pb2.MetricNameAndValue(
+                                name=detector_nearside.fingerprint,
+                                value=Value(number_value=25.0),
+                                op=engine_pb2.Operation.LEQ,
+                            ),
+                        )
+                    )
+
+                    interrupt_event = None
+
+                    async for event in low_traffic_interrupts:
+                        if not event:
+                            return
+                        interrupt_event = event
+                        logging.info("Setting meter to 1/10 mode")
+                        await stub.AcknowledgeInterrupt(
+                            engine_pb2.AcknowledgeInterruptRequest(
+                                run_id=run_id,
+                                interrupt_id=interrupt_event.interrupt_id,
+                                event_id=interrupt_event.event_id,
+                                actions=engine_pb2.ActionBundle(
+                                    run_id=run_id,
+                                    actions=[
+                                        engine_pb2.Action(
+                                            setter=engine_pb2.GenericSetter(
+                                                domain="trafficlight",
+                                                setter_name="setProgram",
+                                                object_id="TL0",
+                                                value=Value(
+                                                    string_value="2"
+                                                ),  # METER TENTHS
+                                            )
+                                        ),
+                                    ],
+                                ),
+                            )
+                        )
+                        meter_state = MeterState.TENTH
+                        break
+
+                    # if interrupt_event is not None:
+                    #     # interrupt is already cancelled normally
+                    #     await stub.CancelInterrupt(
+                    #         request=engine_pb2.CancelInterruptRequest(
+                    #             run_id=run_id,
+                    #             interrupt_id=interrupt_event.interrupt_id,
+                    #         )
+                    #     )
+ 
+
+                else:
+                    logging.warning("Unknown meter state, resetting to OFF")
+                    meter_state = MeterState.OFF
+                    await stub.ApplyActions(
+                        engine_pb2.ActionBundle(
+                            run_id=run_id,
+                            actions=[
+                                engine_pb2.Action(
+                                    setter=engine_pb2.GenericSetter(
+                                        domain="trafficlight",
+                                        setter_name="setProgram",
+                                        object_id="TL0",
+                                        value=Value(string_value="0"),
+                                    )
+                                )
+                            ],
+                        )
+                    )
 
         async def scenario_stop_random() -> None:
             eastbound_veh_ids = "eastbound_veh_ids"
@@ -326,7 +765,7 @@ async def main() -> None:
             if not deq:  # checks for None and empty queue
                 raise RuntimeError("Expected data!")
 
-            tup = eval(deq[-1].value)
+            tup = eval(deq[-1].value.string_value)
 
             chosen_veh_id = str(random.choice(tup))
 
@@ -342,7 +781,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSpeed",
                                 object_id=chosen_veh_id,
-                                value="0",
+                                value=Value(number_value=0),
                             )
                         ),
                         engine_pb2.Action(
@@ -350,7 +789,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSignals",
                                 object_id=chosen_veh_id,
-                                value=str((1 << 2) + (1 << 10)),
+                                value=Value(number_value=(1 << 2) + (1 << 10)),
                                 # emergency signal and door right open
                             )
                         ),
@@ -372,7 +811,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSpeed",
                                 object_id=chosen_veh_id,
-                                value="-1",
+                                value=Value(number_value=-1),
                             )
                         ),
                         engine_pb2.Action(
@@ -380,7 +819,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSignals",
                                 object_id=chosen_veh_id,
-                                value="-1",
+                                value=Value(number_value=-1),
                             )
                         ),
                     ],
@@ -445,7 +884,12 @@ async def main() -> None:
             )
             await asyncio.wait_for(wait_for_step(deq, new_step), 10)
 
-            tup = eval(deq[-1].value)
+            try:
+                tup = eval(deq[-1].value.string_value)
+            except Exception as e:
+                logging.error(
+                    f"Could no evaluate vehicle ID list into tuple. {e}"
+                )
 
             chosen_veh_id = str(random.choice(tup))
 
@@ -461,7 +905,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSpeed",
                                 object_id=chosen_veh_id,
-                                value="0",
+                                value=Value(number_value=0),
                             )
                         ),
                         engine_pb2.Action(
@@ -469,7 +913,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSignals",
                                 object_id=chosen_veh_id,
-                                value=str((1 << 2) + (1 << 10)),
+                                value=Value(number_value=(1 << 2) + (1 << 10)),
                                 # emergency signal and door right open
                             )
                         ),
@@ -491,7 +935,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSpeed",
                                 object_id=chosen_veh_id,
-                                value="-1",
+                                value=Value(number_value=-1),
                             )
                         ),
                         engine_pb2.Action(
@@ -499,7 +943,7 @@ async def main() -> None:
                                 domain="vehicle",
                                 setter_name="setSignals",
                                 object_id=chosen_veh_id,
-                                value="-1",
+                                value=Value(number_value=-1),
                             )
                         ),
                     ],
@@ -520,8 +964,18 @@ async def main() -> None:
 
             await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
 
-        scenario = asyncio.create_task(scenario_stop_random_async_tls())
+        async def scenario_service_station() -> None:
+            controller = asyncio.create_task(meter_controller())
+
+            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=3600))
+
+            await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
+            controller.cancel()
+
+
         # scenario = asyncio.create_task(scenario_stop_random())
+        # scenario = asyncio.create_task(scenario_stop_random_async_tls())
+        scenario = asyncio.create_task(scenario_service_station())
 
         try:
             await scenario

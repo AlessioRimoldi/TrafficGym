@@ -8,7 +8,7 @@ from ..api import engine_pb2, engine_pb2_grpc
 from google.protobuf.struct_pb2 import Value
 
 # from libsumo import DOMAINS
-from typing import Any, Callable, AsyncIterator
+from typing import Any, Callable, AsyncIterator, Literal
 
 from functools import partial
 
@@ -36,6 +36,12 @@ def raise_async_except(
 # Domain = Enum("Domain", list(map(lambda x: x.__name__, DOMAINS)))
 
 
+def value_to_str(value: Value) -> str:
+    return str(
+        value.string_value if value.string_value != "" else value.number_value
+    )
+
+
 class Subscription:
     def __init__(
         self,
@@ -43,7 +49,7 @@ class Subscription:
         domain: str,
         getter_name: str,
         object_id: str,
-        additional_parameters: dict[str, Any],
+        additional_parameters: dict[str, Value],
         name: str | None = None,
     ):
         self.__name = name
@@ -60,7 +66,7 @@ class Subscription:
     def fingerprint(self) -> str:
         return f"{str(self.domain)}.{self.getter_name}_{self.object_id}"
 
-    def collect(self, run_state: RunState) -> str:
+    def collect(self, run_state: RunState) -> Value:
         if self.getter_name.startswith("_"):
             raise InvalidGetterError(
                 "Dunder names are blocked from being collected."
@@ -70,24 +76,44 @@ class Subscription:
                 "Collection only possible for functions beginning with 'get'."
             )
 
+        string_params: dict[str, str] = {}
+
+        for k, v in self.additional_parameters.items():
+            kind = v.WhichOneof("kind")
+
+            if kind == "string_value":
+                string_params[k] = v.string_value
+            elif kind == "number_value":
+                string_params[k] = str(v.number_value)
+            else:
+                raise InvalidGetterError(
+                    f"Unknown type in additional parameters: got {kind} for {k}"
+                )
+
         try:
             collected = run_state.collect_metric(
                 self.domain,
                 self.getter_name,
                 self.object_id,
-                self.additional_parameters,
+                string_params,
             )
+            collected_typed: Value
+            try:
+                collected_typed = Value(number_value=float(collected))
+            except ValueError:
+                collected_typed = Value(string_value=collected)
+
         except AttributeError as e:
             raise InvalidGetterError("Unknown getter") from e
-            # in future, we can check the getter and name exist before calling
+            # in future, we can check the getter an"d name exist before calling
             # and also send the client the available getters before they exec.
 
-        return collected
+        return collected_typed
 
 
 class SubscriptionManager:
     subscriptions: dict[str, Subscription]
-    metrics: dict[str, list[str | None]]
+    metrics: dict[str, list[Value | None]]
 
     def __init__(
         self,
@@ -109,7 +135,7 @@ class SubscriptionManager:
         self._frame_builder = frame_builder
 
     async def collect(self) -> list[tuple[Subscription, Exception]]:
-        self.newMetrics = {}
+        self.newMetrics: dict[str, Value | None] = {}
         failed_collects: list[tuple[Subscription, Exception]] = []
         for subscription in self.subscriptions.values():
             try:
@@ -132,13 +158,13 @@ class SubscriptionManager:
         q = self.subscription_queues[self.run_state.run_id]
         frame = self._frame_builder(
             [
-                engine_pb2.KeyValue(key=k, value=Value(string_value=str(v)))
+                engine_pb2.KeyValue(key=k, value=v)
                 for k, v in self.newMetrics.items()
             ]
         )
         await q.put(frame)
 
-    def lookup_recent_collection(self, fingerprint: str) -> str | None:
+    def lookup_recent_collection(self, fingerprint: str) -> Value | None:
         history = self.metrics.get(fingerprint)
         if not history:
             return None
@@ -151,7 +177,7 @@ class SubscriptionManager:
         domain: str,
         getter_name: str,
         object_id: str,
-        additional_params: dict[str, str] | None = None,
+        additional_params: dict[str, Value] | None = None,
         name: str | None = None,
     ) -> str:
         if not additional_params:
@@ -177,7 +203,7 @@ class SubscriptionManager:
             raise Exception("Subscription already exists")
 
         self.subscriptions[newSub.fingerprint()] = newSub
-        return newSub.name
+        return newSub.fingerprint()
 
     def unsubscribe(self, fingerprint: str) -> None:
         if fingerprint not in self.subscriptions:
@@ -216,6 +242,23 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             sim_time_s=run.step * run.cfg.step_length_ms / 1000,
             metrics=metrics,
         )
+
+    async def _log_client(
+        self, run_id: str, log_type: Literal["Warning", "Error"], msg: str
+    ) -> None:
+        if run_id not in self.telemetry_queues:
+            logging.warning(
+                "Failed to send client log message! "
+                f"Could not find telemetry queue for run {run_id}."
+            )
+        frame = self._build_frame(
+            run_id=run_id,
+            metrics=[
+                engine_pb2.KeyValue(key=log_type, value=Value(string_value=msg))
+            ],
+        )
+
+        await self.telemetry_queues[run_id].put(frame)
 
     async def CreateRun(
         self,
@@ -314,7 +357,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         for a in request.actions:
             p: str | None = a.WhichOneof("payload")
             if p == "setter":
-                additional_parameters: dict[str, str] = {
+                additional_parameters: dict[str, Value] = {
                     param.name: param.value
                     for param in a.setter.additional_parameters
                 }
@@ -424,9 +467,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             request.name,
         )
 
-        return engine_pb2.SubscribeResponse(
-            subscription_name_or_fingerprint=fingerprint
-        )
+        return engine_pb2.SubscribeResponse(fingerprint=fingerprint)
 
     async def Unsubscribe(
         self,
@@ -456,25 +497,23 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             asyncio.Queue()
         )
 
-        value = request.trigger_metric.value.string_value
-        if value == "":
-            value = str(request.trigger_metric.value.number_value)
-
         new_interrupt = Interrupt(
-            request.trigger_metric.name,
-            value,
-            interrupt_requests,
+            trigger_metric_name=request.trigger_metric.name,
+            trigger_metric_value=request.trigger_metric.value,
+            trigger_metric_op=request.trigger_metric.op,
+            interrupt_requests=interrupt_requests,
         )
 
         run.interrupts[new_interrupt.interrupt_id] = new_interrupt
+        logging.info(f"Registered new Interrupt {new_interrupt.trigger_metric_name}_{new_interrupt.trigger_metric_value}")
 
         while True:
             frame = await interrupt_requests.get()
             if frame is None:
                 return
-            new_interrupt.active_interrupt_event = InterruptEvent(
-                frame.observed_value
-            )
+            # new_interrupt.active_interrupt_event = InterruptEvent(
+            #     frame.observed_value
+            # )
             yield engine_pb2.InterruptEvent(
                 interrupt_id=new_interrupt.interrupt_id,
                 event_id=frame.event_id,
@@ -523,30 +562,43 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             )
         else:
             try:
+                if not request.HasField("new_interrupt_conditions"):
+                    await self.CancelInterrupt(
+                        request=engine_pb2.CancelInterruptRequest(
+                            run_id=run_id, interrupt_id=request.interrupt_id
+                        ),
+                        context=context,
+                    )
+
+                else:
+                    new_name = request.new_interrupt_conditions.name
+                    new_value = request.new_interrupt_conditions.value
+
+                    if new_name != "":
+                        acknowledged_interrupt.trigger_metric_name = new_name
+                        logging.debug(
+                            f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
+                            f"trigger name to {new_name}."
+                        )
+                    if request.new_interrupt_conditions.HasField("value"):
+                        acknowledged_interrupt.trigger_metric_value = new_value
+                        logging.debug(
+                            f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
+                            f"trigger value to {value_to_str(new_value)}"
+                        )
+
+                apply_actions_response = await self.ApplyActions(
+                    request.actions, context
+                )
+                acknowledged_interrupt.interrupt_requests.task_done()
+                logging.info("Interrupt Acknoledge Received and Processed")
                 acknowledged_interrupt.active_interrupt_event = None
 
-                new_name = request.new_interrupt_conditions.name
-                new_value = request.new_interrupt_conditions.value.string_value
-                # new_value = request.new_interrupt_conditions.value
-                if new_name != "":
-                    acknowledged_interrupt.trigger_metric_name = new_name
-                    logging.debug(
-                        f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
-                        f"trigger name to {new_name}."
-                    )
-                if new_value != "":
-                    acknowledged_interrupt.trigger_metric_value = new_value
-                    logging.debug(
-                        f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
-                        f"trigger value to {new_value}."
-                    )
-
-                acknowledged_interrupt.interrupt_requests.task_done()
-
-                return await self.ApplyActions(request.actions, context)
+                return apply_actions_response
                 # logging.info(f"Interrupt action would occur here: {request.actions}")
                 # return engine_pb2.ApplyActionsResponse()
             except Exception as e:
+                logging.error(str(e))
                 await context.abort(
                     grpc.StatusCode.ABORTED, "Error executing interrupt."
                 )
@@ -569,6 +621,11 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         if removed_interrupt:
             await removed_interrupt.interrupt_requests.put(None)
+            logging.info(
+                f"Cancelled interrupt {removed_interrupt.trigger_metric_name} "
+                f"triggers at {removed_interrupt.trigger_metric_value}"
+            )
+            removed_interrupt.interrupt_requests.task_done()
             return engine_pb2.CancelInterruptResponse(
                 interrupt_id=removed_interrupt.interrupt_id
             )
@@ -590,6 +647,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             for _ in range(max_steps):
                 step, sim_time_s, metrics = run.tick()
 
+                failed_getters_and_exceptions: list[
+                    tuple[Subscription, Exception]
+                ] = []
+
                 try:
                     failed_getters_and_exceptions = (
                         await self.subscription_manager.collect()
@@ -598,47 +659,139 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
                     # decision for now to run interrupts
                     # after collecting subscriptions.
-                    for i in run.interrupts.values():
-                        recent_collection = (
+                    # list() to copy dictionary state,
+                    # during handling, new interrupts may be registered
+
+                    # logging.info(f"{len(run.interrupts)} interrupts registered")
+                    for i in list(run.interrupts.values()):
+                        if i.active_interrupt_event:
+                            continue
+
+                        recent_collection_value = (
                             self.subscription_manager.lookup_recent_collection(
-                                i.trigger_metric_name
+                                fingerprint=i.trigger_metric_name
                             )
                         )
-                        # recent_collection = Value(
-                        #     string_value=(
-                        #         self.subscription_manager.lookup_recent_collection(
-                        #             i.trigger_metric_name
-                        #         )
-                        #     )
-                        # )
-                        assert isinstance(recent_collection, str)
-                        assert isinstance(i.trigger_metric_value, str)
 
-                        if recent_collection == i.trigger_metric_value:
-                            event = InterruptEvent(
-                                observed_value=Value(
-                                    string_value=recent_collection
-                                )
+                        if not recent_collection_value:
+                            message = (
+                                "Interrupt trigger check collection "
+                                f"for {i.trigger_metric_name} failed."
                             )
+                            logging.warning(message)
+                            asyncio.create_task(
+                                self._log_client(run.run_id, "Error", message)
+                            )
+                            continue
+
+                        collection_type = recent_collection_value.WhichOneof(
+                            "kind"
+                        )
+                        trigger_type = i.trigger_metric_value.WhichOneof("kind")
+
+                        if collection_type != trigger_type:
+                            message = (
+                                f"Interrupt trigger {i.trigger_metric_name} "
+                                f"Value type ({trigger_type}) does not "
+                                f"match collected ({collection_type})"
+                            )
+                            logging.warning(message)
+                            asyncio.create_task(
+                                self._log_client(run.run_id, "Error", message)
+                            )
+                            continue
+
+                        recent_collection: float | str
+                        trigger: float | str
+
+                        triggered = False
+
+                        if collection_type == "number_value":
+                            recent_collection = (
+                                recent_collection_value.number_value
+                            )
+                            trigger = i.trigger_metric_value.number_value
+
+                            if i.trigger_metric_op == engine_pb2.EQU:
+                                triggered = recent_collection == trigger
+                            elif i.trigger_metric_op == engine_pb2.NEQ:
+                                triggered = recent_collection != trigger
+                            elif i.trigger_metric_op == engine_pb2.GRT:
+                                triggered = recent_collection > trigger
+                            elif i.trigger_metric_op == engine_pb2.LST:
+                                triggered = recent_collection < trigger
+                            elif i.trigger_metric_op == engine_pb2.GEQ:
+                                triggered = recent_collection >= trigger
+                            elif i.trigger_metric_op == engine_pb2.LEQ:
+                                triggered = recent_collection <= trigger
+                            else:
+                                message = "Unsupported operation for interrupt trigger."
+                                logging.warning(message)
+                                asyncio.create_task(
+                                    self._log_client(run_id, "Error", message)
+                                )
+                                continue
+
+                        elif collection_type == "string_value":
+                            recent_collection = (
+                                recent_collection_value.string_value
+                            )
+                            trigger = i.trigger_metric_value.string_value
+
+                            if i.trigger_metric_op == engine_pb2.EQU:
+                                triggered = recent_collection == trigger
+                            elif i.trigger_metric_op == engine_pb2.NEQ:
+                                triggered = recent_collection != trigger
+                            else:
+                                message = "Unsupported operation for interrupt trigger."
+                                logging.warning(message)
+                                asyncio.create_task(
+                                    self._log_client(run_id, "Error", message)
+                                )
+                                continue
+
+                        else:
+                            message = (
+                                "Unsupported interrupt trigger value "
+                                "or collection value type"
+                            )
+                            logging.warning(message)
+                            asyncio.create_task(
+                                self._log_client(run_id, "Error", message)
+                            )
+                            continue
+
+                        if triggered:
+                            logging.info("Interrupt triggered")
+                            event = InterruptEvent(
+                                observed_value=recent_collection_value
+                            )
+                            i.active_interrupt_event = event
                             await i.interrupt_requests.put(event)
+                            logging.info("Enqueing interrupt request")
 
                             # need to wait for interrupts to be processed before continuing
                             try:
-                                await asyncio.wait_for(
-                                    i.interrupt_requests.join(), 1500
+                                logging.info(
+                                    f"Awiting Interrupt processing! {i.trigger_metric_name} val {i.trigger_metric_value}"
                                 )
+                                await asyncio.wait_for(
+                                    i.interrupt_requests.join(), 1
+                                )
+                                logging.info("Interrupts donc processing.")
                             except TimeoutError:
-                                logging.warning(
-                                    f"Interrupt execution timed out!"
+                                message = "Interrupt execution timeout!"
+                                logging.warning(message)
+                                asyncio.create_task(
+                                    self._log_client(run_id, "Error", message)
                                 )
 
                 except Exception as e:
-                    logging.warning(
-                        f"Failed to collect subscribed metrics: {str(e)}"
+                    message = f"Failed to collect subscribed metrics: {str(e)}"
+                    logging.warning(message)
+                    asyncio.create_task(
+                        self._log_client(run_id, "Error", message)
                     )
-
-                    # for the moment, crash when problem collecting subscriptions
-                    # raise e
 
                 if len(failed_getters_and_exceptions) > 0:
                     errors = []
@@ -693,7 +846,7 @@ async def serve(host: str = "127.0.0.1", port: int = 50051) -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
 
-    asyncio.run(serve())
+    asyncio.run(serve(), debug=False)
 
 
 if __name__ == "__main__":

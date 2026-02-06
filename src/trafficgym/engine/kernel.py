@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import sys, os
 from typing import Dict, Tuple, Any
 from google.protobuf.struct_pb2 import Value
+from ..api import engine_pb2
 import asyncio
 import uuid
 import logging
@@ -16,17 +17,13 @@ else:
 
 import libsumo  # type: ignore[import-untyped]
 
-_original_setPhase = libsumo.trafficlight.setRedYellowGreenState
-
-
-def logging_setPhase(tls_id: str, phase: str) -> Any:
-    print(
-        f"[setPhase] tls={tls_id}, phase={phase}, simTime={libsumo.simulation.getTime()}"
-    )
-    return _original_setPhase(tls_id, phase)
-
-
-libsumo.trafficlight.setRedYellowGreenState = logging_setPhase
+# _original_setPhase = libsumo.trafficlight.setRedYellowGreenState
+# def logging_setPhase(tls_id: str, phase: str) -> Any:
+#     print(
+#         f"[setPhase] tls={tls_id}, phase={phase}, simTime={libsumo.simulation.getTime()}"
+#     )
+#     return _original_setPhase(tls_id, phase)
+# libsumo.trafficlight.setRedYellowGreenState = logging_setPhase
 
 # Domain = Enum("Domain", list(map(lambda x: x.__name__, libsumo.DOMAINS)))
 
@@ -37,14 +34,21 @@ class InterruptEvent:
     observed_value: Value
 
 
-@dataclass
 class Interrupt:
-    trigger_metric_name: str
-    # trigger_metric_value: Value
-    trigger_metric_value: str
-    interrupt_id = str(uuid.uuid4())
-    interrupt_requests: asyncio.Queue[InterruptEvent | None]
-    active_interrupt_event: InterruptEvent | None = None
+    def __init__(
+        self,
+        trigger_metric_name: str,
+        trigger_metric_value: Value,
+        trigger_metric_op: engine_pb2.Operation.ValueType,
+        interrupt_requests: asyncio.Queue[InterruptEvent | None],
+        active_interrupt_event: InterruptEvent | None = None,
+    ):
+        self.trigger_metric_name = trigger_metric_name
+        self.trigger_metric_value = trigger_metric_value
+        self.trigger_metric_op = trigger_metric_op
+        self.interrupt_requests = interrupt_requests
+        self.active_interrupt_event = active_interrupt_event
+        self.interrupt_id = str(uuid.uuid4())
 
 
 @dataclass
@@ -75,6 +79,7 @@ class RunState:
             self.cfg.sumocfg_path,
             "--step-length",
             str(self.cfg.step_length_ms / 1000.0),
+            "--no-warnings",
         ]
         libsumo.start(cmd)
         self.edge_ids = list(libsumo.edge.getIDList())
@@ -98,28 +103,30 @@ class RunState:
         domain: str,
         setter_name: str,
         object_id: str,
-        value: str,
+        value: Value,
         additional_parameters: dict[str, Any],
     ) -> None:
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
 
+        kind = value.WhichOneof("kind")
+
         if object_id == "":
-            # not sure if there are any setters which do not need an object id
-            # TODO this whole trying each type will be improved in the future
-            setter_handle(value, **additional_parameters)
-        else:
+            raise RuntimeError("ObjectID required for setter")
+
+        if kind == "number_value":
             try:
-                setter_handle(object_id, value, **additional_parameters)
+                setter_handle(
+                    object_id, value.number_value, **additional_parameters
+                )
             except TypeError:
-                try:
-                    setter_handle(
-                        object_id, float(value), **additional_parameters
-                    )
-                except TypeError:
-                    setter_handle(
-                        object_id, int(value), **additional_parameters
-                    )
+                setter_handle(
+                    object_id, int(value.number_value), **additional_parameters
+                )
+        elif kind == "string_value":
+            setter_handle(
+                object_id, value.string_value, **additional_parameters
+            )
 
         logging.debug(
             f"Invoked setter: {domain}.{setter_name}_"
@@ -155,7 +162,7 @@ class RunState:
         domain: str,
         getter_name: str,
         object_id: str,
-        additional_parameters: dict[str, Any],
+        additional_parameters: dict[str, str],
     ) -> str:
         domain_handle = getattr(libsumo, domain)
         getter_handle = getattr(domain_handle, getter_name)
