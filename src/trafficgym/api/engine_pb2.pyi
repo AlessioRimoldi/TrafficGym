@@ -287,15 +287,18 @@ class RunResponse(_message.Message):
 
     RUN_ID_FIELD_NUMBER: _builtins.int
     NEW_STEP_FIELD_NUMBER: _builtins.int
+    NEW_TIME_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
     new_step: _builtins.int
+    new_time: _builtins.float
     def __init__(
         self,
         *,
         run_id: _builtins.str = ...,
         new_step: _builtins.int = ...,
+        new_time: _builtins.float = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["new_step", b"new_step", "run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["new_step", b"new_step", "new_time", b"new_time", "run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RunResponse: _TypeAlias = RunResponse  # noqa: Y015
@@ -485,6 +488,7 @@ class MetricNameAndValue(_message.Message):
     VALUE_FIELD_NUMBER: _builtins.int
     OP_FIELD_NUMBER: _builtins.int
     name: _builtins.str
+    """TODO coalesce with Parameter, which shares name and value"""
     op: Global___Operation.ValueType
     @_builtins.property
     def value(self) -> _struct_pb2.Value: ...

@@ -8,6 +8,8 @@ import asyncio
 import uuid
 import logging
 
+ValueType = float | str | bool | None
+
 if "SUMO_HOME" in os.environ:
     tools = os.path.join(os.environ["SUMO_HOME"], "tools")
     sys.path.append(tools)
@@ -103,30 +105,13 @@ class RunState:
         domain: str,
         setter_name: str,
         object_id: str,
-        value: Value,
-        additional_parameters: dict[str, Any],
+        value: ValueType,
+        additional_parameters: dict[str, ValueType],
     ) -> None:
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
 
-        kind = value.WhichOneof("kind")
-
-        if object_id == "":
-            raise RuntimeError("ObjectID required for setter")
-
-        if kind == "number_value":
-            try:
-                setter_handle(
-                    object_id, value.number_value, **additional_parameters
-                )
-            except TypeError:
-                setter_handle(
-                    object_id, int(value.number_value), **additional_parameters
-                )
-        elif kind == "string_value":
-            setter_handle(
-                object_id, value.string_value, **additional_parameters
-            )
+        setter_handle(object_id, value, **additional_parameters)
 
         logging.debug(
             f"Invoked setter: {domain}.{setter_name}_"

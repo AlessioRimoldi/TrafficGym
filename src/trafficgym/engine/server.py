@@ -3,7 +3,7 @@ import asyncio
 
 import grpc
 
-from .kernel import RunConfig, RunState, Interrupt, InterruptEvent
+from .kernel import RunConfig, RunState, Interrupt, InterruptEvent, ValueType
 from ..api import engine_pb2, engine_pb2_grpc
 from google.protobuf.struct_pb2 import Value
 
@@ -36,10 +36,18 @@ def raise_async_except(
 # Domain = Enum("Domain", list(map(lambda x: x.__name__, DOMAINS)))
 
 
-def value_to_str(value: Value) -> str:
-    return str(
-        value.string_value if value.string_value != "" else value.number_value
-    )
+def extract_value(value: Value) -> ValueType:
+    kind = value.WhichOneof("kind")
+    if kind == "null_value":
+        return None
+    elif kind == "number_value":
+        return value.number_value
+    elif kind == "string_value":
+        return value.string_value
+    elif kind == "bool_value":
+        return value.bool_value
+
+    raise TypeError(f"Unsupported Value kind: {kind}")
 
 
 class Subscription:
@@ -299,27 +307,33 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
             return
 
-        if run_id not in self.run_tasks:
-            max_run: str | None = request.WhichOneof("max_run")
-            if max_run == "max_steps":
-                max_steps = request.max_steps
-            elif max_run == "max_time":
-                max_steps = int(
-                    1000
-                    * request.max_time
-                    / self.runs[run_id].cfg.step_length_ms
-                )
-            else:
-                max_steps = int(
-                    1000 * 1000 / self.runs[run_id].cfg.step_length_ms
-                )
+        if run_id in self.run_tasks:
+            logging.warning(f"Trying to start a run in {run_id}, but this run is already executing.")
+            context.abort(grpc.StatusCode.ALREADY_EXISTS, "Run is already executing, maybe await its end")
+            return
 
-            task = asyncio.create_task(self._run_loop(run_id, max_steps))
-            self.run_tasks[run_id] = task
-            await task
-            raise_async_except(task, context)
+        max_run: str | None = request.WhichOneof("max_run")
+        if max_run == "max_steps":
+            max_steps = request.max_steps
+        elif max_run == "max_time":
+            max_steps = int(
+                1000
+                * request.max_time
+                / self.runs[run_id].cfg.step_length_ms
+            )
+        else:
+            max_steps = int(
+                1000 * 1000 / self.runs[run_id].cfg.step_length_ms
+            )
+
+        task = asyncio.create_task(self._run_loop(run_id, max_steps))
+        self.run_tasks[run_id] = task
+        await task
+        raise_async_except(task, context)
+        new_step=self.runs[run_id].step
+        new_time=new_step * self.runs[run_id].cfg.step_length_ms / 1000
         return engine_pb2.RunResponse(
-            run_id=run_id, new_step=self.runs[run_id].step
+            run_id=run_id, new_step=new_step, new_time=new_time
         )
 
     async def CloseRun(
@@ -357,8 +371,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         for a in request.actions:
             p: str | None = a.WhichOneof("payload")
             if p == "setter":
-                additional_parameters: dict[str, Value] = {
-                    param.name: param.value
+                additional_parameters: dict[str, ValueType] = {
+                    param.name: extract_value(param.value)
                     for param in a.setter.additional_parameters
                 }
                 try:
@@ -366,14 +380,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         a.setter.domain,
                         a.setter.setter_name,
                         a.setter.object_id,
-                        a.setter.value,
+                        extract_value(a.setter.value),
                         additional_parameters,
                     )
                 except (AttributeError, TypeError) as e:
                     logging.warning(
                         f"Received a malformed setter request: {a.setter.domain}."
                         f"{a.setter.setter_name}({a.setter.object_id}, "
-                        f"{a.setter.value}, {a.setter.additional_parameters})"
+                        f"{extract_value(a.setter.value)}, {a.setter.additional_parameters})\n{e}"
                     )
                     # await context.abort(
                     #     grpc.StatusCode.INVALID_ARGUMENT,
@@ -505,7 +519,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         )
 
         run.interrupts[new_interrupt.interrupt_id] = new_interrupt
-        logging.info(f"Registered new Interrupt {new_interrupt.trigger_metric_name}_{new_interrupt.trigger_metric_value}")
+        logging.debug(
+            f"Registered new Interrupt {new_interrupt.trigger_metric_name}_{new_interrupt.trigger_metric_value}"
+        )
 
         while True:
             frame = await interrupt_requests.get()
@@ -584,14 +600,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         acknowledged_interrupt.trigger_metric_value = new_value
                         logging.debug(
                             f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
-                            f"trigger value to {value_to_str(new_value)}"
+                            f"trigger value to {str(extract_value(new_value))}"
                         )
 
                 apply_actions_response = await self.ApplyActions(
                     request.actions, context
                 )
                 acknowledged_interrupt.interrupt_requests.task_done()
-                logging.info("Interrupt Acknoledge Received and Processed")
+                logging.debug("Interrupt Acknoledge Received and Processed")
                 acknowledged_interrupt.active_interrupt_event = None
 
                 return apply_actions_response
@@ -621,7 +637,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         if removed_interrupt:
             await removed_interrupt.interrupt_requests.put(None)
-            logging.info(
+            logging.debug(
                 f"Cancelled interrupt {removed_interrupt.trigger_metric_name} "
                 f"triggers at {removed_interrupt.trigger_metric_value}"
             )
@@ -762,23 +778,23 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                             continue
 
                         if triggered:
-                            logging.info("Interrupt triggered")
+                            logging.debug("Interrupt triggered")
                             event = InterruptEvent(
                                 observed_value=recent_collection_value
                             )
                             i.active_interrupt_event = event
                             await i.interrupt_requests.put(event)
-                            logging.info("Enqueing interrupt request")
+                            logging.debug("Enqueing interrupt request")
 
                             # need to wait for interrupts to be processed before continuing
                             try:
-                                logging.info(
+                                logging.debug(
                                     f"Awiting Interrupt processing! {i.trigger_metric_name} val {i.trigger_metric_value}"
                                 )
                                 await asyncio.wait_for(
                                     i.interrupt_requests.join(), 1
                                 )
-                                logging.info("Interrupts donc processing.")
+                                logging.debug("Interrupts donc processing.")
                             except TimeoutError:
                                 message = "Interrupt execution timeout!"
                                 logging.warning(message)
@@ -844,7 +860,7 @@ async def serve(host: str = "127.0.0.1", port: int = 50051) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     asyncio.run(serve(), debug=False)
 

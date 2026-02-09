@@ -42,7 +42,7 @@ class UnaryUnaryInterceptor(UnaryUnaryClientInterceptor):  # type: ignore[type-a
         client_call_details: ClientCallDetails,
         request: Message,
     ) -> UnaryUnaryCall[Any, Any]:
-        logging.info(f"Sending UU Request: {type(request).__name__}")
+        logging.debug(f"Sending UU Request: {type(request).__name__}")
 
         return await continuation(client_call_details, request)  # type: ignore[no-any-return]
 
@@ -56,7 +56,7 @@ class UnaryStreamInterceptor(UnaryStreamClientInterceptor):  # type: ignore[type
         client_call_details: ClientCallDetails,
         request: Message,
     ) -> UnaryStreamCall[Any, Any]:
-        logging.info(f"Sending US Request: {type(request).__name__}")
+        logging.debug(f"Sending US Request: {type(request).__name__}")
 
         return await continuation(client_call_details, request)  # type: ignore[no-any-return, misc]
 
@@ -208,7 +208,10 @@ async def main() -> None:
                 prefix="S: ",
                 store=subscriptions_store,
                 # print_filter=None,
-                print_filter=[],
+                print_filter=[
+                    "CAPass",
+                    "CAFlow",
+                ],
                 # print_filter=[
                 #     "trafficlight.getRedYellowGreenState_TL0",
                 #     "trafficlight.getSpentDuration_TL0",
@@ -232,12 +235,14 @@ async def main() -> None:
                 async for event in stream:
                     if event is None:
                         return None
-                    
+
                     interrupt_id = event.interrupt_id
                     return event
             except asyncio.CancelledError:
                 if interrupt_id is not None:
-                    logging.info(f"Cancelling from wait_for_interrupt() {interrupt_id}")
+                    logging.debug(
+                        f"Cancelling from wait_for_interrupt() {interrupt_id}"
+                    )
                     await stub.CancelInterrupt(
                         engine_pb2.CancelInterruptRequest(
                             run_id=run_id,
@@ -385,7 +390,7 @@ async def main() -> None:
                     ],
                 )
             )
-             
+
             interrupt_event: engine_pb2.InterruptEvent | None = None
 
             while True:
@@ -489,7 +494,7 @@ async def main() -> None:
                     interrupt_event = finished.result()
                     if interrupt_event is None:
                         return
-                    
+
                     if finished is high_traffic_task:
                         logging.info("Setting meter to 1/10 mode")
                         await stub.AcknowledgeInterrupt(
@@ -532,7 +537,7 @@ async def main() -> None:
                                                 setter_name="setProgram",
                                                 object_id=tls_id,
                                                 value=Value(
-                                                    string_value="0"
+                                                    string_value="off"
                                                 ),  # METER OFF
                                             )
                                         ),
@@ -541,7 +546,6 @@ async def main() -> None:
                             )
                         )
                         meter_state = MeterState.OFF
-
 
                 elif meter_state is MeterState.TENTH:
                     high_traffic_interrupts = stub.RegisterInterrupt(
@@ -592,7 +596,7 @@ async def main() -> None:
                     interrupt_event = finished.result()
                     if interrupt_event is None:
                         return
-                    
+
                     if finished is high_traffic_task:
                         logging.info("Setting meter to CHOKE mode")
                         await stub.AcknowledgeInterrupt(
@@ -697,7 +701,6 @@ async def main() -> None:
                     #             interrupt_id=interrupt_event.interrupt_id,
                     #         )
                     #     )
- 
 
                 else:
                     logging.warning("Unknown meter state, resetting to OFF")
@@ -965,13 +968,148 @@ async def main() -> None:
             await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
 
         async def scenario_service_station() -> None:
-            controller = asyncio.create_task(meter_controller(tls_id))
 
-            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=3600))
+            # await stub.Subscribe(
+            #     engine_pb2.SubscribeRequest(
+            #         name="CAPass",
+            #         run_id=run_id,
+            #         domain="calibrator",
+            #         getter_name="getPassed",
+            #         object_id="ca_0",
+            #     )
+            # )
+            # await stub.Subscribe(
+            #     engine_pb2.SubscribeRequest(
+            #         name="CAFlow",
+            #         run_id=run_id,
+            #         domain="calibrator",
+            #         getter_name="getVehsPerHour",
+            #         object_id="ca_0",
+            #     )
+            # )
+
+
+            await stub.ApplyActions(
+                engine_pb2.ActionBundle(
+                    run_id=run_id,
+                    actions=[
+                        engine_pb2.Action(
+                            setter=engine_pb2.GenericSetter(
+                                domain="trafficlight",
+                                setter_name="setProgram",
+                                object_id=tls_id,
+                                value=Value(string_value="off"),  # METER OFF
+                            )
+                        ),
+                    ],
+                )
+            )
+
+            await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=300))
+
+            controller = asyncio.create_task(meter_controller(tls_id, "e1_1"))
+
+            after_run = await stub.Run(
+                engine_pb2.RunRequest(run_id=run_id, max_time=600)
+            )
+
+            logging.info("Starting Calibrator at flow rate 0")
+
+            await stub.ApplyActions(
+                engine_pb2.ActionBundle(
+                    run_id=run_id,
+                    actions=[
+                        engine_pb2.Action(
+                            setter=engine_pb2.GenericSetter(
+                                domain="calibrator",
+                                setter_name="setFlow",
+                                object_id="ca_0",
+                                value=Value(number_value=after_run.new_time),
+                                additional_parameters=[
+                                    engine_pb2.Parameter(
+                                        name="end",
+                                        value=Value(
+                                            number_value=float(
+                                                after_run.new_time + 600
+                                            )
+                                        ),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="vehsPerHour",
+                                        value=Value(number_value=100),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="speed",
+                                        value=Value(number_value=10),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="typeID",
+                                        value=Value(string_value="DEFAULT_VEHTYPE"),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="routeID",
+                                        value=Value(string_value="f_2"),
+                                    ),
+                                ],
+                            )
+                        )
+                    ],
+                )
+            )
+
+            after_run = await stub.Run(
+                engine_pb2.RunRequest(run_id=run_id, max_time=600)
+            )
+
+            # await stub.ApplyActions(
+            #     engine_pb2.ActionBundle(
+            #         run_id=run_id,
+            #         actions=[
+            #             engine_pb2.Action(
+            #                 setter=engine_pb2.GenericSetter(
+            #                     domain="calibrator",
+            #                     setter_name="setFlow",
+            #                     object_id="ca_0",
+            #                     value=Value(number_value=after_run.new_time),
+            #                     additional_parameters=[
+            #                         engine_pb2.Parameter(
+            #                             name="end",
+            #                             value=Value(
+            #                                 number_value=float(
+            #                                     after_run.new_time + 600
+            #                                 )
+            #                             ),
+            #                         ),
+            #                         engine_pb2.Parameter(
+            #                             name="vehsPerHour",
+            #                             value=Value(number_value=250),
+            #                         ),
+            #                         engine_pb2.Parameter(
+            #                             name="speed",
+            #                             value=Value(number_value=-1),
+            #                         ),
+            #                         engine_pb2.Parameter(
+            #                             name="typeID",
+            #                             value=Value(string_value="DEFAULT_VEHTYPE"),
+            #                         ),
+            #                         engine_pb2.Parameter(
+            #                             name="routeID",
+            #                             value=Value(string_value="f_2"),
+            #                         ),
+            #                     ],
+            #                 )
+            #             )
+            #         ],
+            #     )
+            # )
+            logging.info("Calibrator should stop by now")
+
+            after_run = await stub.Run(
+                engine_pb2.RunRequest(run_id=run_id, max_time=1000)
+            )
 
             await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
             controller.cancel()
-
 
         # scenario = asyncio.create_task(scenario_stop_random())
         # scenario = asyncio.create_task(scenario_stop_random_async_tls())
@@ -987,10 +1125,10 @@ async def main() -> None:
         await handle_teardown(scenario, streaming)
 
         for err in errors:
-            logging.info(f"Error: {err}")
+            logging.error(f"Error: {err}")
 
         for warn in warnings:
-            logging.info(f"Warning: {warn}")
+            logging.warning(f"Warning: {warn}")
 
         logging.info(
             f"Execution terminated with {len(errors)} error(s) and {len(warnings)} warning(s)."
@@ -998,7 +1136,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     asyncio.run(main())
 

@@ -76,7 +76,8 @@ message RunRequest {
 
 message RunResponse {
   string run_id = 1;
-  uint64 new_step = 5;
+  uint64 new_step = 2;
+  float new_time = 3;
 }
 
 message CloseRunRequest {
