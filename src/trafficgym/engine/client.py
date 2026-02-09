@@ -122,8 +122,8 @@ async def main() -> None:
     sumocfg_path = (
         "/home/diego/documents/"
         # "/home/r/Code"
-        # "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
-        "TrafficGym/sumo_files/service_station/service_station.sumocfg"
+        "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
+        # "TrafficGym/sumo_files/service_station/service_station.sumocfg"
     )
 
     tls_id = "TL0"
@@ -287,6 +287,7 @@ async def main() -> None:
                     trigger_metric=engine_pb2.MetricNameAndValue(
                         name=time_subscription_name,
                         value=Value(number_value=(durations[0] + inital_step)),
+                        op=engine_pb2.Operation.GEQ
                     ),
                 )
             )
@@ -344,6 +345,7 @@ async def main() -> None:
                                         + observed_value
                                     )
                                 ),
+                                op=engine_pb2.Operation.GEQ,
                             ),
                         )
                     )
@@ -1112,8 +1114,8 @@ async def main() -> None:
             controller.cancel()
 
         # scenario = asyncio.create_task(scenario_stop_random())
-        # scenario = asyncio.create_task(scenario_stop_random_async_tls())
-        scenario = asyncio.create_task(scenario_service_station())
+        scenario = asyncio.create_task(scenario_stop_random_async_tls())
+        # scenario = asyncio.create_task(scenario_service_station())
 
         try:
             await scenario

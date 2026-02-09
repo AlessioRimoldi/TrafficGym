@@ -111,7 +111,10 @@ class RunState:
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
 
-        setter_handle(object_id, value, **additional_parameters)
+        try:
+            setter_handle(object_id, value, **additional_parameters)
+        except TypeError:
+            setter_handle(object_id, int(value), **additional_parameters)
 
         logging.debug(
             f"Invoked setter: {domain}.{setter_name}_"
