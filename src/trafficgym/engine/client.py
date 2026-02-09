@@ -346,7 +346,7 @@ async def main() -> None:
 
             return asyncio.create_task(tls_program_async(), name="tls_program")
 
-        async def meter_controller() -> None:
+        async def meter_controller(tls_id: str, det_id: str) -> None:
             high_traffic_interrupts: InterruptStream
             low_traffic_interrupts: InterruptStream
 
@@ -365,7 +365,7 @@ async def main() -> None:
                         run_id=run_id,
                         domain="inductionloop",
                         getter_name="getLastIntervalOccupancy",
-                        object_id="e1_1",
+                        object_id=det_id,
                     )
                 )
             )
@@ -378,7 +378,7 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="trafficlight",
                                 setter_name="setProgram",
-                                object_id="TL0",
+                                object_id=tls_id,
                                 value=Value(string_value="0"),
                             )
                         )
@@ -420,7 +420,7 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id="TL0",
+                                                object_id=tls_id,
                                                 value=Value(
                                                     string_value="1"
                                                 ),  # METER QUARTER
@@ -504,7 +504,7 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id="TL0",
+                                                object_id=tls_id,
                                                 value=Value(
                                                     string_value="2"
                                                 ),  # METER TENTHS
@@ -530,7 +530,7 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id="TL0",
+                                                object_id=tls_id,
                                                 value=Value(
                                                     string_value="0"
                                                 ),  # METER OFF
@@ -607,7 +607,7 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id="TL0",
+                                                object_id=tls_id,
                                                 value=Value(
                                                     string_value="3"
                                                 ),  # METER CHOKE
@@ -633,7 +633,7 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id="TL0",
+                                                object_id=tls_id,
                                                 value=Value(
                                                     string_value="1"
                                                 ),  # METER QUARTER
@@ -965,7 +965,7 @@ async def main() -> None:
             await stub.CloseRun(engine_pb2.CloseRunRequest(run_id=run_id))
 
         async def scenario_service_station() -> None:
-            controller = asyncio.create_task(meter_controller())
+            controller = asyncio.create_task(meter_controller(tls_id))
 
             await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=3600))
 
