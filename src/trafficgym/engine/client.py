@@ -118,13 +118,15 @@ async def set_signal(
     )
 
 
+sumocfg_path = (
+    "/home/diego/documents/"
+    # "/home/r/Code"
+    # "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
+    "TrafficGym/sumo_files/service_station/service_station.sumocfg"
+)
+
+
 async def main() -> None:
-    sumocfg_path = (
-        "/home/diego/documents/"
-        # "/home/r/Code"
-        # "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
-        "TrafficGym/sumo_files/service_station/service_station.sumocfg"
-    )
 
     tls_id = "TL0"
 
@@ -287,7 +289,7 @@ async def main() -> None:
                     trigger_metric=engine_pb2.MetricNameAndValue(
                         name=time_subscription_name,
                         value=Value(number_value=(durations[0] + inital_step)),
-                        op=engine_pb2.Operation.GEQ
+                        op=engine_pb2.Operation.GEQ,
                     ),
                 )
             )
@@ -990,7 +992,6 @@ async def main() -> None:
             #     )
             # )
 
-
             await stub.ApplyActions(
                 engine_pb2.ActionBundle(
                     run_id=run_id,
@@ -1046,7 +1047,9 @@ async def main() -> None:
                                     ),
                                     engine_pb2.Parameter(
                                         name="typeID",
-                                        value=Value(string_value="DEFAULT_VEHTYPE"),
+                                        value=Value(
+                                            string_value="DEFAULT_VEHTYPE"
+                                        ),
                                     ),
                                     engine_pb2.Parameter(
                                         name="routeID",

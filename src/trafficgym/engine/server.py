@@ -308,8 +308,13 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             return
 
         if run_id in self.run_tasks:
-            logging.warning(f"Trying to start a run in {run_id}, but this run is already executing.")
-            context.abort(grpc.StatusCode.ALREADY_EXISTS, "Run is already executing, maybe await its end")
+            logging.warning(
+                f"Trying to start a run in {run_id}, but this run is already executing."
+            )
+            context.abort(
+                grpc.StatusCode.ALREADY_EXISTS,
+                "Run is already executing, maybe await its end",
+            )
             return
 
         max_run: str | None = request.WhichOneof("max_run")
@@ -317,21 +322,17 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             max_steps = request.max_steps
         elif max_run == "max_time":
             max_steps = int(
-                1000
-                * request.max_time
-                / self.runs[run_id].cfg.step_length_ms
+                1000 * request.max_time / self.runs[run_id].cfg.step_length_ms
             )
         else:
-            max_steps = int(
-                1000 * 1000 / self.runs[run_id].cfg.step_length_ms
-            )
+            max_steps = int(1000 * 1000 / self.runs[run_id].cfg.step_length_ms)
 
         task = asyncio.create_task(self._run_loop(run_id, max_steps))
         self.run_tasks[run_id] = task
         await task
         raise_async_except(task, context)
-        new_step=self.runs[run_id].step
-        new_time=new_step * self.runs[run_id].cfg.step_length_ms / 1000
+        new_step = self.runs[run_id].step
+        new_time = new_step * self.runs[run_id].cfg.step_length_ms / 1000
         return engine_pb2.RunResponse(
             run_id=run_id, new_step=new_step, new_time=new_time
         )
