@@ -122,8 +122,8 @@ async def main() -> None:
     sumocfg_path = (
         "/home/diego/documents/"
         # "/home/r/Code"
-        "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
-        # "TrafficGym/sumo_files/service_station/service_station.sumocfg"
+        # "TrafficGym/sumo_files/single_intersection/sim.sumocfg"
+        "TrafficGym/sumo_files/service_station/service_station.sumocfg"
     )
 
     tls_id = "TL0"
@@ -1114,8 +1114,8 @@ async def main() -> None:
             controller.cancel()
 
         # scenario = asyncio.create_task(scenario_stop_random())
-        scenario = asyncio.create_task(scenario_stop_random_async_tls())
-        # scenario = asyncio.create_task(scenario_service_station())
+        # scenario = asyncio.create_task(scenario_stop_random_async_tls())
+        scenario = asyncio.create_task(scenario_service_station())
 
         try:
             await scenario

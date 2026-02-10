@@ -114,7 +114,10 @@ class RunState:
         try:
             setter_handle(object_id, value, **additional_parameters)
         except TypeError:
-            setter_handle(object_id, int(value), **additional_parameters)
+            if isinstance(value, float):
+                setter_handle(object_id, int(value), **additional_parameters)
+            else:
+                raise
 
         logging.debug(
             f"Invoked setter: {domain}.{setter_name}_"
