@@ -13,6 +13,8 @@ from typing import Any, Callable, AsyncIterator, Literal
 from functools import partial
 
 import logging
+ 
+import libsumo
 
 
 class InvalidGetterError(Exception):
@@ -277,7 +279,11 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         cfg = RunConfig(
             sumocfg_path=request.sumocfg_path,
             sumo_binary=request.sumo_binary or "sumo",
-            step_length_ms=request.step_length_ms or 1000,
+            step_length_ms=(
+                request.step_length_ms
+                if request.step_length_ms is not None
+                else 1000
+            ),
         )
         run = RunState(cfg)
         self.runs[run.run_id] = run
@@ -291,7 +297,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         # need to start now so that we can setup simulation
         # before vehicles start moving (tls etc...)
-        run.start()
+        try:
+            run.start()
+        except libsumo.TraCIException as e:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"Error running SUMO: {e}")
 
         return engine_pb2.CreateRunResponse(
             run_id=run.run_id, input_artifacts=[]

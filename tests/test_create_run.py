@@ -1,6 +1,6 @@
 import pytest
 import pytest_asyncio
-import libsumo
+# import libsumo
 from src.trafficgym.engine.server import EngineService
 from src.trafficgym.engine.client import *
 from src.trafficgym.api.engine_pb2 import (
@@ -29,17 +29,29 @@ class CreateRunParams(TypedDict, total=False):
     sumo_binary: Literal["sumo", "sumo-gui"]
     step_length_ms: int
 
+class GrpcAbort(Exception):
+    def __init__(self, code: grpc.StatusCode, details: str):
+        self.code = code
+        self.details = details
+        super().__init__(f"{code.name}: {details}")
+
+class FakeContext:
+    def abort(self, code, details):
+        raise GrpcAbort(code, details)
+
 
 @pytest.fixture
 def service():
     return EngineService()
+
 
 # @pytest.MonkeyPatch.setattr
 @pytest_asyncio.fixture
 async def created_run_factory(
     service: EngineService,
 ) -> Callable[[CreateRunParams], CreatedRunHandle]:
-    async def _create_run(overrides: CreateRunParams = {}) -> CreatedRunHandle:
+    async def _create_run(overrides: CreateRunParams | None = None) -> CreatedRunHandle:
+        overrides = overrides or {}
         defaults: CreateRunParams = dict(
             sumocfg_path=sumocfg_path,
             sumo_binary="sumo",
@@ -49,7 +61,7 @@ async def created_run_factory(
         param: CreateRunParams = {**defaults, **overrides}
 
         create_run_request = CreateRunRequest(**param)
-        context = MagicMock()
+        context = FakeContext()
         response = await service.CreateRun(
             request=create_run_request, context=context
         )
@@ -65,16 +77,17 @@ async def created_run_factory(
     "override",
     [
         {"sumocfg_path": "/dev/null"},
-        # {"sumo_binary": "zumo"},
+        # {"sumo_binary": "fumo"}, # For some reason this doesnt trigger an error...
         {"step_length_ms": -1},
+        {"step_length_ms": 0},
     ],
 )
 @pytest.mark.asyncio
 async def test_create_run_invalid_sumo_cfg_path(
-    override,
+    override: dict[str, str] | dict[str, int],
     created_run_factory: Callable[[CreateRunParams], CreatedRunHandle],
 ):
-    with pytest.raises(libsumo.TraCIException):
+    with pytest.raises(GrpcAbort):
         await created_run_factory(override)
 
 
@@ -84,7 +97,9 @@ async def test_run_after_create(created_run_factory):
     RUN_STEP = 10
     STEP_LENGTH_MS = 1000
 
-    created_run: CreatedRunHandle = await created_run_factory({"step_length_ms": STEP_LENGTH_MS})
+    created_run: CreatedRunHandle = await created_run_factory(
+        {"step_length_ms": STEP_LENGTH_MS}
+    )
 
     run_request = RunRequest(
         run_id=created_run.response.run_id, max_time=RUN_TIME_S
