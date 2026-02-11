@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from src.trafficgym.api import engine_pb2 as src_dot_trafficgym_dot_api_dot_engine__pb2
+from trafficgym.api import engine_pb2 as trafficgym_dot_api_dot_engine__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in src/trafficgym/api/engine_pb2_grpc.py depends on'
+        + ' but the generated code in trafficgym/api/engine_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,58 +36,58 @@ class EngineServiceStub(object):
         """
         self.CreateRun = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/CreateRun',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.FromString,
                 _registered_method=True)
         self.Run = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/Run',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.RunRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.RunResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.RunRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.RunResponse.FromString,
                 _registered_method=True)
         self.CloseRun = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/CloseRun',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.FromString,
                 _registered_method=True)
         self.ApplyActions = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/ApplyActions',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ActionBundle.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.ActionBundle.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
                 _registered_method=True)
         self.StreamTelemetry = channel.unary_stream(
                 '/sumo.engine.v1.EngineService/StreamTelemetry',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
                 _registered_method=True)
         self.StreamSubscriptions = channel.unary_stream(
                 '/sumo.engine.v1.EngineService/StreamSubscriptions',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
                 _registered_method=True)
         self.Subscribe = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/Subscribe',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.FromString,
                 _registered_method=True)
         self.Unsubscribe = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/Unsubscribe',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.FromString,
                 _registered_method=True)
         self.RegisterInterrupt = channel.unary_stream(
                 '/sumo.engine.v1.EngineService/RegisterInterrupt',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
                 _registered_method=True)
         self.AcknowledgeInterrupt = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/AcknowledgeInterrupt',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
                 _registered_method=True)
         self.CancelInterrupt = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/CancelInterrupt',
-                request_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.SerializeToString,
-                response_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.FromString,
                 _registered_method=True)
 
 
@@ -165,58 +165,58 @@ def add_EngineServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateRun': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateRun,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.SerializeToString,
             ),
             'Run': grpc.unary_unary_rpc_method_handler(
                     servicer.Run,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.RunRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.RunResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.RunRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.RunResponse.SerializeToString,
             ),
             'CloseRun': grpc.unary_unary_rpc_method_handler(
                     servicer.CloseRun,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.SerializeToString,
             ),
             'ApplyActions': grpc.unary_unary_rpc_method_handler(
                     servicer.ApplyActions,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ActionBundle.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.ActionBundle.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
             ),
             'StreamTelemetry': grpc.unary_stream_rpc_method_handler(
                     servicer.StreamTelemetry,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.StreamRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.SerializeToString,
             ),
             'StreamSubscriptions': grpc.unary_stream_rpc_method_handler(
                     servicer.StreamSubscriptions,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.StreamRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.SerializeToString,
             ),
             'Subscribe': grpc.unary_unary_rpc_method_handler(
                     servicer.Subscribe,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.SerializeToString,
             ),
             'Unsubscribe': grpc.unary_unary_rpc_method_handler(
                     servicer.Unsubscribe,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.SerializeToString,
             ),
             'RegisterInterrupt': grpc.unary_stream_rpc_method_handler(
                     servicer.RegisterInterrupt,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.InterruptEvent.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.InterruptEvent.SerializeToString,
             ),
             'AcknowledgeInterrupt': grpc.unary_unary_rpc_method_handler(
                     servicer.AcknowledgeInterrupt,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
             ),
             'CancelInterrupt': grpc.unary_unary_rpc_method_handler(
                     servicer.CancelInterrupt,
-                    request_deserializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.FromString,
-                    response_serializer=src_dot_trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -244,8 +244,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/CreateRun',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -271,8 +271,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/Run',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.RunRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.RunResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.RunRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.RunResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -298,8 +298,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/CloseRun',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -325,8 +325,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/ApplyActions',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.ActionBundle.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.ActionBundle.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -352,8 +352,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/StreamTelemetry',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+            trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
             options,
             channel_credentials,
             insecure,
@@ -379,8 +379,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/StreamSubscriptions',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+            trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
             options,
             channel_credentials,
             insecure,
@@ -406,8 +406,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/Subscribe',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -433,8 +433,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/Unsubscribe',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -460,8 +460,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/RegisterInterrupt',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
+            trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
             options,
             channel_credentials,
             insecure,
@@ -487,8 +487,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/AcknowledgeInterrupt',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -514,8 +514,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/CancelInterrupt',
-            src_dot_trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.SerializeToString,
-            src_dot_trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.FromString,
             options,
             channel_credentials,
             insecure,
