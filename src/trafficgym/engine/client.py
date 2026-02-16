@@ -109,8 +109,11 @@ async def set_signal(
                     setter=engine_pb2.GenericSetter(
                         domain="trafficlight",
                         setter_name="setRedYellowGreenState",
-                        object_id=signal_id,
-                        value=Value(string_value=state),
+                        parameters=[
+                            engine_pb2.Parameter(
+                                name="tlsID", value=Value(string_value=state)
+                            )
+                        ],
                     )
                 )
             ],
@@ -329,12 +332,22 @@ async def main() -> None:
                                         setter=engine_pb2.GenericSetter(
                                             domain="trafficlight",
                                             setter_name="setRedYellowGreenState",
-                                            object_id=tls_id,
-                                            value=Value(
-                                                string_value=phases[
-                                                    i % len(phases)
-                                                ]
-                                            ),
+                                            parameters=[
+                                                engine_pb2.Parameter(
+                                                    name="tlsID",
+                                                    value=Value(
+                                                        string_value=tls_id
+                                                    ),
+                                                ),
+                                                engine_pb2.Parameter(
+                                                    name="state",
+                                                    value=Value(
+                                                        string_value=phases[
+                                                            i % len(phases)
+                                                        ]
+                                                    ),
+                                                ),
+                                            ],
                                         )
                                     )
                                 ],
@@ -370,11 +383,15 @@ async def main() -> None:
             detector_nearside: engine_pb2.SubscribeResponse = (
                 await stub.Subscribe(
                     engine_pb2.SubscribeRequest(
-                        name="occup_main_detector_nearside",
                         run_id=run_id,
                         domain="inductionloop",
                         getter_name="getLastIntervalOccupancy",
-                        object_id=det_id,
+                        parameters=[
+                            engine_pb2.Parameter(
+                                name="loopID", value=Value(string_value=det_id)
+                            )
+                        ],
+                        name="occup_main_detector_nearside",
                     )
                 )
             )
@@ -387,8 +404,16 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="trafficlight",
                                 setter_name="setProgram",
-                                object_id=tls_id,
-                                value=Value(string_value="0"),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="tlsID",
+                                        value=Value(string_value=tls_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="programID",
+                                        value=Value(string_value="0"),
+                                    ),
+                                ],
                             )
                         )
                     ],
@@ -429,10 +454,21 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id=tls_id,
-                                                value=Value(
-                                                    string_value="1"
-                                                ),  # METER QUARTER
+                                                parameters=[
+                                                    engine_pb2.Parameter(
+                                                        name="tlsID",
+                                                        value=Value(
+                                                            string_value=tls_id
+                                                        ),
+                                                    ),
+                                                    engine_pb2.Parameter(
+                                                        name="programID",
+                                                        value=Value(
+                                                            string_value="1"
+                                                        ),
+                                                    ),
+                                                ],
+                                                # METER QUARTER
                                             )
                                         ),
                                     ],
@@ -513,10 +549,21 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id=tls_id,
-                                                value=Value(
-                                                    string_value="2"
-                                                ),  # METER TENTHS
+                                                parameters=[
+                                                    engine_pb2.Parameter(
+                                                        name="tlsID",
+                                                        value=Value(
+                                                            string_value=tls_id
+                                                        ),
+                                                    ),
+                                                    engine_pb2.Parameter(
+                                                        name="programID",
+                                                        value=Value(
+                                                            string_value="2"
+                                                        ),
+                                                    ),
+                                                ],
+                                                # METER TENTHS
                                             )
                                         ),
                                     ],
@@ -539,10 +586,21 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id=tls_id,
-                                                value=Value(
-                                                    string_value="off"
-                                                ),  # METER OFF
+                                                parameters=[
+                                                    engine_pb2.Parameter(
+                                                        name="tlsID",
+                                                        value=Value(
+                                                            string_value=tls_id
+                                                        ),
+                                                    ),
+                                                    engine_pb2.Parameter(
+                                                        name="programID",
+                                                        value=Value(
+                                                            string_value="off"
+                                                        ),
+                                                    ),
+                                                ],
+                                                # METER OFF
                                             )
                                         ),
                                     ],
@@ -615,10 +673,21 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id=tls_id,
-                                                value=Value(
-                                                    string_value="3"
-                                                ),  # METER CHOKE
+                                                parameters=[
+                                                    engine_pb2.Parameter(
+                                                        name="tlsID",
+                                                        value=Value(
+                                                            string_value=tls_id
+                                                        ),
+                                                    ),
+                                                    engine_pb2.Parameter(
+                                                        name="programID",
+                                                        value=Value(
+                                                            string_value="3"
+                                                        ),
+                                                    ),
+                                                ],
+                                                # METER CHOKE
                                             )
                                         ),
                                     ],
@@ -641,10 +710,21 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id=tls_id,
-                                                value=Value(
-                                                    string_value="1"
-                                                ),  # METER QUARTER
+                                                parameters=[
+                                                    engine_pb2.Parameter(
+                                                        name="tlsID",
+                                                        value=Value(
+                                                            string_value=tls_id
+                                                        ),
+                                                    ),
+                                                    engine_pb2.Parameter(
+                                                        name="programID",
+                                                        value=Value(
+                                                            string_value="1"
+                                                        ),
+                                                    ),
+                                                ],
+                                                # METER QUARTER
                                             )
                                         ),
                                     ],
@@ -684,10 +764,21 @@ async def main() -> None:
                                             setter=engine_pb2.GenericSetter(
                                                 domain="trafficlight",
                                                 setter_name="setProgram",
-                                                object_id="TL0",
-                                                value=Value(
-                                                    string_value="2"
-                                                ),  # METER TENTHS
+                                                parameters=[
+                                                    engine_pb2.Parameter(
+                                                        name="tlsID",
+                                                        value=Value(
+                                                            string_value=tls_id
+                                                        ),
+                                                    ),
+                                                    engine_pb2.Parameter(
+                                                        name="programID",
+                                                        value=Value(
+                                                            string_value="2"
+                                                        ),
+                                                    ),
+                                                ],
+                                                # METER TENTHS
                                             )
                                         ),
                                     ],
@@ -734,7 +825,11 @@ async def main() -> None:
                     run_id=run_id,
                     domain="trafficlight",
                     getter_name="getRedYellowGreenState",
-                    object_id=tls_id,
+                    parameters=[
+                        engine_pb2.Parameter(
+                            name="tlsID", value=Value(string_value=tls_id)
+                        )
+                    ],
                 )
             )
             await stub.Subscribe(
@@ -743,7 +838,11 @@ async def main() -> None:
                     run_id=run_id,
                     domain="edge",
                     getter_name="getLastStepVehicleIDs",
-                    object_id="W2J",
+                    parameters=[
+                        engine_pb2.Parameter(
+                            name="edgeID", value=Value(string_value="W2J")
+                        )
+                    ],
                 )
             )
             await stub.Subscribe(
@@ -751,7 +850,11 @@ async def main() -> None:
                     run_id=run_id,
                     domain="trafficlight",
                     getter_name="getSpentDuration",
-                    object_id=tls_id,
+                    parameters=[
+                        engine_pb2.Parameter(
+                            name="tlsID", value=Value(string_value=tls_id)
+                        )
+                    ],
                 )
             )
             await stub.Run(engine_pb2.RunRequest(run_id=run_id, max_time=20))
@@ -787,16 +890,34 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSpeed",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=0),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="speed",
+                                        value=Value(number_value=0),
+                                    ),
+                                ],
                             )
                         ),
                         engine_pb2.Action(
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSignals",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=(1 << 2) + (1 << 10)),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="signals",
+                                        value=Value(
+                                            number_value=(1 << 2) + (1 << 10)
+                                        ),
+                                    ),
+                                ],
                                 # emergency signal and door right open
                             )
                         ),
@@ -817,16 +938,32 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSpeed",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=-1),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="speed",
+                                        value=Value(number_value=-1),
+                                    ),
+                                ],
                             )
                         ),
                         engine_pb2.Action(
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSignals",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=-1),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="signals",
+                                        value=Value(number_value=-1),
+                                    ),
+                                ],
                             )
                         ),
                     ],
@@ -854,7 +991,11 @@ async def main() -> None:
                     run_id=run_id,
                     domain="edge",
                     getter_name="getLastStepVehicleIDs",
-                    object_id="W2J",
+                    parameters=[
+                        engine_pb2.Parameter(
+                            name="edgeID", value=Value(string_value="W2J")
+                        )
+                    ],
                 )
             )
             await stub.Subscribe(
@@ -862,7 +1003,11 @@ async def main() -> None:
                     run_id=run_id,
                     domain="trafficlight",
                     getter_name="getRedYellowGreenState",
-                    object_id=tls_id,
+                    parameters=[
+                        engine_pb2.Parameter(
+                            name="tlsID", value=Value(string_value=tls_id)
+                        )
+                    ],
                 )
             )
 
@@ -911,16 +1056,34 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSpeed",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=0),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="speed",
+                                        value=Value(number_value=0),
+                                    ),
+                                ],
                             )
                         ),
                         engine_pb2.Action(
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSignals",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=(1 << 2) + (1 << 10)),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="signals",
+                                        value=Value(
+                                            number_value=(1 << 2) + (1 << 10)
+                                        ),
+                                    ),
+                                ],
                                 # emergency signal and door right open
                             )
                         ),
@@ -941,16 +1104,32 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSpeed",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=-1),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="speed",
+                                        value=Value(number_value=-1),
+                                    ),
+                                ],
                             )
                         ),
                         engine_pb2.Action(
                             setter=engine_pb2.GenericSetter(
                                 domain="vehicle",
                                 setter_name="setSignals",
-                                object_id=chosen_veh_id,
-                                value=Value(number_value=-1),
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="vehID",
+                                        value=Value(string_value=chosen_veh_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="signals",
+                                        value=Value(number_value=-1),
+                                    ),
+                                ],
                             )
                         ),
                     ],
@@ -1000,8 +1179,17 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="trafficlight",
                                 setter_name="setProgram",
-                                object_id=tls_id,
-                                value=Value(string_value="off"),  # METER OFF
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="tlsID",
+                                        value=Value(string_value=tls_id),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="programID",
+                                        value=Value(string_value="off"),
+                                    ),
+                                ],
+                                # METER OFF
                             )
                         ),
                     ],
@@ -1026,9 +1214,17 @@ async def main() -> None:
                             setter=engine_pb2.GenericSetter(
                                 domain="calibrator",
                                 setter_name="setFlow",
-                                object_id="ca_0",
-                                value=Value(number_value=after_run.new_time),
-                                additional_parameters=[
+                                parameters=[
+                                    engine_pb2.Parameter(
+                                        name="calibratorID",
+                                        value=Value(string_value="ca_0"),
+                                    ),
+                                    engine_pb2.Parameter(
+                                        name="begin",
+                                        value=Value(
+                                            number_value=after_run.new_time
+                                        ),
+                                    ),
                                     engine_pb2.Parameter(
                                         name="end",
                                         value=Value(
