@@ -17,7 +17,7 @@ from grpc.aio import (
 )
 from google.protobuf.message import Message
 
-from ..api import engine_pb2, engine_pb2_grpc
+from trafficgym.api import engine_pb2, engine_pb2_grpc
 from google.protobuf.struct_pb2 import Value
 
 from dataclasses import dataclass

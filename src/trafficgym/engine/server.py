@@ -3,9 +3,22 @@ import asyncio
 
 import grpc
 
-from .kernel import RunConfig, RunState, Interrupt, InterruptEvent, ValueType
-from ..api import engine_pb2, engine_pb2_grpc
+# from .kernel import RunConfig, RunState, Interrupt, InterruptEvent, ValueType
+from trafficgym.api import engine_pb2, engine_pb2_grpc
 from google.protobuf.struct_pb2 import Value
+
+from trafficgym.engine.ports.simulation import (
+    SimulationPort,
+    Interrupt,
+    InterruptEvent,
+    RunConfig,
+)
+
+from trafficgym.engine.ports.adapter_factory import AdapterFactory
+
+from trafficgym.engine.adapters.factories import LibsumoAdapterFactory
+
+# from trafficgym.engine.adapters.fake_adapter import FakeAdapter
 
 # from libsumo import DOMAINS
 from typing import Any, Callable, AsyncIterator, Literal
@@ -15,6 +28,8 @@ from functools import partial
 import logging
 
 import libsumo  # type: ignore
+
+ExtractedValueType = float | str | bool | None
 
 
 class InvalidGetterError(Exception):
@@ -35,10 +50,7 @@ def raise_async_except(
         context.abort(grpc.StatusCode.UNKNOWN, "An Exception Occured")
 
 
-# Domain = Enum("Domain", list(map(lambda x: x.__name__, DOMAINS)))
-
-
-def extract_value(value: Value) -> ValueType:
+def extract_value(value: Value) -> ExtractedValueType:
     kind = value.WhichOneof("kind")
     if kind == "null_value":
         return None
@@ -58,15 +70,13 @@ class Subscription:
         # domain: Domain,
         domain: str,
         getter_name: str,
-        object_id: str,
-        additional_parameters: dict[str, Value],
+        parameters: dict[str, Value],
         name: str | None = None,
     ):
         self.__name = name
         self.domain = domain
         self.getter_name: str = getter_name
-        self.object_id = object_id
-        self.additional_parameters = additional_parameters
+        self.parameters = parameters
 
     @property
     def name(self) -> str:
@@ -74,9 +84,9 @@ class Subscription:
         return self.__name or self.fingerprint()
 
     def fingerprint(self) -> str:
-        return f"{str(self.domain)}.{self.getter_name}_{self.object_id}"
+        return f"{str(self.domain)}.{self.getter_name}_{self.parameters}"
 
-    def collect(self, run_state: RunState) -> Value:
+    def collect(self, simulation: SimulationPort) -> Value:
         if self.getter_name.startswith("_"):
             raise InvalidGetterError(
                 "Dunder names are blocked from being collected."
@@ -88,7 +98,7 @@ class Subscription:
 
         string_params: dict[str, str] = {}
 
-        for k, v in self.additional_parameters.items():
+        for k, v in self.parameters.items():
             kind = v.WhichOneof("kind")
 
             if kind == "string_value":
@@ -101,11 +111,10 @@ class Subscription:
                 )
 
         try:
-            collected = run_state.collect_metric(
+            collected = simulation.query(
                 self.domain,
                 self.getter_name,
-                self.object_id,
-                string_params,
+                self.parameters,
             )
             collected_typed: Value
             try:
@@ -127,7 +136,7 @@ class SubscriptionManager:
 
     def __init__(
         self,
-        run_state: RunState,
+        simulation: SimulationPort,
         subscription_queues: dict[
             str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
         ],
@@ -135,7 +144,7 @@ class SubscriptionManager:
             [list[engine_pb2.KeyValue]], engine_pb2.TelemetryFrame
         ],
     ):
-        self.run_state = run_state
+        self.simulation = simulation
         self.subscription_queues = subscription_queues
 
         self.subscriptions = {}
@@ -149,7 +158,7 @@ class SubscriptionManager:
         failed_collects: list[tuple[Subscription, Exception]] = []
         for subscription in self.subscriptions.values():
             try:
-                collected = subscription.collect(self.run_state)
+                collected = subscription.collect(self.simulation)
             except InvalidGetterError as e:
                 failed_collects.append((subscription, e))
                 collected = None
@@ -165,7 +174,7 @@ class SubscriptionManager:
         return failed_collects
 
     async def queue_recent_collect(self) -> None:
-        q = self.subscription_queues[self.run_state.run_id]
+        q = self.subscription_queues[self.simulation.run_id]
         frame = self._frame_builder(
             [
                 engine_pb2.KeyValue(key=k, value=v)
@@ -186,26 +195,15 @@ class SubscriptionManager:
         # domain: Domain,
         domain: str,
         getter_name: str,
-        object_id: str,
-        additional_params: dict[str, Value] | None = None,
+        parameters: dict[str, Value] | None = None,
         name: str | None = None,
     ) -> str:
-        if not additional_params:
-            additional_params = {}
-        newSub = Subscription(
-            domain, getter_name, object_id, additional_params, name
-        )
+        parameters = parameters or {}
+        newSub = Subscription(domain, getter_name, parameters, name)
         if newSub.fingerprint() in self.subscriptions:
-            obj_message = ("_" + object_id) if object_id is not None else ""
-            param_message = (
-                f"with additional parameters {additional_params}"
-                if additional_params is not None
-                else ""
-            )
-
             logging.warning(
                 f"Received a request to subscribe to {domain}.{getter_name}"
-                f"{obj_message}{param_message}. "
+                f"{parameters}. "
                 f"\nThis failed because a subscription is already registered "
                 f"with the same domain, getter_name and object_id. The "
                 f"corresponding fingerprint is {newSub.fingerprint()}."
@@ -227,8 +225,8 @@ class SubscriptionManager:
 
 
 class EngineService(engine_pb2_grpc.EngineServiceServicer):
-    def __init__(self) -> None:
-        self.runs: dict[str, RunState] = {}
+    def __init__(self, adapter_factory: AdapterFactory) -> None:
+        self.runs: dict[str, SimulationPort] = {}
         self.telemetry_queues: dict[
             str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
         ] = {}
@@ -237,6 +235,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         ] = {}
         self.run_tasks: dict[str, asyncio.Task[Any]] = {}
         self.subscription_manager: SubscriptionManager | None = None
+        self._adapter_factory = adapter_factory
 
     def _build_frame(
         self, metrics: list[engine_pb2.KeyValue], run_id: str
@@ -249,7 +248,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return engine_pb2.TelemetryFrame(
             run_id=run_id,
             step=run.step,
-            sim_time_s=run.step * run.cfg.step_length_ms / 1000,
+            sim_time_s=run.step * run.seconds_per_step,
             metrics=metrics,
         )
 
@@ -279,13 +278,13 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         cfg = RunConfig(
             sumocfg_path=request.sumocfg_path,
             sumo_binary=request.sumo_binary or "sumo",
-            step_length_ms=(
-                request.step_length_ms
-                if request.step_length_ms is not None
-                else 1000
-            ),
         )
-        run = RunState(cfg)
+        step_length_ms = (
+            request.step_length_ms
+            if request.step_length_ms is not None
+            else 1000
+        )
+        run = self._adapter_factory.create(cfg, step_length_ms)
 
         # need to start now so that we can setup simulation
         # before vehicles start moving (tls etc...)
@@ -305,7 +304,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             run, self.subscription_queues, part
         )
 
-
         return engine_pb2.CreateRunResponse(
             run_id=run.run_id, input_artifacts=[]
         )
@@ -318,7 +316,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
-            return
 
         if run_id in self.run_tasks:
             logging.warning(
@@ -328,24 +325,44 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 grpc.StatusCode.ALREADY_EXISTS,
                 "Run is already executing, maybe await its end",
             )
-            return
 
-        max_run: str | None = request.WhichOneof("max_run")
-        if max_run == "max_steps":
-            max_steps = request.max_steps
-        elif max_run == "max_time":
-            max_steps = int(
-                1000 * request.max_time / self.runs[run_id].cfg.step_length_ms
+        run = self.runs[run_id]
+
+        if run.closed:
+            context.abort(
+                grpc.StatusCode.ABORTED,
+                "Run was closed and can not longer be run",
+            )
+
+        run_mode: str | None = request.WhichOneof("run_mode")
+        if run_mode == "steps":
+            steps = request.steps
+        elif run_mode == "time":
+            steps = int(request.time * run.steps_per_second)
+        elif run_mode == "max_steps":
+            # steps = request.max_steps - run.step
+            await context.abort(
+                grpc.StatusCode.UNIMPLEMENTED, "max_step unimplemented"
+            )
+        elif run_mode == "max_time":
+            # max_steps = int(
+            #     1000 * request.max_time / run.cfg.step_length_ms
+            # )
+            # steps = max_steps - run.step
+            await context.abort(
+                grpc.StatusCode.UNIMPLEMENTED, "max_time unimplemented"
             )
         else:
-            max_steps = int(1000 * 1000 / self.runs[run_id].cfg.step_length_ms)
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, "Run Mode not specified."
+            )
 
-        task = asyncio.create_task(self._run_loop(run_id, max_steps))
+        task = asyncio.create_task(self._run_loop(run_id, steps))
         self.run_tasks[run_id] = task
         await task
         raise_async_except(task, context)
-        new_step = self.runs[run_id].step
-        new_time = new_step * self.runs[run_id].cfg.step_length_ms / 1000
+        new_step = run.step
+        new_time = new_step * run.seconds_per_step
         return engine_pb2.RunResponse(
             run_id=run_id, new_step=new_step, new_time=new_time
         )
@@ -358,15 +375,18 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
-            return
         run = self.runs[run_id]
+
+        if run.closed:
+            context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, "Run already closed"
+            )
 
         if run_id in self.run_tasks:
             logging.warning(
                 f"Closing Run {run_id}, despite running task for that run"
             )
         run.close()
-        run.started = False
         await self.telemetry_queues[run_id].put(None)
         await self.subscription_queues[run_id].put(None)
         return engine_pb2.CloseRunResponse(run_id=run_id)
@@ -380,38 +400,44 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
-            return
+
+        if request.HasField("step"):
+            context.abort(
+                grpc.StatusCode.UNIMPLEMENTED,
+                "steps not supported in ApplyActions.",
+            )
+
         run = self.runs[run_id]
         for a in request.actions:
             p: str | None = a.WhichOneof("payload")
             if p == "setter":
-                additional_parameters: dict[str, ValueType] = {
+                additional_parameters: dict[str, ExtractedValueType] = {
                     param.name: extract_value(param.value)
-                    for param in a.setter.additional_parameters
+                    for param in a.setter.parameters
                 }
                 try:
-                    run.invoke_setter(
+                    run.apply(
                         a.setter.domain,
                         a.setter.setter_name,
-                        a.setter.object_id,
-                        extract_value(a.setter.value),
-                        additional_parameters,
+                        {
+                            parameter.name: parameter.value
+                            for parameter in a.setter.parameters
+                        },
                     )
                 except (AttributeError, TypeError) as e:
                     logging.warning(
                         f"Received a malformed setter request: {a.setter.domain}."
-                        f"{a.setter.setter_name}({a.setter.object_id}, "
-                        f"{extract_value(a.setter.value)}, {a.setter.additional_parameters})\n{e}"
+                        f"{a.setter.parameters})\n{e}"
                     )
-                    # await context.abort(
-                    #     grpc.StatusCode.INVALID_ARGUMENT,
-                    #     "Setter not found or request malformed.",
-                    # )
                     application_results.append(
                         engine_pb2.KeyValue(
                             key="Error",
                             value=Value(string_value=f"Setter: {str(e)}"),
                         )
+                    )
+                    await context.abort(
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        "Setter not found or request malformed.",
                     )
 
                 application_results.append(
@@ -419,8 +445,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         key="Info",
                         value=Value(
                             string_value=f"Setter Called {a.setter.domain}.{a.setter.setter_name}"
-                            f"({a.setter.object_id}, {a.setter.value}, "
-                            f"{a.setter.additional_parameters})"
+                            f"{a.setter.parameters})"
                         ),
                     )
                 )
@@ -471,9 +496,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             )
             return
         logging.debug(f"Subscribe: {request}")
-        additional_parameters = {
-            p.name: p.value for p in request.additional_parameters
-        }
+        additional_parameters = {p.name: p.value for p in request.parameters}
 
         if request.name in map(
             lambda x: x.name, self.subscription_manager.subscriptions.values()
@@ -490,8 +513,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         fingerprint = self.subscription_manager.subscribe(
             request.domain,
             request.getter_name,
-            request.object_id,
-            additional_parameters,
+            {
+                parameter.name: parameter.value
+                for parameter in request.parameters
+            },
             request.name,
         )
 
@@ -665,7 +690,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             f"Interrupt with id {request.interrupt_id} not found.",
         )
 
-    async def _run_loop(self, run_id: str, max_steps: int) -> None:
+    async def _run_loop(self, run_id: str, steps: int) -> None:
         run = self.runs[run_id]
         q = self.telemetry_queues[run_id]
 
@@ -674,8 +699,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         try:
             # run.start(max_steps=max_steps) # run already started in create run
-            for _ in range(max_steps):
-                step, sim_time_s, metrics = run.tick()
+            for _ in range(steps):
+                _, _, metrics = run.tick()
 
                 failed_getters_and_exceptions: list[
                     tuple[Subscription, Exception]
@@ -849,7 +874,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     run_id=run_id,
                     metrics=[
                         engine_pb2.KeyValue(
-                            key=k, value=Value(number_value=float(v))
+                            key=k, value=v
                         )
                         for k, v in metrics.items()
                     ],
@@ -867,7 +892,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
 async def serve(host: str = "127.0.0.1", port: int = 50051) -> None:
     server = grpc.aio.server()
-    engine_pb2_grpc.add_EngineServiceServicer_to_server(EngineService(), server)
+    engine_pb2_grpc.add_EngineServiceServicer_to_server(
+        EngineService(LibsumoAdapterFactory()), server
+    )
     server.add_insecure_port(f"{host}:{port}")
     await server.start()
     await server.wait_for_termination()

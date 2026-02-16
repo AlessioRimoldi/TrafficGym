@@ -27,9 +27,7 @@ message TlsSetPhase {
 message GenericSetter {
   string domain = 1;
   string setter_name = 2;
-  string object_id = 3;
-  google.protobuf.Value value = 4;
-  repeated Parameter additional_parameters = 5;
+  repeated Parameter parameters = 3;
 }
 
 message Action {
@@ -42,7 +40,7 @@ message Action {
 
 message ActionBundle {
   string run_id = 1;
-  int64 step = 2;
+  optional int64 step = 2;
   repeated Action actions = 3;
 }
 
@@ -66,11 +64,13 @@ message CreateRunResponse {
 
 message RunRequest {
   string run_id = 1;
-  reserved 2; // used to only support max_steps
+  reserved 2, 3, 4, 5, 6; // used to only support max_steps
 
-  oneof max_run {
-    int32 max_steps = 3;
-    float max_time = 4;
+  oneof run_mode {
+    int32 max_steps = 7;
+    float max_time = 8;
+    int32 steps = 9;
+    float time = 10;
   }
 }
 
@@ -106,9 +106,8 @@ message SubscribeRequest {
   string run_id = 1;
   string domain = 2;
   string getter_name = 3;
-  optional string object_id = 4;
-  repeated Parameter additional_parameters = 5;
-  optional string name = 6;
+  repeated Parameter parameters = 4;
+  optional string name = 5;
 }
 
 message SubscribeResponse {

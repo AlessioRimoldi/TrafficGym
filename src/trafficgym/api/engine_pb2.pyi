@@ -116,28 +116,19 @@ class GenericSetter(_message.Message):
 
     DOMAIN_FIELD_NUMBER: _builtins.int
     SETTER_NAME_FIELD_NUMBER: _builtins.int
-    OBJECT_ID_FIELD_NUMBER: _builtins.int
-    VALUE_FIELD_NUMBER: _builtins.int
-    ADDITIONAL_PARAMETERS_FIELD_NUMBER: _builtins.int
+    PARAMETERS_FIELD_NUMBER: _builtins.int
     domain: _builtins.str
     setter_name: _builtins.str
-    object_id: _builtins.str
     @_builtins.property
-    def value(self) -> _struct_pb2.Value: ...
-    @_builtins.property
-    def additional_parameters(self) -> _containers.RepeatedCompositeFieldContainer[Global___Parameter]: ...
+    def parameters(self) -> _containers.RepeatedCompositeFieldContainer[Global___Parameter]: ...
     def __init__(
         self,
         *,
         domain: _builtins.str = ...,
         setter_name: _builtins.str = ...,
-        object_id: _builtins.str = ...,
-        value: _struct_pb2.Value | None = ...,
-        additional_parameters: _abc.Iterable[Global___Parameter] | None = ...,
+        parameters: _abc.Iterable[Global___Parameter] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["additional_parameters", b"additional_parameters", "domain", b"domain", "object_id", b"object_id", "setter_name", b"setter_name", "value", b"value"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["domain", b"domain", "parameters", b"parameters", "setter_name", b"setter_name"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___GenericSetter: _TypeAlias = GenericSetter  # noqa: Y015
@@ -179,11 +170,16 @@ class ActionBundle(_message.Message):
         self,
         *,
         run_id: _builtins.str = ...,
-        step: _builtins.int = ...,
+        step: _builtins.int | None = ...,
         actions: _abc.Iterable[Global___Action] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["actions", b"actions", "run_id", b"run_id", "step", b"step"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_step", b"_step", "step", b"step"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_step", b"_step", "actions", b"actions", "run_id", b"run_id", "step", b"step"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__step: _TypeAlias = _typing.Literal["step"]  # noqa: Y015
+    _WhichOneofArgType__step: _TypeAlias = _typing.Literal["_step", b"_step"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__step) -> _WhichOneofReturnType__step | None: ...
 
 Global___ActionBundle: _TypeAlias = ActionBundle  # noqa: Y015
 
@@ -261,23 +257,29 @@ class RunRequest(_message.Message):
     RUN_ID_FIELD_NUMBER: _builtins.int
     MAX_STEPS_FIELD_NUMBER: _builtins.int
     MAX_TIME_FIELD_NUMBER: _builtins.int
+    STEPS_FIELD_NUMBER: _builtins.int
+    TIME_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
     max_steps: _builtins.int
     max_time: _builtins.float
+    steps: _builtins.int
+    time: _builtins.float
     def __init__(
         self,
         *,
         run_id: _builtins.str = ...,
         max_steps: _builtins.int = ...,
         max_time: _builtins.float = ...,
+        steps: _builtins.int = ...,
+        time: _builtins.float = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["max_run", b"max_run", "max_steps", b"max_steps", "max_time", b"max_time"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["max_steps", b"max_steps", "max_time", b"max_time", "run_mode", b"run_mode", "steps", b"steps", "time", b"time"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["max_run", b"max_run", "max_steps", b"max_steps", "max_time", b"max_time", "run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["max_steps", b"max_steps", "max_time", b"max_time", "run_id", b"run_id", "run_mode", b"run_mode", "steps", b"steps", "time", b"time"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_max_run: _TypeAlias = _typing.Literal["max_steps", "max_time"]  # noqa: Y015
-    _WhichOneofArgType_max_run: _TypeAlias = _typing.Literal["max_run", b"max_run"]  # noqa: Y015
-    def WhichOneof(self, oneof_group: _WhichOneofArgType_max_run) -> _WhichOneofReturnType_max_run | None: ...
+    _WhichOneofReturnType_run_mode: _TypeAlias = _typing.Literal["max_steps", "max_time", "steps", "time"]  # noqa: Y015
+    _WhichOneofArgType_run_mode: _TypeAlias = _typing.Literal["run_mode", b"run_mode"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType_run_mode) -> _WhichOneofReturnType_run_mode | None: ...
 
 Global___RunRequest: _TypeAlias = RunRequest  # noqa: Y015
 
@@ -397,38 +399,30 @@ class SubscribeRequest(_message.Message):
     RUN_ID_FIELD_NUMBER: _builtins.int
     DOMAIN_FIELD_NUMBER: _builtins.int
     GETTER_NAME_FIELD_NUMBER: _builtins.int
-    OBJECT_ID_FIELD_NUMBER: _builtins.int
-    ADDITIONAL_PARAMETERS_FIELD_NUMBER: _builtins.int
+    PARAMETERS_FIELD_NUMBER: _builtins.int
     NAME_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
     domain: _builtins.str
     getter_name: _builtins.str
-    object_id: _builtins.str
     name: _builtins.str
     @_builtins.property
-    def additional_parameters(self) -> _containers.RepeatedCompositeFieldContainer[Global___Parameter]: ...
+    def parameters(self) -> _containers.RepeatedCompositeFieldContainer[Global___Parameter]: ...
     def __init__(
         self,
         *,
         run_id: _builtins.str = ...,
         domain: _builtins.str = ...,
         getter_name: _builtins.str = ...,
-        object_id: _builtins.str | None = ...,
-        additional_parameters: _abc.Iterable[Global___Parameter] | None = ...,
+        parameters: _abc.Iterable[Global___Parameter] | None = ...,
         name: _builtins.str | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_name", b"_name", "_object_id", b"_object_id", "name", b"name", "object_id", b"object_id"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_name", b"_name", "name", b"name"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_name", b"_name", "_object_id", b"_object_id", "additional_parameters", b"additional_parameters", "domain", b"domain", "getter_name", b"getter_name", "name", b"name", "object_id", b"object_id", "run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_name", b"_name", "domain", b"domain", "getter_name", b"getter_name", "name", b"name", "parameters", b"parameters", "run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__name: _TypeAlias = _typing.Literal["name"]  # noqa: Y015
     _WhichOneofArgType__name: _TypeAlias = _typing.Literal["_name", b"_name"]  # noqa: Y015
-    _WhichOneofReturnType__object_id: _TypeAlias = _typing.Literal["object_id"]  # noqa: Y015
-    _WhichOneofArgType__object_id: _TypeAlias = _typing.Literal["_object_id", b"_object_id"]  # noqa: Y015
-    @_typing.overload
     def WhichOneof(self, oneof_group: _WhichOneofArgType__name) -> _WhichOneofReturnType__name | None: ...
-    @_typing.overload
-    def WhichOneof(self, oneof_group: _WhichOneofArgType__object_id) -> _WhichOneofReturnType__object_id | None: ...
 
 Global___SubscribeRequest: _TypeAlias = SubscribeRequest  # noqa: Y015
 
