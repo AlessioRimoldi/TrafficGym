@@ -514,7 +514,13 @@ async def test_apply_actions(
         parameters=[Parameter(name="tlsID", value=Value(string_value="TL0"))],
     )
 
-    await service.Subscribe(subscribe_request, fake_context)
+    subscribe_response = await service.Subscribe(
+        subscribe_request, fake_context
+    )
+
+    # service.subscription_manager.lookup_recent_collection(
+    #     subscribe_response.fingerprint
+    # )
 
     apply_actions_request = action_bundle_factory(
         create_run_response.run_id, None

@@ -234,7 +234,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             str, asyncio.Queue[engine_pb2.TelemetryFrame | None]
         ] = {}
         self.run_tasks: dict[str, asyncio.Task[Any]] = {}
-        self.subscription_manager: SubscriptionManager | None = None
+        self._subscription_manager: SubscriptionManager | None = None
         self._adapter_factory = adapter_factory
 
     def _build_frame(
@@ -300,7 +300,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self.subscription_queues[run.run_id] = asyncio.Queue()
 
         part = partial(self._build_frame, run_id=run.run_id)
-        self.subscription_manager = SubscriptionManager(
+        self._subscription_manager = SubscriptionManager(
             run, self.subscription_queues, part
         )
 
@@ -490,7 +490,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         request: engine_pb2.SubscribeRequest,
         context: grpc.ServicerContext,
     ) -> engine_pb2.SubscribeResponse:
-        if self.subscription_manager is None:
+        if self._subscription_manager is None:
             context.abort(
                 grpc.StatusCode.ABORTED, "Subscription Manager not initialised."
             )
@@ -499,7 +499,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         additional_parameters = {p.name: p.value for p in request.parameters}
 
         if request.name in map(
-            lambda x: x.name, self.subscription_manager.subscriptions.values()
+            lambda x: x.name, self._subscription_manager.subscriptions.values()
         ):
             logging.warning(
                 f"Duplicate subscription name "
@@ -510,7 +510,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 f"Subscription with name {request.name} already exists.",
             )
 
-        fingerprint = self.subscription_manager.subscribe(
+        fingerprint = self._subscription_manager.subscribe(
             request.domain,
             request.getter_name,
             {
@@ -694,7 +694,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run = self.runs[run_id]
         q = self.telemetry_queues[run_id]
 
-        if self.subscription_manager is None:
+        if self._subscription_manager is None:
             raise RuntimeError("Subscription manager not initialised.")
 
         try:
@@ -708,9 +708,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
                 try:
                     failed_getters_and_exceptions = (
-                        await self.subscription_manager.collect()
+                        await self._subscription_manager.collect()
                     )
-                    await self.subscription_manager.queue_recent_collect()
+                    await self._subscription_manager.queue_recent_collect()
 
                     # decision for now to run interrupts
                     # after collecting subscriptions.
@@ -723,7 +723,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                             continue
 
                         recent_collection_value = (
-                            self.subscription_manager.lookup_recent_collection(
+                            self._subscription_manager.lookup_recent_collection(
                                 fingerprint=i.trigger_metric_name
                             )
                         )
@@ -873,9 +873,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 frame = self._build_frame(
                     run_id=run_id,
                     metrics=[
-                        engine_pb2.KeyValue(
-                            key=k, value=v
-                        )
+                        engine_pb2.KeyValue(key=k, value=v)
                         for k, v in metrics.items()
                     ],
                 )
