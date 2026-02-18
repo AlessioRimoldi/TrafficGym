@@ -66,30 +66,37 @@ class LibsumoAdapter(SimulationPort):
         self,
         domain: str,
         setter_name: str,
+        object_id: str,
         args: ValDict,
     ) -> None:
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
 
-        try:
-            setter_handle(**args)
-        except TypeError:
-            if "value" in args:
-                args_no_value = {k: v for k, v in args.items() if k != "value"}
-            setter_handle(value=int(args["value"]), **args_no_value)
+        # try:
+        setter_handle(object_id, **args)
+        # except TypeError:
+        #     if "value" in args:
+        #         args_no_value = {k: v for k, v in args.items() if k != "value"}
+        #     setter_handle(object_id, value=int(args["value"]), **args_no_value)
 
-        logging.debug(f"Invoked setter: {domain}.{setter_name}_{args}")
+        logging.debug(
+            f"Invoked setter: {domain}.{object_id}.{setter_name}_{args}"
+        )
 
     def query(
         self,
         domain: str,
         getter_name: str,
+        object_id: str,
         args: ValDict,
-    ) -> Value:
+    ) -> str:
         domain_handle = getattr(libsumo, domain)
         getter_handle = getattr(domain_handle, getter_name)
 
-        return Value(string_value=str(getter_handle(**args)))
+        logging.debug(
+            f"Invoked getter: {domain}.{object_id}.{getter_name}_{args}"
+        )
+        return str(getter_handle(object_id, **args))
 
         # try:
         #     return getterHandle()

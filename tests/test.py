@@ -10,9 +10,12 @@ from trafficgym.engine.adapters.factories import (
     FakeAdapterFactory,
     LibsumoAdapterFactory,
 )
-from trafficgym.engine.adapters.fake_adapter import FakeStateDict
+from trafficgym.engine.adapters.fake_adapter import (
+    FakeStateDict,
+    FakeStateDictKey,
+)
 from trafficgym.engine.ports.adapter_factory import AdapterFactory
-from google.protobuf.struct_pb2 import Value
+from google.protobuf.struct_pb2 import Value, NullValue
 from trafficgym.api.engine_pb2 import (
     CreateRunRequest,
     CreateRunResponse,
@@ -23,6 +26,8 @@ from trafficgym.api.engine_pb2 import (
     GenericSetter,
     Parameter,
     SubscribeRequest,
+    FetchRequest,
+    FetchResponse,
 )
 from grpc import ServicerContext, StatusCode
 from typing import (
@@ -84,7 +89,11 @@ def service(request: pytest.FixtureRequest) -> EngineService:
     kind = params.get("kind", "fake")
 
     if kind == "fake":
-        initial_state = params.get("initial_state", {})
+        # deep copy initial state to prevent test cross-contaminatio n
+        # when the fake state is mutated
+        initial_state = {
+            k: v for k, v in params.get("initial_state", {}).items()
+        }
         return EngineService(FakeAdapterFactory(initial_state))
     elif kind == "libsumo":
         adapter_factory = LibsumoAdapterFactory()
@@ -395,6 +404,7 @@ async def test_close_run_during_exec_triggers_warning(
 class GenericSetterType:
     domain: str
     setter_name: str
+    object_id: str
     parameters: list[Parameter] | None = None
 
 
@@ -425,10 +435,8 @@ def action_bundle_factory(
                 GenericSetterType(
                     domain="trafficlight",
                     setter_name="setProgram",
+                    object_id="TL0",
                     parameters=[
-                        Parameter(
-                            name="tlsID", value=Value(string_value="TL0")
-                        ),
                         Parameter(
                             name="programID", value=Value(string_value="10")
                         ),
@@ -437,10 +445,8 @@ def action_bundle_factory(
                 GenericSetterType(
                     domain="trafficlight",
                     setter_name="setRedYellowGreenState",
+                    object_id="TL0",
                     parameters=[
-                        Parameter(
-                            name="tlsID", value=Value(string_value="TL0")
-                        ),
                         Parameter(
                             name="state", value=Value(string_value="rGrG")
                         ),
@@ -489,45 +495,111 @@ async def test_apply_action_step_unimplemented(
     assert e.value.code == StatusCode.UNIMPLEMENTED
 
 
+FAKE_SERVICE_CONFIG = (
+    {
+        "kind": "fake",
+        "initial_state": {
+            FakeStateDictKey(
+                domain="fake_domain",
+                object_id="fake_object",
+                attribute="program",
+            ): Value(string_value="off")
+        },
+    }
+)
+
+
 @pytest.mark.parametrize(
-    "service",
+    "service, requires_collect, expected",
     [
-        {"kind": "fake", "intial_state": {"test": 0}},
+        (FAKE_SERVICE_CONFIG, False, [None, "off", "off", "42"]),
+        (FAKE_SERVICE_CONFIG, True, ["off", "off", "42", "42"]),
     ],
-    indirect=True,
+    indirect=["service"],
 )
 @pytest.mark.asyncio
-async def test_apply_actions(
+async def test_apply_actions_requires_collect_true_false(
     action_bundle_factory: ActionBundleFactoryType,
+    action_factory: ActionFactoryType,
     service: EngineService,
     fake_context: ServicerContext,
     create_run_factory: CreateRunFactoryType,
+    requires_collect: bool,
+    expected: list[str | None],
 ) -> None:
-    """Ensure that if an action is misformed, the entire bundle
-    is rejected, without partial application"""
+    """Ensure that subscriptions are collected after a
+    run when the requires_collect flag is not set.
+    When the requires_collect flag is set, ensure the collection
+    occurs despite no run being commanded"""
     create_run_response = await create_run_factory(None)
 
     subscribe_request = SubscribeRequest(
         run_id=create_run_response.run_id,
-        domain="trafficlight",
-        getter_name="getProgramID",
-        parameters=[Parameter(name="tlsID", value=Value(string_value="TL0"))],
+        domain="fake_domain",
+        object_id="fake_object",
+        getter_name="getProgram",
     )
 
     subscribe_response = await service.Subscribe(
         subscribe_request, fake_context
     )
 
-    # service.subscription_manager.lookup_recent_collection(
-    #     subscribe_response.fingerprint
-    # )
+    fetch_request = FetchRequest(
+        fingerprint=subscribe_response.fingerprint, requires_collect=requires_collect
+    )
+
+    first_fetch_response = await service.FetchSubscription(
+        fetch_request, fake_context
+    )
+
+    run_one_step_request = RunRequest(
+        run_id=create_run_response.run_id, steps=1
+    )
+
+    await service.Run(run_one_step_request, fake_context)
+
+    second_fetch_response = await service.FetchSubscription(
+        fetch_request, fake_context
+    )
 
     apply_actions_request = action_bundle_factory(
-        create_run_response.run_id, None
+        create_run_response.run_id,
+        [
+            action_factory(
+                GenericSetterType(
+                    "fake_domain",
+                    "setProgram",
+                    "fake_object",
+                    [Parameter(name="value", value=Value(string_value="42"))],
+                )
+            )
+        ],
     )
 
     await service.ApplyActions(apply_actions_request, fake_context)
 
+    third_fetch_response = await service.FetchSubscription(
+        fetch_request, fake_context
+    )
+
+    await service.Run(run_one_step_request, fake_context)
+
+    fourth_fetch_response = await service.FetchSubscription(
+        fetch_request, fake_context
+    )
+
+    assert first_fetch_response.fetched.has_value == (expected[0] is not None)
+    assert second_fetch_response.fetched.has_value
+    assert third_fetch_response.fetched.has_value
+    assert fourth_fetch_response.fetched.has_value
+
+    assert first_fetch_response.fetched.value == (expected[0] or "")
+    assert second_fetch_response.fetched.value == expected[1]
+    assert third_fetch_response.fetched.value == expected[2]
+    assert fourth_fetch_response.fetched.value == expected[3]
+
+
+# Fails correctly with fetch before subscription
 
 # @pytest.mark.asyncio
 # async def test_ensure_malformed_actions_are_rejected(

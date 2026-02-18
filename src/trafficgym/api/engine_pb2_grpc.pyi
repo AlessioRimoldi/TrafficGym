@@ -42,6 +42,7 @@ class EngineServiceStub:
     RegisterInterrupt: _grpc.UnaryStreamMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.InterruptEvent]
     AcknowledgeInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.ApplyActionsResponse]
     CancelInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.CancelInterruptRequest, _engine_pb2.CancelInterruptResponse]
+    FetchSubscription: _grpc.UnaryUnaryMultiCallable[_engine_pb2.FetchRequest, _engine_pb2.FetchResponse]
 
 @_typing.type_check_only
 class EngineServiceAsyncStub(EngineServiceStub):
@@ -57,6 +58,7 @@ class EngineServiceAsyncStub(EngineServiceStub):
     RegisterInterrupt: _aio.UnaryStreamMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.InterruptEvent]  # type: ignore[assignment]
     AcknowledgeInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.ApplyActionsResponse]  # type: ignore[assignment]
     CancelInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.CancelInterruptRequest, _engine_pb2.CancelInterruptResponse]  # type: ignore[assignment]
+    FetchSubscription: _aio.UnaryUnaryMultiCallable[_engine_pb2.FetchRequest, _engine_pb2.FetchResponse]  # type: ignore[assignment]
 
 class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
     @_abc_1.abstractmethod
@@ -135,5 +137,12 @@ class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _engine_pb2.CancelInterruptRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_engine_pb2.CancelInterruptResponse, _abc.Awaitable[_engine_pb2.CancelInterruptResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def FetchSubscription(
+        self,
+        request: _engine_pb2.FetchRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_engine_pb2.FetchResponse, _abc.Awaitable[_engine_pb2.FetchResponse]]: ...
 
 def add_EngineServiceServicer_to_server(servicer: EngineServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

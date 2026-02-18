@@ -48,19 +48,19 @@ class KeyValue(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     KEY_FIELD_NUMBER: _builtins.int
+    HAS_VALUE_FIELD_NUMBER: _builtins.int
     VALUE_FIELD_NUMBER: _builtins.int
     key: _builtins.str
-    @_builtins.property
-    def value(self) -> _struct_pb2.Value: ...
+    has_value: _builtins.bool
+    value: _builtins.str
     def __init__(
         self,
         *,
         key: _builtins.str = ...,
-        value: _struct_pb2.Value | None = ...,
+        has_value: _builtins.bool = ...,
+        value: _builtins.str = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["has_value", b"has_value", "key", b"key", "value", b"value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___KeyValue: _TypeAlias = KeyValue  # noqa: Y015
@@ -116,9 +116,11 @@ class GenericSetter(_message.Message):
 
     DOMAIN_FIELD_NUMBER: _builtins.int
     SETTER_NAME_FIELD_NUMBER: _builtins.int
+    OBJECT_ID_FIELD_NUMBER: _builtins.int
     PARAMETERS_FIELD_NUMBER: _builtins.int
     domain: _builtins.str
     setter_name: _builtins.str
+    object_id: _builtins.str
     @_builtins.property
     def parameters(self) -> _containers.RepeatedCompositeFieldContainer[Global___Parameter]: ...
     def __init__(
@@ -126,9 +128,10 @@ class GenericSetter(_message.Message):
         *,
         domain: _builtins.str = ...,
         setter_name: _builtins.str = ...,
+        object_id: _builtins.str = ...,
         parameters: _abc.Iterable[Global___Parameter] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["domain", b"domain", "parameters", b"parameters", "setter_name", b"setter_name"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["domain", b"domain", "object_id", b"object_id", "parameters", b"parameters", "setter_name", b"setter_name"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___GenericSetter: _TypeAlias = GenericSetter  # noqa: Y015
@@ -399,11 +402,13 @@ class SubscribeRequest(_message.Message):
     RUN_ID_FIELD_NUMBER: _builtins.int
     DOMAIN_FIELD_NUMBER: _builtins.int
     GETTER_NAME_FIELD_NUMBER: _builtins.int
+    OBJECT_ID_FIELD_NUMBER: _builtins.int
     PARAMETERS_FIELD_NUMBER: _builtins.int
     NAME_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
     domain: _builtins.str
     getter_name: _builtins.str
+    object_id: _builtins.str
     name: _builtins.str
     @_builtins.property
     def parameters(self) -> _containers.RepeatedCompositeFieldContainer[Global___Parameter]: ...
@@ -413,12 +418,13 @@ class SubscribeRequest(_message.Message):
         run_id: _builtins.str = ...,
         domain: _builtins.str = ...,
         getter_name: _builtins.str = ...,
+        object_id: _builtins.str = ...,
         parameters: _abc.Iterable[Global___Parameter] | None = ...,
         name: _builtins.str | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_name", b"_name", "name", b"name"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_name", b"_name", "domain", b"domain", "getter_name", b"getter_name", "name", b"name", "parameters", b"parameters", "run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_name", b"_name", "domain", b"domain", "getter_name", b"getter_name", "name", b"name", "object_id", b"object_id", "parameters", b"parameters", "run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__name: _TypeAlias = _typing.Literal["name"]  # noqa: Y015
     _WhichOneofArgType__name: _TypeAlias = _typing.Literal["_name", b"_name"]  # noqa: Y015
@@ -535,19 +541,15 @@ class InterruptEvent(_message.Message):
     OBSERVED_VALUE_FIELD_NUMBER: _builtins.int
     interrupt_id: _builtins.str
     event_id: _builtins.str
-    @_builtins.property
-    def observed_value(self) -> _struct_pb2.Value:
-        """maybe following fields optional?"""
-
+    observed_value: _builtins.str
+    """maybe following fields optional?"""
     def __init__(
         self,
         *,
         interrupt_id: _builtins.str = ...,
         event_id: _builtins.str = ...,
-        observed_value: _struct_pb2.Value | None = ...,
+        observed_value: _builtins.str = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["observed_value", b"observed_value"]  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["event_id", b"event_id", "interrupt_id", b"interrupt_id", "observed_value", b"observed_value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -619,3 +621,41 @@ class CancelInterruptResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CancelInterruptResponse: _TypeAlias = CancelInterruptResponse  # noqa: Y015
+
+@_typing.final
+class FetchRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    FINGERPRINT_FIELD_NUMBER: _builtins.int
+    REQUIRES_COLLECT_FIELD_NUMBER: _builtins.int
+    fingerprint: _builtins.str
+    requires_collect: _builtins.bool
+    def __init__(
+        self,
+        *,
+        fingerprint: _builtins.str = ...,
+        requires_collect: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["fingerprint", b"fingerprint", "requires_collect", b"requires_collect"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___FetchRequest: _TypeAlias = FetchRequest  # noqa: Y015
+
+@_typing.final
+class FetchResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    FETCHED_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def fetched(self) -> Global___KeyValue: ...
+    def __init__(
+        self,
+        *,
+        fetched: Global___KeyValue | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["fetched", b"fetched"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["fetched", b"fetched"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___FetchResponse: _TypeAlias = FetchResponse  # noqa: Y015

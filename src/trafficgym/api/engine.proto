@@ -6,9 +6,8 @@ package sumo.engine.v1;
 
 message KeyValue {
     string key = 1;
-    reserved 2;
-    reserved 3;
-    google.protobuf.Value value = 4;
+    bool has_value = 2;
+    string value = 3;
 }
 
 message TelemetryFrame {
@@ -27,7 +26,8 @@ message TlsSetPhase {
 message GenericSetter {
   string domain = 1;
   string setter_name = 2;
-  repeated Parameter parameters = 3;
+  string object_id = 3;
+  repeated Parameter parameters = 4;
 }
 
 message Action {
@@ -106,8 +106,9 @@ message SubscribeRequest {
   string run_id = 1;
   string domain = 2;
   string getter_name = 3;
-  repeated Parameter parameters = 4;
-  optional string name = 5;
+  string object_id = 4;
+  repeated Parameter parameters = 5;
+  optional string name = 6;
 }
 
 message SubscribeResponse {
@@ -151,7 +152,7 @@ message InterruptEvent {
   string interrupt_id = 1;
   string event_id = 2;
   // maybe following fields optional?
-  google.protobuf.Value observed_value = 3;
+  string observed_value = 3;
 }
 
 message AcknowledgeInterruptRequest {
@@ -171,6 +172,15 @@ message CancelInterruptResponse {
   string interrupt_id = 1;
 }
 
+message FetchRequest {
+  string fingerprint = 1;
+  bool requires_collect = 2;
+}
+
+message FetchResponse {
+  KeyValue fetched = 1;
+}
+
 service EngineService {
   rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
   rpc Run(RunRequest) returns (RunResponse);
@@ -183,5 +193,6 @@ service EngineService {
   rpc RegisterInterrupt(RegisterInterruptRequest) returns (stream InterruptEvent);
   rpc AcknowledgeInterrupt(AcknowledgeInterruptRequest) returns (ApplyActionsResponse);
   rpc CancelInterrupt(CancelInterruptRequest) returns (CancelInterruptResponse);
+  rpc FetchSubscription(FetchRequest) returns (FetchResponse);
 }
 

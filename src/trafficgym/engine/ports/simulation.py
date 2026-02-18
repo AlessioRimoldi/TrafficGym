@@ -70,12 +70,16 @@ class SimulationPort(ABC):
     telemetry after the step"""
 
     @abstractmethod
-    def query(self, domain: str, getter_name: str, args: ValDict) -> Value: ...
+    def query(
+        self, domain: str, getter_name: str, object_id: str, args: ValDict
+    ) -> str: ...
 
     """query simulation state"""
 
     @abstractmethod
-    def apply(self, domain: str, setter_name: str, args: ValDict) -> None: ...
+    def apply(
+        self, domain: str, setter_name: str, onject_id: str, args: ValDict
+    ) -> None: ...
 
     """set simulation state"""
 
