@@ -345,14 +345,15 @@ Global___CloseRunResponse: _TypeAlias = CloseRunResponse  # noqa: Y015
 class ApplyActionsResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
-    RUN_ID_FIELD_NUMBER: _builtins.int
-    run_id: _builtins.str
+    ERRORS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def errors(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
     def __init__(
         self,
         *,
-        run_id: _builtins.str = ...,
+        errors: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["errors", b"errors"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ApplyActionsResponse: _TypeAlias = ApplyActionsResponse  # noqa: Y015

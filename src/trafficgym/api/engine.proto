@@ -90,7 +90,7 @@ message CloseRunResponse {
 }
 
 message ApplyActionsResponse {
-  string run_id = 1;
+  repeated string errors = 1;
 }
 
 message StreamRequest {

@@ -23,12 +23,17 @@ class InterruptEvent:
 
 @dataclass
 class Interrupt:
-    trigger_metric_name: str
+    trigger_metric_fingerprint: str
     trigger_metric_value: Value
     trigger_metric_op: engine_pb2.Operation.ValueType
     interrupt_requests: asyncio.Queue[InterruptEvent | None]
     active_interrupt_event: InterruptEvent | None = None
     interrupt_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+class InvalidGetterError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
 class SimulationPort(ABC):

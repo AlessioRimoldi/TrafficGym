@@ -45,6 +45,7 @@ from trafficgym.engine.ports.simulation import (
     Interrupt,
     InterruptEvent as SimulationInterruptEvent,
     RunConfig,
+    InvalidGetterError,
 )
 
 from trafficgym.engine.ports.adapter_factory import AdapterFactory
@@ -61,17 +62,6 @@ from functools import partial
 import logging
 
 import libsumo  # type: ignore
-
-
-class InvalidGetterError(Exception):
-    def __init__(self, message_or_exception: str | Exception):
-        if isinstance(message_or_exception, Exception):
-            self.original = message_or_exception
-            message = str(message_or_exception)
-        else:
-            message = message_or_exception
-
-        super().__init__(message)
 
 
 def raise_async_except(
@@ -103,18 +93,9 @@ class Subscription:
         return self.__name or self.fingerprint()
 
     def fingerprint(self) -> str:
-        return f"{str(self.domain)}.{self.getter_name}_{self.parameters}"
+        return f"{str(self.domain)}.{self.object_id}.{self.getter_name}_{self.parameters}"
 
     def collect(self, simulation: SimulationPort) -> str:
-        if self.getter_name.startswith("_"):
-            raise InvalidGetterError(
-                "Dunder names are blocked from being collected."
-            )
-        if not self.getter_name.startswith("get"):
-            raise InvalidGetterError(
-                "Collection only possible for functions beginning with 'get'."
-            )
-
         string_params: dict[str, str] = {}
 
         for k, v in self.parameters.items():
@@ -153,6 +134,18 @@ class Subscription:
         return collected
 
 
+class SubscriptionInvalidGetterError(Exception):
+    pass
+
+
+class SubscriptionNameCollisionError(Exception):
+    pass
+
+
+class SubscriptionFingerprintCollisionError(Exception):
+    pass
+
+
 class SubscriptionManager:
     subscriptions: dict[str, Subscription]
     metrics: dict[str, list[str | None]]
@@ -173,7 +166,6 @@ class SubscriptionManager:
         self._frame_builder = frame_builder
 
     async def collect(self) -> list[tuple[Subscription, Exception]]:
-        # self.newMetrics: dict[str, Value | None] = {}
         self.newMetrics: dict[str, str | None] = {}
         failed_collects: list[tuple[Subscription, Exception]] = []
         for subscription in self.subscriptions.values():
@@ -182,8 +174,6 @@ class SubscriptionManager:
             except InvalidGetterError as e:
                 failed_collects.append((subscription, e))
                 collected = None
-            except Exception as e:
-                raise e
 
             self.newMetrics[subscription.name] = collected
 
@@ -197,7 +187,7 @@ class SubscriptionManager:
         q = self.subscription_queues[self.simulation.run_id]
         frame = self._frame_builder(
             [
-                KeyValue(key=k, has_value=v is None, value=v or "")
+                KeyValue(key=k, has_value=v is not None, value=v or "")
                 for k, v in self.newMetrics.items()
             ]
         )
@@ -212,7 +202,6 @@ class SubscriptionManager:
 
     def subscribe(
         self,
-        # domain: Domain,
         domain: str,
         getter_name: str,
         object_id: str,
@@ -220,16 +209,33 @@ class SubscriptionManager:
         name: str | None = None,
     ) -> str:
         parameters = parameters or {}
+
+        if getter_name.startswith("_"):
+            raise SubscriptionInvalidGetterError(
+                "Getter names starting with '_' are blocked from being collected.",
+            )
+
+        if not getter_name.startswith("get"):
+            raise SubscriptionInvalidGetterError(
+                "Collection only possible for functions beginning with 'get'.",
+            )
+
+        if name is not None and name in map(
+            lambda x: x.name, self.subscriptions.values()
+        ):
+            raise SubscriptionNameCollisionError(
+                f"Subscription with name {name} already exists.",
+            )
+
         newSub = Subscription(domain, getter_name, object_id, parameters, name)
         if newSub.fingerprint() in self.subscriptions:
-            logging.warning(
+            raise SubscriptionFingerprintCollisionError(
                 f"Received a request to subscribe to {domain}.{getter_name}"
                 f"{parameters}. "
-                f"\nThis failed because a subscription is already registered "
+                f"This failed because a subscription is already registered "
                 f"with the same domain, getter_name and object_id. The "
                 f"corresponding fingerprint is {newSub.fingerprint()}."
             )
-            raise Exception("Subscription already exists")
 
         self.subscriptions[newSub.fingerprint()] = newSub
         return newSub.fingerprint()
@@ -411,7 +417,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     ) -> ApplyActionsResponse:
         # breakpoint()
         logging.debug(f"ApplyAction: {request}")
-        application_results: list[KeyValue] = []
+        application_errors: list[KeyValue] = []
+        application_info: list[KeyValue] = []
         run_id = request.run_id
         if run_id not in self.runs:
             logging.warning(f"Could not find run {run_id}.")
@@ -427,10 +434,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         for a in request.actions:
             p: str | None = a.WhichOneof("payload")
             if p == "setter":
-                additional_parameters: dict[str, ExtractedValueType] = {
-                    param.name: extract_value(param.value)
-                    for param in a.setter.parameters
-                }
                 try:
                     run.apply(
                         a.setter.domain,
@@ -441,24 +444,25 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                             for parameter in a.setter.parameters
                         },
                     )
-                except (AttributeError, TypeError) as e:
+                except (AttributeError, TypeError, libsumo.TraCIException) as e:
                     logging.warning(
                         f"Received a malformed setter request: {a.setter.domain}."
                         f"{a.setter.parameters})\n{e}"
                     )
-                    application_results.append(
+                    application_errors.append(
                         KeyValue(
                             key="Error",
                             has_value=True,
                             value=f"Setter: {str(e)}",
                         )
                     )
-                    await context.abort(
-                        grpc.StatusCode.INVALID_ARGUMENT,
-                        "Setter not found or request malformed.",
-                    )
+                    # if we abort here, then next actions in bundle won't be applied
+                    # await context.abort(
+                    #     grpc.StatusCode.INVALID_ARGUMENT,
+                    #     "Setter not found or request malformed.",
+                    # )
 
-                application_results.append(
+                application_info.append(
                     KeyValue(
                         key="Info",
                         has_value=True,
@@ -467,9 +471,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     )
                 )
 
-        frame = self._build_frame(run_id=run_id, metrics=application_results)
-        await self.telemetry_queues[run_id].put(frame)
-        return ApplyActionsResponse(run_id=run_id)
+        if len(application_errors) + len(application_info) > 0:
+            frame = self._build_frame(
+                run_id=run_id, metrics=application_info + application_errors
+            )
+            await self.telemetry_queues[run_id].put(frame)
+        return ApplyActionsResponse(
+            errors=[kv.value for kv in application_errors]
+        )
 
     async def StreamTelemetry(
         self, request: StreamRequest, context: grpc.ServicerContext
@@ -478,7 +487,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run_id = request.run_id
         if run_id not in self.telemetry_queues:
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
-            return
+
         q = self.telemetry_queues[run_id]
         while True:
             frame = await q.get()
@@ -493,7 +502,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run_id = request.run_id
         if run_id not in self.subscription_queues:
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
-            return
 
         q = self.subscription_queues[run_id]
         while True:
@@ -508,35 +516,30 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         context: grpc.ServicerContext,
     ) -> SubscribeResponse:
         if self._subscription_manager is None:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.ABORTED, "Subscription Manager not initialised."
             )
-            return
-        logging.debug(f"Subscribe: {request}")
-        additional_parameters = {p.name: p.value for p in request.parameters}
 
-        if request.name in map(
-            lambda x: x.name, self._subscription_manager.subscriptions.values()
-        ):
-            logging.warning(
-                f"Duplicate subscription name "
-                f"{request.name}. Rejected request."
+        try:
+            fingerprint = self._subscription_manager.subscribe(
+                request.domain,
+                request.getter_name,
+                request.object_id,
+                {
+                    parameter.name: parameter.value
+                    for parameter in request.parameters
+                },
+                request.name,
             )
-            await context.abort(
-                grpc.StatusCode.ALREADY_EXISTS,
-                f"Subscription with name {request.name} already exists.",
-            )
+            logging.debug(f"Subscribe: {request}")
 
-        fingerprint = self._subscription_manager.subscribe(
-            request.domain,
-            request.getter_name,
-            request.object_id,
-            {
-                parameter.name: parameter.value
-                for parameter in request.parameters
-            },
-            request.name,
-        )
+        except SubscriptionInvalidGetterError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+        except (
+            SubscriptionNameCollisionError,
+            SubscriptionFingerprintCollisionError,
+        ) as e:
+            await context.abort(grpc.StatusCode.ALREADY_EXISTS, str(e))
 
         return SubscribeResponse(fingerprint=fingerprint)
 
@@ -569,7 +572,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         )
 
         new_interrupt = Interrupt(
-            trigger_metric_name=request.trigger_metric.name,
+            trigger_metric_fingerprint=request.trigger_metric.name,
             trigger_metric_value=request.trigger_metric.value,
             trigger_metric_op=request.trigger_metric.op,
             interrupt_requests=interrupt_requests,
@@ -577,7 +580,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         run.interrupts[new_interrupt.interrupt_id] = new_interrupt
         logging.debug(
-            f"Registered new Interrupt {new_interrupt.trigger_metric_name}_{new_interrupt.trigger_metric_value}"
+            f"Registered new Interrupt {new_interrupt.trigger_metric_fingerprint}_{new_interrupt.trigger_metric_value}"
         )
 
         while True:
@@ -590,7 +593,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             yield EngineInterruptEvent(
                 interrupt_id=new_interrupt.interrupt_id,
                 event_id=frame.event_id,
-                observed_value=frame.observed_value,
+                observed_value=str(extract_value(frame.observed_value)),
             )
             logging.debug("Issued Interrupt Event")
 
@@ -648,7 +651,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     new_value = request.new_interrupt_conditions.value
 
                     if new_name != "":
-                        acknowledged_interrupt.trigger_metric_name = new_name
+                        acknowledged_interrupt.trigger_metric_fingerprint = (
+                            new_name
+                        )
                         logging.debug(
                             f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
                             f"trigger name to {new_name}."
@@ -695,7 +700,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         if removed_interrupt:
             await removed_interrupt.interrupt_requests.put(None)
             logging.debug(
-                f"Cancelled interrupt {removed_interrupt.trigger_metric_name} "
+                f"Cancelled interrupt {removed_interrupt.trigger_metric_fingerprint} "
                 f"triggers at {removed_interrupt.trigger_metric_value}"
             )
             removed_interrupt.interrupt_requests.task_done()
@@ -717,7 +722,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             )
 
         if request.requires_collect:
-            await self._subscription_manager.collect()
+            try:
+                await self._subscription_manager.collect()
+            except Exception as e:
+                await context.abort(grpc.StatusCode.ABORTED, str(e))
 
         collected = self._subscription_manager.lookup_recent_collection(
             request.fingerprint
@@ -770,14 +778,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
                         recent_collection_str = (
                             self._subscription_manager.lookup_recent_collection(
-                                fingerprint=i.trigger_metric_name
+                                fingerprint=i.trigger_metric_fingerprint
                             )
                         )
 
                         if not recent_collection_str:
                             message = (
                                 "Interrupt trigger check collection "
-                                f"for {i.trigger_metric_name} failed."
+                                f"for {i.trigger_metric_fingerprint} failed."
                             )
                             logging.warning(message)
                             asyncio.create_task(
@@ -791,7 +799,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
                         # if collection_type != trigger_type:
                         #     message = (
-                        #         f"Interrupt trigger {i.trigger_metric_name} "
+                        #         f"Interrupt trigger {i.trigger_metric_fingerprint} "
                         #         f"Value type ({trigger_type}) does not "
                         #         f"match collected ({collection_type})"
                         #     )
@@ -874,7 +882,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                             # need to wait for interrupts to be processed before continuing
                             try:
                                 logging.debug(
-                                    f"Awiting Interrupt processing! {i.trigger_metric_name} val {i.trigger_metric_value}"
+                                    f"Awiting Interrupt processing! {i.trigger_metric_fingerprint} val {i.trigger_metric_value}"
                                 )
                                 await asyncio.wait_for(
                                     i.interrupt_requests.join(), 1

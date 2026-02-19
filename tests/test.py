@@ -26,8 +26,15 @@ from trafficgym.api.engine_pb2 import (
     GenericSetter,
     Parameter,
     SubscribeRequest,
+    UnsubscribeRequest,
     FetchRequest,
-    FetchResponse,
+    StreamRequest,
+    RegisterInterruptRequest,
+    MetricNameAndValue,
+    Operation,
+    InterruptEvent,
+    AcknowledgeInterruptRequest,
+    CancelInterruptRequest,
 )
 from grpc import ServicerContext, StatusCode
 from typing import (
@@ -208,9 +215,13 @@ async def test_run_after_create(
     RUN_STEP = 10
     STEP_LENGTH_MS = 1000
 
-    response = await create_run_factory({"step_length_ms": STEP_LENGTH_MS})
+    create_factory_response = await create_run_factory(
+        {"step_length_ms": STEP_LENGTH_MS}
+    )
 
-    run_request = RunRequest(run_id=response.run_id, time=RUN_TIME_S)
+    run_request = RunRequest(
+        run_id=create_factory_response.run_id, time=RUN_TIME_S
+    )
 
     first_step_response = await service.Run(
         request=run_request, context=fake_context
@@ -219,7 +230,9 @@ async def test_run_after_create(
     assert first_step_response.new_time == RUN_TIME_S
     assert first_step_response.new_step == RUN_TIME_S * 1000 // STEP_LENGTH_MS
 
-    run_request = RunRequest(run_id=response.run_id, steps=RUN_STEP)
+    run_request = RunRequest(
+        run_id=create_factory_response.run_id, steps=RUN_STEP
+    )
 
     second_step_response = await service.Run(
         request=run_request, context=fake_context
@@ -400,6 +413,24 @@ async def test_close_run_during_exec_triggers_warning(
     ]
 
 
+@pytest.mark.asyncio
+async def test_close_run_twice(
+    caplog: pytest.LogCaptureFixture,
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Ensure that closing an already closed run triggers an abort"""
+    create_run_response = await create_run_factory(None)
+
+    close_run_request = CloseRunRequest(run_id=create_run_response.run_id)
+
+    await service.CloseRun(close_run_request, fake_context)
+
+    with pytest.raises(GrpcAbort):
+        await service.CloseRun(close_run_request, fake_context)
+
+
 @dataclass
 class GenericSetterType:
     domain: str
@@ -420,42 +451,69 @@ def action_factory() -> ActionFactoryType:
     return _make_action
 
 
-ActionBundleFactoryType = Callable[[str, list[Action] | None], ActionBundle]
+ActionBundleFactoryType = Callable[
+    [str, list[Action] | None, list[GenericSetterType] | None], ActionBundle
+]
+
+DEFAULT_LIBSUMO_ACTIONS = [
+    GenericSetterType(
+        domain="trafficlight",
+        setter_name="setProgram",
+        object_id="TL0",
+        parameters=[
+            Parameter(name="programID", value=Value(string_value="10")),
+        ],
+    ),
+    GenericSetterType(
+        domain="trafficlight",
+        setter_name="setRedYellowGreenState",
+        object_id="TL0",
+        parameters=[
+            Parameter(name="state", value=Value(string_value="rGrG")),
+        ],
+    ),
+]
+
+DEFAULT_FAKE_ACTIONS = [
+    GenericSetterType(
+        domain="fake_domain",
+        setter_name="setDefaultNumber",
+        object_id="default",
+        parameters=[Parameter(name="value", value=Value(number_value=42))],
+    ),
+    GenericSetterType(
+        domain="fake_domain",
+        setter_name="setDefaultString",
+        object_id="default",
+        parameters=[
+            Parameter(name="value", value=Value(string_value="foobar"))
+        ],
+    ),
+]
 
 
 @pytest.fixture
 def action_bundle_factory(
     action_factory: ActionFactoryType,
 ) -> ActionBundleFactoryType:
-    def _make_action_bundle(
-        run_id: str, actions: list[Action] | None
-    ) -> ActionBundle:
-        if actions is None:
-            default_actions = [
-                GenericSetterType(
-                    domain="trafficlight",
-                    setter_name="setProgram",
-                    object_id="TL0",
-                    parameters=[
-                        Parameter(
-                            name="programID", value=Value(string_value="10")
-                        ),
-                    ],
-                ),
-                GenericSetterType(
-                    domain="trafficlight",
-                    setter_name="setRedYellowGreenState",
-                    object_id="TL0",
-                    parameters=[
-                        Parameter(
-                            name="state", value=Value(string_value="rGrG")
-                        ),
-                    ],
-                ),
-            ]
-            actions = [action_factory(gst) for gst in default_actions]
+    """Generate an Action Bundle for the given run_id.
 
-        action_bundle = ActionBundle(run_id=run_id, actions=actions)
+    Will add to the bundles the list of actions, and the list of
+    GenericSetterTypes, passed through action_factory, in that order."""
+
+    def _make_action_bundle(
+        run_id: str,
+        actions: list[Action] | None,
+        gsts: list[GenericSetterType] | None,
+    ) -> ActionBundle:
+        actions = actions or []
+        gst_actions = []
+        if gsts is not None and len(gsts) > 0:
+            gst_actions = [action_factory(gst) for gst in gsts]
+
+        action_bundle = ActionBundle(
+            run_id=run_id, actions=actions + gst_actions
+        )
 
         return action_bundle
 
@@ -495,18 +553,16 @@ async def test_apply_action_step_unimplemented(
     assert e.value.code == StatusCode.UNIMPLEMENTED
 
 
-FAKE_SERVICE_CONFIG = (
-    {
-        "kind": "fake",
-        "initial_state": {
-            FakeStateDictKey(
-                domain="fake_domain",
-                object_id="fake_object",
-                attribute="program",
-            ): Value(string_value="off")
-        },
-    }
-)
+FAKE_SERVICE_CONFIG = {
+    "kind": "fake",
+    "initial_state": {
+        FakeStateDictKey(
+            domain="fake_domain",
+            object_id="fake_object",
+            attribute="program",
+        ): Value(string_value="off")
+    },
+}
 
 
 @pytest.mark.parametrize(
@@ -520,7 +576,6 @@ FAKE_SERVICE_CONFIG = (
 @pytest.mark.asyncio
 async def test_apply_actions_requires_collect_true_false(
     action_bundle_factory: ActionBundleFactoryType,
-    action_factory: ActionFactoryType,
     service: EngineService,
     fake_context: ServicerContext,
     create_run_factory: CreateRunFactoryType,
@@ -545,7 +600,8 @@ async def test_apply_actions_requires_collect_true_false(
     )
 
     fetch_request = FetchRequest(
-        fingerprint=subscribe_response.fingerprint, requires_collect=requires_collect
+        fingerprint=subscribe_response.fingerprint,
+        requires_collect=requires_collect,
     )
 
     first_fetch_response = await service.FetchSubscription(
@@ -564,14 +620,13 @@ async def test_apply_actions_requires_collect_true_false(
 
     apply_actions_request = action_bundle_factory(
         create_run_response.run_id,
+        None,
         [
-            action_factory(
-                GenericSetterType(
-                    "fake_domain",
-                    "setProgram",
-                    "fake_object",
-                    [Parameter(name="value", value=Value(string_value="42"))],
-                )
+            GenericSetterType(
+                "fake_domain",
+                "setProgram",
+                "fake_object",
+                [Parameter(name="value", value=Value(string_value="42"))],
             )
         ],
     )
@@ -599,22 +654,749 @@ async def test_apply_actions_requires_collect_true_false(
     assert fourth_fetch_response.fetched.value == expected[3]
 
 
-# Fails correctly with fetch before subscription
+@pytest.mark.asyncio
+async def test_apply_actions_legal_illegal_negative(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    action_bundle_factory: ActionBundleFactoryType,
+    action_factory: ActionFactoryType,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """noNegativeNumber is a special property in the fake which simulates a property for which libsumo
+    might reject a certain input. For example, libsumo.setSpeed() might accept -1 to reset the speed control
+     but would reject other inputs. The fake will reject all negative numbers with a TraCIException.
 
+    This test ensures that rejects are correctly handled, by issuing a warning to the server console, and returning
+    evidence of the exception in the ApplyActions response."""
+    create_run_response = await create_run_factory(None)
+
+    subscription_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="test_domain",
+        getter_name="getNoNegativeNumber",
+        object_id="veh1",
+    )
+
+    subscribe_response = await service.Subscribe(
+        subscription_request, fake_context
+    )
+
+    legal_action_bundle = action_bundle_factory(
+        create_run_response.run_id,
+        None,
+        [
+            GenericSetterType(
+                "test_domain",
+                "setNoNegativeNumber",
+                "veh1",
+                [Parameter(name="value", value=Value(number_value=10))],
+            )
+        ],
+    )
+
+    legal_action_bundle_response = await service.ApplyActions(
+        legal_action_bundle, fake_context
+    )
+
+    illegal_action_bundle = action_bundle_factory(
+        create_run_response.run_id,
+        None,
+        [
+            GenericSetterType(
+                "test_domain",
+                "setNoNegativeNumber",
+                "veh1",
+                [Parameter(name="value", value=Value(number_value=-1))],
+            )
+        ],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        illegal_action_bundle_response = await service.ApplyActions(
+            illegal_action_bundle, fake_context
+        )
+
+    assert legal_action_bundle_response.errors == []
+    assert (
+        illegal_action_bundle_response.errors[0]
+        == "Setter: invalid setter argument for noNegativeNumber"
+    )
+
+    fetch_request = FetchRequest(
+        fingerprint=subscribe_response.fingerprint, requires_collect=True
+    )
+
+    fetch_response = await service.FetchSubscription(
+        fetch_request, fake_context
+    )
+
+    assert fetch_response.fetched.has_value
+    assert float(fetch_response.fetched.value) == 10
+
+
+@pytest.mark.asyncio
+async def test_apply_actions_empty(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    action_bundle_factory: ActionBundleFactoryType,
+) -> None:
+    create_run_response = await create_run_factory(None)
+
+    empty_actions_request = action_bundle_factory(
+        create_run_response.run_id, [], None
+    )
+
+    empty_apply_actions_response = await service.ApplyActions(
+        empty_actions_request, fake_context
+    )
+
+    assert empty_apply_actions_response.errors == []
+
+
+@pytest.mark.parametrize("step_length_ms", [1000, 100, 10])
+@pytest.mark.parametrize("steps", [0, 10, 100])
+@pytest.mark.asyncio
+async def test_telemetry_stream_reports_steps(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    steps: int,
+    step_length_ms: int,
+) -> None:
+    """Ensures that telemetry stream reports every step and simulation time in order"""
+    create_run_response = await create_run_factory(
+        CreateRunParams(step_length_ms=step_length_ms)
+    )
+    run = service.runs[create_run_response.run_id]
+
+    stream_telemetry_request = StreamRequest(run_id=create_run_response.run_id)
+
+    telemetry_stream = service.StreamTelemetry(
+        stream_telemetry_request, fake_context
+    )
+
+    run_request = RunRequest(run_id=create_run_response.run_id, steps=steps)
+
+    run_response = await service.Run(run_request, fake_context)
+
+    close_run_request = CloseRunRequest(run_id=create_run_response.run_id)
+
+    await service.CloseRun(close_run_request, fake_context)
+
+    expected_step = 1
+    expected_time = run.seconds_per_step
+
+    async for frame in telemetry_stream:
+        assert frame.run_id == create_run_response.run_id
+        assert frame.step == expected_step
+        assert frame.sim_time_s - expected_time == pytest.approx(0)
+
+        expected_step += 1
+        expected_time += run.seconds_per_step
+
+    assert expected_step - 1 == run_response.new_step
+    assert expected_time == pytest.approx(
+        run_response.new_time + run.seconds_per_step
+    )
+
+
+@pytest.mark.asyncio
+async def test_subscription_stream(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    action_bundle_factory: ActionBundleFactoryType,
+) -> None:
+    """Ensure subscription stream transmits expected subscription values
+    in order, with the correct timestamps."""
+    create_run_response = await create_run_factory(None)
+
+    stream_request = StreamRequest(run_id=create_run_response.run_id)
+
+    subscription_stream = service.StreamSubscriptions(
+        stream_request, fake_context
+    )
+
+    run_ten_steps_request = RunRequest(
+        run_id=create_run_response.run_id, steps=10
+    )
+
+    first_run_response = await service.Run(run_ten_steps_request, fake_context)
+
+    subscription_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getDefaultNumber",
+        object_id="default",
+    )
+
+    await service.Subscribe(subscription_request, fake_context)
+
+    second_run_response = await service.Run(run_ten_steps_request, fake_context)
+
+    first_apply_action_request = action_bundle_factory(
+        create_run_response.run_id, None, DEFAULT_FAKE_ACTIONS
+    )
+
+    await service.ApplyActions(first_apply_action_request, fake_context)
+
+    third_run_response = await service.Run(run_ten_steps_request, fake_context)
+
+    second_apply_action_request = action_bundle_factory(
+        create_run_response.run_id,
+        None,
+        [
+            GenericSetterType(
+                domain="fake_domain",
+                setter_name="setDefaultNumber",
+                object_id="default",
+                parameters=[
+                    Parameter(name="value", value=Value(number_value=0))
+                ],
+            )
+        ],
+    )
+
+    await service.ApplyActions(second_apply_action_request, fake_context)
+
+    fourth_run_response = await service.Run(run_ten_steps_request, fake_context)
+
+    close_run_request = CloseRunRequest(run_id=create_run_response.run_id)
+
+    await service.CloseRun(close_run_request, fake_context)
+
+    expected_step = 1
+
+    # The subscription is not initiated, so no metrics are expected in the subscription stream
+    for _ in range(first_run_response.new_step):
+        frame = await anext(subscription_stream)
+
+        assert frame.step == expected_step
+        assert len(frame.metrics) == 0
+
+        expected_step += 1
+
+    # Here, the subscription should be established, but apply action has not yet occured,
+    # and no value exists in the state, therefore, the subscription should have collected no value
+    for _ in range(second_run_response.new_step - first_run_response.new_step):
+        frame = await anext(subscription_stream)
+
+        assert frame.step == expected_step
+        assert len(frame.metrics) == 1
+        assert not frame.metrics[0].has_value
+
+        expected_step += 1
+
+    # By this point, ApplyActions should be applied with the default fake actions
+    # The subscription should have collected this with at this time
+    for _ in range(third_run_response.new_step - second_run_response.new_step):
+        frame = await anext(subscription_stream)
+
+        assert frame.step == expected_step
+        assert len(frame.metrics) == 1
+        assert frame.metrics[0].has_value
+        assert float(frame.metrics[0].value) == pytest.approx(42)
+
+        expected_step += 1
+
+    # By this point, the second ApplyActions should have been applied and the
+    # subscription collected value updated accordingly
+    for _ in range(fourth_run_response.new_step - third_run_response.new_step):
+        frame = await anext(subscription_stream)
+
+        assert frame.step == expected_step
+        assert len(frame.metrics) == 1
+        assert frame.metrics[0].has_value
+        assert float(frame.metrics[0].value) == pytest.approx(0)
+
+        expected_step += 1
+
+    # The run should have been closed by now. This should have sent a poison pill
+    # to the stream, and closed it. Calling the iterator should therefore raise StopAsyncIteration
+    with pytest.raises(StopAsyncIteration):
+        await anext(subscription_stream)
+
+
+@pytest.mark.asyncio
+async def test_subscription_stream_fetch_subscription_with_requires_collect(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    action_bundle_factory: ActionBundleFactoryType,
+) -> None:
+    """Ensure that calling fetch_subscription with requires_collect updates the internal state
+    via a collection, but that this collection is not published to subscribers until the next run step.
+    """
+    create_run_response = await create_run_factory(None)
+
+    stream_request = StreamRequest(run_id=create_run_response.run_id)
+
+    subscription_stream = service.StreamSubscriptions(
+        stream_request, fake_context
+    )
+
+    subscription_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getDefaultNumber",
+        object_id="default",
+    )
+
+    subscription_response = await service.Subscribe(
+        subscription_request, fake_context
+    )
+
+    run_ten_steps_request = RunRequest(
+        run_id=create_run_response.run_id, steps=10
+    )
+
+    first_run_response = await service.Run(run_ten_steps_request, fake_context)
+
+    first_apply_action_request = action_bundle_factory(
+        create_run_response.run_id, None, DEFAULT_FAKE_ACTIONS
+    )
+
+    await service.ApplyActions(first_apply_action_request, fake_context)
+
+    fetch_subscription_request = FetchRequest(
+        fingerprint=subscription_response.fingerprint, requires_collect=True
+    )
+
+    fetch_subscription_response = await service.FetchSubscription(
+        fetch_subscription_request, fake_context
+    )
+
+    expected_step = 1
+
+    for _ in range(first_run_response.new_step):
+        frame = await anext(subscription_stream)
+
+        assert frame.step == expected_step
+        assert len(frame.metrics) == 1
+        assert not frame.metrics[0].has_value
+
+        expected_step += 1
+
+    # This pattern is required becase of asyncio.shield() in the wait_for function:
+    # Without asyncio.shield, a timeout cancels the anext(), which in turn cancels the stream
+    # With asyncio.shield, anext() is not cancelled, but stays pending, until frames are added
+    # at the next run, causing one frame to be consumed silently.
+    # This pattern means that when the wait_for times out, we can still retrieve the awaited
+    # frame by awaiting the future.
+    await_next = asyncio.ensure_future(anext(subscription_stream))
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(asyncio.shield(await_next), timeout=0.01)
+        # Ensure reasonably likely that the queue is empty. Need to
+        # shield to prevent cancellation of the stream on timeout
+
+    second_run_response = await service.Run(run_ten_steps_request, fake_context)
+
+    close_request = CloseRunRequest(run_id=create_run_response.run_id)
+
+    await service.CloseRun(close_request, fake_context)
+
+    frame = await await_next
+    for _ in range(
+        second_run_response.new_step - first_run_response.new_step - 1
+    ):
+        assert frame.step == expected_step
+        assert len(frame.metrics) == 1
+        assert frame.metrics[0].has_value
+        assert fetch_subscription_response.fetched.has_value
+        assert (
+            frame.metrics[0].value == fetch_subscription_response.fetched.value
+        )
+        assert float(frame.metrics[0].value) == pytest.approx(
+            float(fetch_subscription_response.fetched.value)
+        )
+
+        expected_step += 1
+        frame = await anext(subscription_stream)
+
+    with pytest.raises(StopAsyncIteration):
+        await anext(subscription_stream)
+
+
+@pytest.mark.asyncio
+async def test_stream_invalid_run_id(
+    service: EngineService, fake_context: ServicerContext
+) -> None:
+    """Ensure that both streams raise a grpc error when the run_id is invalid"""
+    stream_request = StreamRequest(run_id="bahahahhahaha")
+    telemetry_stream = service.StreamTelemetry(stream_request, fake_context)
+    subscription_stream = service.StreamSubscriptions(
+        stream_request, fake_context
+    )
+
+    with pytest.raises(GrpcAbort):
+        async for frame in telemetry_stream:
+            pass
+
+    with pytest.raises(GrpcAbort):
+        async for frame in subscription_stream:
+            pass
+
+
+# The following contract is challenging to implement so is deferred for now.
+@pytest.mark.xfail
+@pytest.mark.asyncio
+async def test_ensure_reject_actions_bundles_with_at_least_one_malformed_action(
+    action_bundle_factory: ActionBundleFactoryType,
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Ensure that if an action is misformed, the entire bundle
+    is rejected, without partial application.
+    This requires either a 'dry run' or for already applied actions
+    to be rolled back to before the change."""
+    create_run_response = await create_run_factory(None)
+
+    subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getDefaultString",
+    )
+
+    default_string_subscription_response = await service.Subscribe(
+        subscribe_request, fake_context
+    )
+
+    valid_apply_actions_request = action_bundle_factory(
+        create_run_response.run_id, None, DEFAULT_FAKE_ACTIONS
+    )
+
+    valid_apply_actions_response = await service.ApplyActions(
+        valid_apply_actions_request, fake_context
+    )
+
+    fetch_default_number_request = FetchRequest(
+        fingerprint=default_string_subscription_response.fingerprint,
+        requires_collect=True,
+    )
+
+    first_fetch_response = await service.FetchSubscription(
+        fetch_default_number_request, fake_context
+    )
+
+    invalid_apply_actions_request = action_bundle_factory(
+        create_run_response.run_id,
+        None,
+        [
+            GenericSetterType(
+                "fake_domain",
+                "setDefaultString",
+                "default",
+                [Parameter(name="value", value=Value(string_value="baz"))],
+            ),
+            GenericSetterType(
+                "fake_domain",
+                "noNegativeNumber",
+                "default_object",
+                [Parameter(name="value", value=Value(number_value=-10))],
+            ),
+        ],
+    )
+
+    invalid_apply_actions_response = await service.ApplyActions(
+        invalid_apply_actions_request, fake_context
+    )
+
+    second_fetch_response = await service.FetchSubscription(
+        fetch_default_number_request, fake_context
+    )
+
+    assert len(valid_apply_actions_response.errors) == 0
+    assert first_fetch_response.fetched.has_value
+    assert first_fetch_response.fetched.value == "foobar"
+
+    assert len(invalid_apply_actions_response.errors) == 1
+    assert second_fetch_response.fetched.has_value
+    assert second_fetch_response.fetched.value == "foobar"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_rejects_private_name(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Ensure that subscriptions with private / dunder getters are rejected.
+    Ensure non-'get' functions are rejected."""
+    create_run_response = await create_run_factory(None)
+
+    private_subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="_youShallNotSubscribe",
+        object_id="default_object",
+    )
+
+    non_get_subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="setSpeed",
+        object_id="default_object",
+    )
+
+    with pytest.raises(
+        GrpcAbort,
+        match="Getter names starting with '_' are blocked from being collected.",
+    ):
+        await service.Subscribe(private_subscribe_request, fake_context)
+
+    with pytest.raises(
+        GrpcAbort,
+        match="Collection only possible for functions beginning with 'get'.",
+    ):
+        await service.Subscribe(non_get_subscribe_request, fake_context)
+
+
+@pytest.mark.xfail
+@pytest.mark.asyncio
+async def test_thorough_getter_valdation(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Currently, any name starting with 'get' is allowed even though it may not be a
+    proper getter. In the future, more thorough getter validation will be required.
+    """
+    create_run_response = await create_run_factory(None)
+
+    cheeky_user_subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getsetSpeed",
+        object_id="default_object",
+    )
+
+    with pytest.raises(GrpcAbort):
+        await service.Subscribe(cheeky_user_subscribe_request, fake_context)
+
+
+@pytest.mark.asyncio
+async def test_rejects_duplicate_subscription_fingerprint(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Ensures new subscriptions with identical fingerprints are rejected.
+    As fingerprints as pseudo-hashes of the subscription, this will block repeated
+    collections for the same arguments for an object."""
+    create_run_response = await create_run_factory(None)
+
+    subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getDefaultString",
+    )
+
+    default_string_subscription_response = await service.Subscribe(
+        subscribe_request, fake_context
+    )
+
+    assert default_string_subscription_response.fingerprint is not None
+    with pytest.raises(GrpcAbort, match="ALREADY_EXISTS.*fingerprint"):
+        await service.Subscribe(subscribe_request, fake_context)
+
+
+@pytest.mark.asyncio
+async def test_rejects_duplicate_subscription_name(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Ensures new subscriptions are rejected if their optional
+    name (user-friendly) matches an existing subscription name."""
+    create_run_response = await create_run_factory(None)
+
+    mysub_request_1 = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getDefaultString",
+        name="mysub",
+    )
+    mysub_request_2 = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getDefaultNumber",
+        name="mysub",
+    )
+
+    default_string_subscription_response = await service.Subscribe(
+        mysub_request_1, fake_context
+    )
+
+    assert default_string_subscription_response.fingerprint is not None
+    with pytest.raises(GrpcAbort, match="ALREADY_EXISTS.*name"):
+        await service.Subscribe(mysub_request_2, fake_context)
+
+
+@pytest.mark.parametrize("service", [FAKE_SERVICE_CONFIG], indirect=True)
+@pytest.mark.asyncio
+async def test_unsubscribe_unimplemented(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Ensure calling unsubscribe throws an error"""
+    create_run_response = await create_run_factory(None)
+
+    # subscribe_request = SubscribeRequest(run_id=create_run_response.run_id, domain="fake_domain", getter_name="getProgram", object_id="fake_object")
+
+    # subscribe_response = await service.Subscribe(subscribe_request, fake_context)
+
+    # fetch_request = FetchRequest(subscribe_response.fingerprint)
+
+    # fetch_response = await service.FetchSubscription(fetch_request, fake_context)
+
+    # assert fetch_response.fetched.has_value
+    # assert fetch_response.fetched.value == "off"
+
+    unsubscribe_request = UnsubscribeRequest(run_id=create_run_response.run_id)
+
+    with pytest.raises(GrpcAbort, match="UNIMPLEMENTED"):
+        await service.Unsubscribe(unsubscribe_request, fake_context)
+
+    # Should fetching non subscribed just return None or throw an error?
+    # with pytest.raises(GrpcAbort):
+    #     fetch_response = await service.FetchSubscription(fetch_request, fake_context)
+
+    # fetch_response = await service.FetchSubscription(fetch_request, fake_context)
+
+    # assert not fetch_response.fetched.has_value
+
+
+@pytest.mark.parametrize("service", [FAKE_SERVICE_CONFIG], indirect=True)
+@pytest.mark.asyncio
+async def test_register_interrupt_autocancel(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    action_bundle_factory: ActionBundleFactoryType,
+) -> None:
+    """Ensure interrupt is triggered on run after apply action which matches its
+    trigger condition. Ensure it applies actions on acknowledge. Ensure deregistration
+    when no new trigger condition provided."""
+    create_run_response = await create_run_factory(None)
+
+    subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getProgram",
+        object_id="fake_object",
+    )
+
+    subscribe_response = await service.Subscribe(
+        subscribe_request, fake_context
+    )
+
+    register_interrupt_request = RegisterInterruptRequest(
+        run_id=create_run_response.run_id,
+        trigger_metric=MetricNameAndValue(
+            name=subscribe_response.fingerprint,
+            value=Value(string_value="on"),
+            op=Operation.EQU,
+        ),
+    )
+
+    interrupt_event_stream = service.RegisterInterrupt(
+        register_interrupt_request, fake_context
+    )
+
+    run_ten_steps_request = RunRequest(
+        run_id=create_run_response.run_id, steps=10
+    )
+
+    await service.Run(run_ten_steps_request, fake_context)
+
+    apply_action_request = action_bundle_factory(
+        create_run_response.run_id,
+        None,
+        [
+            GenericSetterType(
+                "fake_domain",
+                "setProgram",
+                "fake_object",
+                [Parameter(name="value", value=Value(string_value="on"))],
+            )
+        ],
+    )
+
+    apply_action_response = await service.ApplyActions(
+        apply_action_request, fake_context
+    )
+
+    assert len(apply_action_response.errors) == 0
+
+    fetch_request = FetchRequest(
+        fingerprint=subscribe_response.fingerprint, requires_collect=True
+    )
+
+    first_fetch_response = await service.FetchSubscription(
+        fetch_request, fake_context
+    )
+
+    assert first_fetch_response.fetched.has_value
+    assert first_fetch_response.fetched.value == "on"
+
+    next_interrupt_event = asyncio.ensure_future(anext(interrupt_event_stream))
+
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(asyncio.shield(next_interrupt_event), 0.02)
+
+    run_task_during_interrupt = service.Run(run_ten_steps_request, fake_context)
+
+    async def handle_interrupt() -> None:
+        interrupt_event = await next_interrupt_event
+
+        interrupt_acknowledge_request = AcknowledgeInterruptRequest(
+            run_id=create_run_response.run_id,
+            interrupt_id=interrupt_event.interrupt_id,
+            event_id=interrupt_event.event_id,
+            actions=action_bundle_factory(
+                create_run_response.run_id,
+                None,
+                [
+                    GenericSetterType(
+                        "fake_domain",
+                        "setProgram",
+                        "fake_object",
+                        [
+                            Parameter(
+                                name="value", value=Value(string_value="off")
+                            )
+                        ],
+                    )
+                ],
+            ),
+        )
+
+        await service.AcknowledgeInterrupt(
+            interrupt_acknowledge_request, fake_context
+        )
+
+    await asyncio.gather(run_task_during_interrupt, handle_interrupt())
+
+    fetch_response = await service.FetchSubscription(
+        fetch_request, fake_context
+    )
+
+    assert fetch_response.fetched.has_value
+    assert fetch_response.fetched.value == "off"
+
+    with pytest.raises(StopAsyncIteration):
+        await anext(interrupt_event_stream)
+
+
+# #Fails correctly with fetch before subscription
 # @pytest.mark.asyncio
-# async def test_ensure_malformed_actions_are_rejected(
-#     action_bundle_factory: ActionBundleFactoryType,
-#     service: EngineService,
-#     fake_context: SupportsAbort,
-#     create_run_factory: CreateRunFactoryType,
-# ) -> None:
-#     """Ensure that if an action is misformed, the entire bundle
-#     is rejected, without partial application"""
-#     create_run_response = await create_run_factory(None)
-
-#     apply_actions_request = action_bundle_factory(
-#         create_run_response.run_id, None
-#     )
+# async def test_fetch_subscription_fails_before_subscription() -> None:
+#     pass
 
 
 ## ENSURE ALL FACTORIES CALL SUPER INIT
