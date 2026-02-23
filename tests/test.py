@@ -50,6 +50,7 @@ from typing import (
 )
 from typing_extensions import Never, NotRequired
 from dataclasses import dataclass, asdict
+from contextlib import suppress
 
 
 class SupportsAbort(Protocol):
@@ -1632,6 +1633,23 @@ async def test_register_interrupt_autocancel(
         await anext(interrupt_session.stream)
 
 
+
+def should_trigger(op: Operation.ValueType, i: int, trigger: int) -> bool:
+    if op == Operation.EQU:
+        return i == trigger
+    elif op == Operation.NEQ:
+        return i != trigger
+    elif op == Operation.GEQ:
+        return i >= trigger
+    elif op == Operation.LEQ:
+        return i <= trigger
+    elif op == Operation.GRT:
+        return i > trigger
+    elif op == Operation.LST:
+        return i < trigger
+    else:
+        raise ValueError(f"Unsupported operation: {op}")
+
 @pytest.mark.parametrize(
     "op",
     [
@@ -1804,42 +1822,22 @@ async def test_all_interrupt_triggers(
             )
         ).fetched
 
-        if op == Operation.EQU:
-            if i == INTERRUPT_TRIGGER:
-                assert fetched_interrupt_report_value.has_value
+
+        if should_trigger(op, i, INTERRUPT_TRIGGER):
+            assert fetched_interrupt_report_value.has_value
+            assert float(
+                fetched_interrupt_report_value.value
+            ) == pytest.approx(float(i))
+        else:
+            if fetched_interrupt_report_value.has_value:
                 assert float(
                     fetched_interrupt_report_value.value
-                ) == pytest.approx(float(i))
-        elif op == Operation.NEQ:
-            if i != INTERRUPT_TRIGGER:
-                assert fetched_interrupt_report_value.has_value
-                assert float(
-                    fetched_interrupt_report_value.value
-                ) == pytest.approx(float(i))
-        elif op == Operation.GEQ:
-            if i >= INTERRUPT_TRIGGER:
-                assert fetched_interrupt_report_value.has_value
-                assert float(
-                    fetched_interrupt_report_value.value
-                ) == pytest.approx(float(i))
-        elif op == Operation.LEQ:
-            if i <= INTERRUPT_TRIGGER:
-                assert fetched_interrupt_report_value.has_value
-                assert float(
-                    fetched_interrupt_report_value.value
-                ) == pytest.approx(float(i))
-        elif op == Operation.GRT:
-            if i > INTERRUPT_TRIGGER:
-                assert fetched_interrupt_report_value.has_value
-                assert float(
-                    fetched_interrupt_report_value.value
-                ) == pytest.approx(float(i))
-        elif op == Operation.LST:
-            if i < INTERRUPT_TRIGGER:
-                assert fetched_interrupt_report_value.has_value
-                assert float(
-                    fetched_interrupt_report_value.value
-                ) == pytest.approx(float(i))
+                ) != pytest.approx(float(i))
+
+        
+    handler_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await handler_task
 
 
 # #Fails correctly with fetch before subscription
