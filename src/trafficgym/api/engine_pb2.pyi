@@ -159,26 +159,45 @@ class Action(_message.Message):
 Global___Action: _TypeAlias = Action  # noqa: Y015
 
 @_typing.final
-class ActionBundle(_message.Message):
+class ApplyActionsRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     RUN_ID_FIELD_NUMBER: _builtins.int
+    ACTION_BUNDLE_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
+    @_builtins.property
+    def action_bundle(self) -> Global___ActionBundle: ...
+    def __init__(
+        self,
+        *,
+        run_id: _builtins.str = ...,
+        action_bundle: Global___ActionBundle | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["action_bundle", b"action_bundle"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["action_bundle", b"action_bundle", "run_id", b"run_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ApplyActionsRequest: _TypeAlias = ApplyActionsRequest  # noqa: Y015
+
+@_typing.final
+class ActionBundle(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
     STEP_FIELD_NUMBER: _builtins.int
     ACTIONS_FIELD_NUMBER: _builtins.int
-    run_id: _builtins.str
     step: _builtins.int
     @_builtins.property
     def actions(self) -> _containers.RepeatedCompositeFieldContainer[Global___Action]: ...
     def __init__(
         self,
         *,
-        run_id: _builtins.str = ...,
         step: _builtins.int | None = ...,
         actions: _abc.Iterable[Global___Action] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_step", b"_step", "step", b"step"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_step", b"_step", "actions", b"actions", "run_id", b"run_id", "step", b"step"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_step", b"_step", "actions", b"actions", "step", b"step"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__step: _TypeAlias = _typing.Literal["step"]  # noqa: Y015
     _WhichOneofArgType__step: _TypeAlias = _typing.Literal["_step", b"_step"]  # noqa: Y015
@@ -485,10 +504,10 @@ Global___UnsubscribeResponse: _TypeAlias = UnsubscribeResponse  # noqa: Y015
 class MetricNameAndValue(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
-    NAME_FIELD_NUMBER: _builtins.int
+    SUBSCRIPTION_FINGERPRINT_FIELD_NUMBER: _builtins.int
     VALUE_FIELD_NUMBER: _builtins.int
     OP_FIELD_NUMBER: _builtins.int
-    name: _builtins.str
+    subscription_fingerprint: _builtins.str
     """TODO coalesce with Parameter, which shares name and value"""
     op: Global___Operation.ValueType
     @_builtins.property
@@ -496,13 +515,13 @@ class MetricNameAndValue(_message.Message):
     def __init__(
         self,
         *,
-        name: _builtins.str = ...,
+        subscription_fingerprint: _builtins.str = ...,
         value: _struct_pb2.Value | None = ...,
         op: Global___Operation.ValueType = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "op", b"op", "value", b"value"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["op", b"op", "subscription_fingerprint", b"subscription_fingerprint", "value", b"value"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___MetricNameAndValue: _TypeAlias = MetricNameAndValue  # noqa: Y015
@@ -537,9 +556,11 @@ Global___RegisterInterruptRequest: _TypeAlias = RegisterInterruptRequest  # noqa
 class InterruptEvent(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    RUN_ID_FIELD_NUMBER: _builtins.int
     INTERRUPT_ID_FIELD_NUMBER: _builtins.int
     EVENT_ID_FIELD_NUMBER: _builtins.int
     OBSERVED_VALUE_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
     interrupt_id: _builtins.str
     event_id: _builtins.str
     observed_value: _builtins.str
@@ -547,11 +568,12 @@ class InterruptEvent(_message.Message):
     def __init__(
         self,
         *,
+        run_id: _builtins.str = ...,
         interrupt_id: _builtins.str = ...,
         event_id: _builtins.str = ...,
         observed_value: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["event_id", b"event_id", "interrupt_id", b"interrupt_id", "observed_value", b"observed_value"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["event_id", b"event_id", "interrupt_id", b"interrupt_id", "observed_value", b"observed_value", "run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___InterruptEvent: _TypeAlias = InterruptEvent  # noqa: Y015

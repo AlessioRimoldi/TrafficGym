@@ -19,7 +19,7 @@ from trafficgym.api.engine_pb2 import (
     RunResponse,
     CloseRunRequest,
     CloseRunResponse,
-    ActionBundle,
+    ApplyActionsRequest,
     ApplyActionsResponse,
     StreamRequest,
     TelemetryFrame,
@@ -34,6 +34,7 @@ from trafficgym.api.engine_pb2 import (
     CancelInterruptResponse,
     FetchRequest,
     FetchResponse,
+    MetricNameAndValue,
 )
 
 from google.protobuf.struct_pb2 import Value
@@ -55,7 +56,7 @@ from trafficgym.engine.adapters.factories import LibsumoAdapterFactory
 # from trafficgym.engine.adapters.fake_adapter import FakeAdapter
 
 # from libsumo import DOMAINS
-from typing import Any, Callable, AsyncIterator, Literal
+from typing import Any, Callable, AsyncIterator, Literal, NoReturn
 
 from functools import partial
 
@@ -79,26 +80,32 @@ class Subscription:
         getter_name: str,
         object_id: str,
         parameters: dict[str, Value],
-        name: str | None = None,
     ):
-        self.__name = name
-        self.domain = domain
-        self.getter_name = getter_name
-        self.object_id = object_id
-        self.parameters = parameters
+        self._domain = domain
+        self._getter_name = getter_name
+        self._object_id = object_id
+        self._parameters = parameters
+
+    # @property
+    # def name(self) -> str:
+    #     """Returns the name of the subscription if set, otherwise the fingerprint"""
+    #     # return self.__name or self.fingerprint()
+    #     return self.fingerprint()
+
+    # TODO HAVE PROPER HASH, FINGERPRINT UNRELIABLE BUT USER READABLE
 
     @property
-    def name(self) -> str:
-        """Returns the name of the subscription if set, otherwise the fingerprint"""
-        return self.__name or self.fingerprint()
-
     def fingerprint(self) -> str:
-        return f"{str(self.domain)}.{self.object_id}.{self.getter_name}_{self.parameters}"
+        param_str = ",".join(
+            f"{k}={extract_value(v)}"
+            for k, v in sorted(self._parameters.items())
+        )
+        return f"{str(self._domain)}.{self._object_id}.{self._getter_name}({param_str})"
 
     def collect(self, simulation: SimulationPort) -> str:
         string_params: dict[str, str] = {}
 
-        for k, v in self.parameters.items():
+        for k, v in self._parameters.items():
             kind = v.WhichOneof("kind")
 
             if kind == "string_value":
@@ -112,10 +119,10 @@ class Subscription:
 
         try:
             collected = simulation.query(
-                self.domain,
-                self.getter_name,
-                self.object_id,
-                self.parameters,
+                self._domain,
+                self._getter_name,
+                self._object_id,
+                self._parameters,
             )
             # collected_typed: Value
             # try:
@@ -165,6 +172,9 @@ class SubscriptionManager:
         self.telemetryStep = 0
         self._frame_builder = frame_builder
 
+    def check_subscription(self, fingerprint: str) -> bool:
+        return fingerprint in self.subscriptions
+
     async def collect(self) -> list[tuple[Subscription, Exception]]:
         self.newMetrics: dict[str, str | None] = {}
         failed_collects: list[tuple[Subscription, Exception]] = []
@@ -175,11 +185,11 @@ class SubscriptionManager:
                 failed_collects.append((subscription, e))
                 collected = None
 
-            self.newMetrics[subscription.name] = collected
+            self.newMetrics[subscription.fingerprint] = collected
 
-            history = self.metrics.get(subscription.fingerprint()) or []
+            history = self.metrics.get(subscription.fingerprint) or []
             history.append(collected)
-            self.metrics[subscription.fingerprint()] = history
+            self.metrics[subscription.fingerprint] = history
 
         return failed_collects
 
@@ -206,7 +216,6 @@ class SubscriptionManager:
         getter_name: str,
         object_id: str,
         parameters: dict[str, Value] | None = None,
-        name: str | None = None,
     ) -> str:
         parameters = parameters or {}
 
@@ -220,25 +229,18 @@ class SubscriptionManager:
                 "Collection only possible for functions beginning with 'get'.",
             )
 
-        if name is not None and name in map(
-            lambda x: x.name, self.subscriptions.values()
-        ):
-            raise SubscriptionNameCollisionError(
-                f"Subscription with name {name} already exists.",
-            )
-
-        newSub = Subscription(domain, getter_name, object_id, parameters, name)
-        if newSub.fingerprint() in self.subscriptions:
+        newSub = Subscription(domain, getter_name, object_id, parameters)
+        if newSub.fingerprint in self.subscriptions:
             raise SubscriptionFingerprintCollisionError(
                 f"Received a request to subscribe to {domain}.{getter_name}"
                 f"{parameters}. "
                 f"This failed because a subscription is already registered "
                 f"with the same domain, getter_name and object_id. The "
-                f"corresponding fingerprint is {newSub.fingerprint()}."
+                f"corresponding fingerprint is {newSub.fingerprint}."
             )
 
-        self.subscriptions[newSub.fingerprint()] = newSub
-        return newSub.fingerprint()
+        self.subscriptions[newSub.fingerprint] = newSub
+        return newSub.fingerprint
 
     def unsubscribe(self, fingerprint: str) -> None:
         if fingerprint not in self.subscriptions:
@@ -413,9 +415,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return CloseRunResponse(run_id=run_id)
 
     async def ApplyActions(
-        self, request: ActionBundle, context: grpc.ServicerContext
+        self, request: ApplyActionsRequest, context: grpc.ServicerContext
     ) -> ApplyActionsResponse:
-        # breakpoint()
         logging.debug(f"ApplyAction: {request}")
         application_errors: list[KeyValue] = []
         application_info: list[KeyValue] = []
@@ -424,14 +425,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             logging.warning(f"Could not find run {run_id}.")
             context.abort(grpc.StatusCode.NOT_FOUND, "run_id not found")
 
-        if request.HasField("step"):
+        if request.action_bundle.HasField("step"):
             context.abort(
                 grpc.StatusCode.UNIMPLEMENTED,
                 "steps not supported in ApplyActions.",
             )
 
         run = self.runs[run_id]
-        for a in request.actions:
+        for a in request.action_bundle.actions:
             p: str | None = a.WhichOneof("payload")
             if p == "setter":
                 try:
@@ -529,7 +530,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     parameter.name: parameter.value
                     for parameter in request.parameters
                 },
-                request.name,
             )
             logging.debug(f"Subscribe: {request}")
 
@@ -560,11 +560,27 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         """CAUTION: Comparaison value must use the same subfield as the
         collected value, or the interrupt will never trigger
         TODO Improve this!"""
+
+        if not self._subscription_manager:
+            yield context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                "Subscription manager not initialised.",
+            )
+
         run_id = request.run_id
         if run_id not in self.runs:
             yield context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, f"run ${run_id} not found."
             )
+
+        if not self._subscription_manager.check_subscription(
+            request.trigger_metric.subscription_fingerprint
+        ):
+            yield context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                "The interrupt metric must first be subscribed to.",
+            )
+
         run = self.runs[run_id]
 
         interrupt_requests: asyncio.Queue[SimulationInterruptEvent | None] = (
@@ -572,7 +588,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         )
 
         new_interrupt = Interrupt(
-            trigger_metric_fingerprint=request.trigger_metric.name,
+            trigger_metric_fingerprint=request.trigger_metric.subscription_fingerprint,
             trigger_metric_value=request.trigger_metric.value,
             trigger_metric_op=request.trigger_metric.op,
             interrupt_requests=interrupt_requests,
@@ -591,6 +607,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             #     frame.observed_value
             # )
             yield EngineInterruptEvent(
+                run_id=run_id,
                 interrupt_id=new_interrupt.interrupt_id,
                 event_id=frame.event_id,
                 observed_value=str(extract_value(frame.observed_value)),
@@ -602,10 +619,16 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         request: AcknowledgeInterruptRequest,
         context: grpc.ServicerContext,
     ) -> ApplyActionsResponse:
+        if not self._subscription_manager:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                "Subscription manager not initialised.",
+            )
+
         run_id = request.run_id
         if run_id not in self.runs:
             await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT, f"run ${run_id} not found."
+                grpc.StatusCode.NOT_FOUND, f"run ${run_id} not found."
             )
         run = self.runs[run_id]
 
@@ -647,16 +670,26 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     )
 
                 else:
-                    new_name = request.new_interrupt_conditions.name
+                    new_fingerprint = (
+                        request.new_interrupt_conditions.subscription_fingerprint
+                    )
                     new_value = request.new_interrupt_conditions.value
 
-                    if new_name != "":
+                    if new_fingerprint != "":
+                        if not self._subscription_manager.check_subscription(
+                            new_fingerprint
+                        ):
+                            await context.abort(
+                                grpc.StatusCode.FAILED_PRECONDITION,
+                                "The interrupt metric must first be subscribed to.",
+                            )
+
                         acknowledged_interrupt.trigger_metric_fingerprint = (
-                            new_name
+                            new_fingerprint
                         )
                         logging.debug(
                             f"Updated interrupt {acknowledged_interrupt.interrupt_id} "
-                            f"trigger name to {new_name}."
+                            f"subscription metric to {new_fingerprint}."
                         )
                     if request.new_interrupt_conditions.HasField("value"):
                         acknowledged_interrupt.trigger_metric_value = new_value
@@ -666,7 +699,10 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         )
 
                 apply_actions_response = await self.ApplyActions(
-                    request.actions, context
+                    ApplyActionsRequest(
+                        run_id=run_id, action_bundle=request.actions
+                    ),
+                    context,
                 )
                 acknowledged_interrupt.interrupt_requests.task_done()
                 logging.debug("Interrupt Acknoledge Received and Processed")
@@ -909,12 +945,12 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                             KeyValue(
                                 key=f"Error",
                                 has_value=True,
-                                value=f"Failed to collect for {sub.name}: "
+                                value=f"Failed to collect for {sub.fingerprint}: "
                                 f"{exception}: {exception.__cause__}",
                             )
                         )
                         logging.warning(
-                            f"Subscription collection failed for {sub.name}"
+                            f"Subscription collection failed for {sub.fingerprint}"
                         )
 
                     frame = self._build_frame(
@@ -961,3 +997,32 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# async def handle_interrupt(next_interrupt_event: SimulationInterruptEvent, actions=ActionBundle | None, new_trigger=MetricNameAndValue | None) -> ApplyActionsResponse:
+#     interrupt_event = await next_interrupt_event
+
+#     interrupt_acknowledge_request = AcknowledgeInterruptRequest(
+#         run_id=create_run_response.run_id,
+#         interrupt_id=interrupt_event.interrupt_id,
+#         event_id=interrupt_event.event_id,
+#         actions=action_bundle_factory(
+#             create_run_response.run_id,
+#             None,
+#             [
+#                 GenericSetterType(
+#                     "fake_domain",
+#                     "setProgram",
+#                     "fake_object",
+#                     [
+#                         Parameter(
+#                             name="value", value=Value(string_value="off")
+#                         )
+#                     ],
+#                 )
+#             ],
+#         ),
+#     )
+
+#     await service.AcknowledgeInterrupt(
+#         interrupt_acknowledge_request, fake_context
+#     )

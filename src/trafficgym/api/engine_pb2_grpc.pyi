@@ -34,7 +34,7 @@ class EngineServiceStub:
     CreateRun: _grpc.UnaryUnaryMultiCallable[_engine_pb2.CreateRunRequest, _engine_pb2.CreateRunResponse]
     Run: _grpc.UnaryUnaryMultiCallable[_engine_pb2.RunRequest, _engine_pb2.RunResponse]
     CloseRun: _grpc.UnaryUnaryMultiCallable[_engine_pb2.CloseRunRequest, _engine_pb2.CloseRunResponse]
-    ApplyActions: _grpc.UnaryUnaryMultiCallable[_engine_pb2.ActionBundle, _engine_pb2.ApplyActionsResponse]
+    ApplyActions: _grpc.UnaryUnaryMultiCallable[_engine_pb2.ApplyActionsRequest, _engine_pb2.ApplyActionsResponse]
     StreamTelemetry: _grpc.UnaryStreamMultiCallable[_engine_pb2.StreamRequest, _engine_pb2.TelemetryFrame]
     StreamSubscriptions: _grpc.UnaryStreamMultiCallable[_engine_pb2.StreamRequest, _engine_pb2.TelemetryFrame]
     Subscribe: _grpc.UnaryUnaryMultiCallable[_engine_pb2.SubscribeRequest, _engine_pb2.SubscribeResponse]
@@ -50,7 +50,7 @@ class EngineServiceAsyncStub(EngineServiceStub):
     CreateRun: _aio.UnaryUnaryMultiCallable[_engine_pb2.CreateRunRequest, _engine_pb2.CreateRunResponse]  # type: ignore[assignment]
     Run: _aio.UnaryUnaryMultiCallable[_engine_pb2.RunRequest, _engine_pb2.RunResponse]  # type: ignore[assignment]
     CloseRun: _aio.UnaryUnaryMultiCallable[_engine_pb2.CloseRunRequest, _engine_pb2.CloseRunResponse]  # type: ignore[assignment]
-    ApplyActions: _aio.UnaryUnaryMultiCallable[_engine_pb2.ActionBundle, _engine_pb2.ApplyActionsResponse]  # type: ignore[assignment]
+    ApplyActions: _aio.UnaryUnaryMultiCallable[_engine_pb2.ApplyActionsRequest, _engine_pb2.ApplyActionsResponse]  # type: ignore[assignment]
     StreamTelemetry: _aio.UnaryStreamMultiCallable[_engine_pb2.StreamRequest, _engine_pb2.TelemetryFrame]  # type: ignore[assignment]
     StreamSubscriptions: _aio.UnaryStreamMultiCallable[_engine_pb2.StreamRequest, _engine_pb2.TelemetryFrame]  # type: ignore[assignment]
     Subscribe: _aio.UnaryUnaryMultiCallable[_engine_pb2.SubscribeRequest, _engine_pb2.SubscribeResponse]  # type: ignore[assignment]
@@ -85,7 +85,7 @@ class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
     @_abc_1.abstractmethod
     def ApplyActions(
         self,
-        request: _engine_pb2.ActionBundle,
+        request: _engine_pb2.ApplyActionsRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_engine_pb2.ApplyActionsResponse, _abc.Awaitable[_engine_pb2.ApplyActionsResponse]]: ...
 

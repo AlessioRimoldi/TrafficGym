@@ -51,7 +51,7 @@ class EngineServiceStub(object):
                 _registered_method=True)
         self.ApplyActions = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/ApplyActions',
-                request_serializer=trafficgym_dot_api_dot_engine__pb2.ActionBundle.SerializeToString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsRequest.SerializeToString,
                 response_deserializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
                 _registered_method=True)
         self.StreamTelemetry = channel.unary_stream(
@@ -191,7 +191,7 @@ def add_EngineServiceServicer_to_server(servicer, server):
             ),
             'ApplyActions': grpc.unary_unary_rpc_method_handler(
                     servicer.ApplyActions,
-                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.ActionBundle.FromString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsRequest.FromString,
                     response_serializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
             ),
             'StreamTelemetry': grpc.unary_stream_rpc_method_handler(
@@ -341,7 +341,7 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/ApplyActions',
-            trafficgym_dot_api_dot_engine__pb2.ActionBundle.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.ApplyActionsRequest.SerializeToString,
             trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
             options,
             channel_credentials,

@@ -64,9 +64,9 @@ class FakeAdapter(SimulationPort):
         """
         if self.closed:
             raise RuntimeError("fake run already closed")
-        guess_name = setter_name.removeprefix("set").lower()
+        guess_name = setter_name.removeprefix("set")
 
-        if guess_name == "noNegativeNumber".lower():
+        if guess_name == "NoNegativeNumber":
             value = args.get("value")
             if value is not None and value.WhichOneof("kind") == "number_value":
                 if value.number_value < 0:
@@ -102,7 +102,7 @@ class FakeAdapter(SimulationPort):
         For now, args are ignored"""
         if self.closed:
             raise RuntimeError("fake run already closed")
-        guess_name = getter_name.removeprefix("get").lower()
+        guess_name = getter_name.removeprefix("get")
 
         state_key = FakeStateDictKey(
             domain=domain, attribute=guess_name, object_id=object_id

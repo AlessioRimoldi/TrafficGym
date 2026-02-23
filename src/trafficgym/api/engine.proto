@@ -38,8 +38,12 @@ message Action {
   }
 }
 
-message ActionBundle {
+message ApplyActionsRequest {
   string run_id = 1;
+  ActionBundle action_bundle = 2;
+}
+
+message ActionBundle {
   optional int64 step = 2;
   repeated Action actions = 3;
 }
@@ -134,7 +138,7 @@ enum Operation {
 
 message MetricNameAndValue {
   // TODO coalesce with Parameter, which shares name and value
-  string name = 1;
+  string subscription_fingerprint = 1;
   google.protobuf.Value value = 2;
   Operation op = 3;
 }
@@ -149,10 +153,11 @@ message RegisterInterruptRequest {
 }
 
 message InterruptEvent {
-  string interrupt_id = 1;
-  string event_id = 2;
+  string run_id = 1;
+  string interrupt_id = 2;
+  string event_id = 3;
   // maybe following fields optional?
-  string observed_value = 3;
+  string observed_value = 4;
 }
 
 message AcknowledgeInterruptRequest {
@@ -185,7 +190,7 @@ service EngineService {
   rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
   rpc Run(RunRequest) returns (RunResponse);
   rpc CloseRun(CloseRunRequest) returns (CloseRunResponse);
-  rpc ApplyActions(ActionBundle) returns (ApplyActionsResponse);
+  rpc ApplyActions(ApplyActionsRequest) returns (ApplyActionsResponse);
   rpc StreamTelemetry(StreamRequest) returns (stream TelemetryFrame);
   rpc StreamSubscriptions(StreamRequest) returns (stream TelemetryFrame);
   rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
