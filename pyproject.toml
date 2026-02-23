@@ -20,3 +20,10 @@ explicit_package_bases = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
+
+[tool.coverage.run]
+omit = [
+  "src/trafficgym/api/*",
+  "src/trafficgym/engine/client.py",
+  "tests/*"
+]

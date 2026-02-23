@@ -649,17 +649,20 @@ Global___CancelInterruptResponse: _TypeAlias = CancelInterruptResponse  # noqa: 
 class FetchRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    RUN_ID_FIELD_NUMBER: _builtins.int
     FINGERPRINT_FIELD_NUMBER: _builtins.int
     REQUIRES_COLLECT_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
     fingerprint: _builtins.str
     requires_collect: _builtins.bool
     def __init__(
         self,
         *,
+        run_id: _builtins.str = ...,
         fingerprint: _builtins.str = ...,
         requires_collect: _builtins.bool = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["fingerprint", b"fingerprint", "requires_collect", b"requires_collect"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["fingerprint", b"fingerprint", "requires_collect", b"requires_collect", "run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___FetchRequest: _TypeAlias = FetchRequest  # noqa: Y015

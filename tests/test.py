@@ -166,19 +166,12 @@ async def create_run_factory(
 @pytest.mark.asyncio
 async def test_create_run_fails_invalid_sumo_parameters(
     override: CreateRunParams,
-    service: EngineService,
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Test invalid parameters which should raise a TraCIException,
-    which is repackaged into a GrpcAbort. The run should not be
-    added into the list of runs because it will never start"""
-
-    assert len(service.runs) == 0
-
+    which is repackaged into a GrpcAbort."""
     with pytest.raises(GrpcAbort):
         await create_run_factory(override)
-
-    assert len(service.runs) == 0
 
 
 # @pytest.mark.asyncio
@@ -190,18 +183,6 @@ async def test_create_run_fails_invalid_sumo_parameters(
 #         await created_run_factory({"sumo_binary": "fumo"})
 
 #     pass # for some reason this does not fail?
-
-
-@pytest.mark.asyncio
-async def test_create_run_adds_to_runs(
-    service: EngineService, create_run_factory: CreateRunFactoryType
-) -> None:
-    """Ensure that creating a run adds elements to the runs list"""
-    assert len(service.runs) == 0
-
-    await create_run_factory(None)
-
-    assert len(service.runs) == 1
 
 
 @pytest.mark.parametrize(
@@ -419,7 +400,6 @@ async def test_close_run_during_exec_triggers_warning(
 
 @pytest.mark.asyncio
 async def test_close_run_twice(
-    caplog: pytest.LogCaptureFixture,
     service: EngineService,
     fake_context: ServicerContext,
     create_run_factory: CreateRunFactoryType,
@@ -433,6 +413,21 @@ async def test_close_run_twice(
 
     with pytest.raises(GrpcAbort):
         await service.CloseRun(close_run_request, fake_context)
+
+
+@pytest.mark.asyncio
+async def test_subscribe_invalid_run_id(
+    service: EngineService,
+    fake_context: ServicerContext,
+) -> None:
+    """Ensure subscribing with an invalid run_id fails gracefully"""
+    with pytest.raises(GrpcAbort, match="NOT_FOUND"):
+        await service.Subscribe(
+            SubscribeRequest(
+                run_id="oula", domain="", getter_name="", object_id=""
+            ),
+            fake_context,
+        )
 
 
 @dataclass
@@ -601,6 +596,7 @@ async def test_apply_actions_requires_collect_true_false(
     )
 
     fetch_request = FetchRequest(
+        run_id=create_run_response.run_id,
         fingerprint=subscribe_response.fingerprint,
         requires_collect=requires_collect,
     )
@@ -729,7 +725,9 @@ async def test_apply_actions_legal_illegal_negative(
     )
 
     fetch_request = FetchRequest(
-        fingerprint=subscribe_response.fingerprint, requires_collect=True
+        run_id=create_run_response.run_id,
+        fingerprint=subscribe_response.fingerprint,
+        requires_collect=True,
     )
 
     fetch_response = await service.FetchSubscription(
@@ -785,7 +783,7 @@ async def test_telemetry_stream_reports_steps(
     create_run_response = await create_run_factory(
         CreateRunParams(step_length_ms=step_length_ms)
     )
-    run = service.runs[create_run_response.run_id]
+    seconds_per_step = step_length_ms / 1000
 
     stream_telemetry_request = StreamRequest(run_id=create_run_response.run_id)
 
@@ -802,7 +800,7 @@ async def test_telemetry_stream_reports_steps(
     await service.CloseRun(close_run_request, fake_context)
 
     expected_step = 1
-    expected_time = run.seconds_per_step
+    expected_time = seconds_per_step
 
     async for frame in telemetry_stream:
         assert frame.run_id == create_run_response.run_id
@@ -810,11 +808,11 @@ async def test_telemetry_stream_reports_steps(
         assert frame.sim_time_s - expected_time == pytest.approx(0)
 
         expected_step += 1
-        expected_time += run.seconds_per_step
+        expected_time += seconds_per_step
 
     assert expected_step - 1 == run_response.new_step
     assert expected_time == pytest.approx(
-        run_response.new_time + run.seconds_per_step
+        run_response.new_time + seconds_per_step
     )
 
 
@@ -980,7 +978,9 @@ async def test_subscription_stream_fetch_subscription_with_requires_collect(
     await service.ApplyActions(first_apply_action_request, fake_context)
 
     fetch_subscription_request = FetchRequest(
-        fingerprint=subscription_response.fingerprint, requires_collect=True
+        run_id=create_run_response.run_id,
+        fingerprint=subscription_response.fingerprint,
+        requires_collect=True,
     )
 
     fetch_subscription_response = await service.FetchSubscription(
@@ -1094,6 +1094,7 @@ async def test_ensure_reject_actions_bundles_with_at_least_one_malformed_action(
     )
 
     fetch_default_number_request = FetchRequest(
+        run_id=create_run_response.run_id,
         fingerprint=default_string_subscription_response.fingerprint,
         requires_collect=True,
     )
@@ -1282,7 +1283,9 @@ async def test_unsubscribe_unimplemented(
     )
 
     fetch_request = FetchRequest(
-        fingerprint=subscribe_response.fingerprint, requires_collect=True
+        run_id=create_run_response.run_id,
+        fingerprint=subscribe_response.fingerprint,
+        requires_collect=True,
     )
 
     fetch_response = await service.FetchSubscription(
@@ -1317,6 +1320,7 @@ class InterruptSession:
     event_callback: Callable[
         [InterruptEvent], tuple[ActionBundle | None, InterruptMetric | None]
     ] = lambda _: (None, None)
+    original_interrupt_condition: MetricNameAndValue | None = None
 
     async def handle_interrupt(
         self,
@@ -1432,6 +1436,7 @@ def setup_interrupt(
             service,
             fake_context,
             service.RegisterInterrupt(register_interrupt_request, fake_context),
+            original_interrupt_condition=MetricNameAndValue(**metric),
         )
 
     return _exec
@@ -1472,8 +1477,9 @@ async def test_register_interrupt_rejects_invalid_subscription(
 ) -> None:
     """Ensure that interrupts registered with non-existing subscriptions
     do not fail silently. Because Registering an interrupt is not unary-unary,
-    the only way to see an exception occured is by await the stream. The first 
-    element in this case should be the exception raised by the subscription issue."""
+    the only way to see an exception occured is by await the stream. The first
+    element in this case should be the exception raised by the subscription issue.
+    """
     create_run_response = await create_run_factory(None)
 
     interrupt_session = await setup_interrupt(
@@ -1507,6 +1513,216 @@ async def test_register_interrupt_rejects_invalid_subscription(
         match="FAILED_PRECONDITION.*The interrupt metric must first be subscribed to.",
     ):
         await handler_task
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_interrupt_fails_invalid_run_id(
+    service: EngineService, fake_context: ServicerContext
+) -> None:
+    """Ensure that calling AcknowledgeInterrupt with an invalid run_id fails gracefully"""
+    with pytest.raises(GrpcAbort, match="NOT_FOUND:.*run_id"):
+        await service.AcknowledgeInterrupt(
+            AcknowledgeInterruptRequest(
+                run_id="hi", interrupt_id="", event_id=""
+            ),
+            fake_context,
+        )
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_interrupt_fails_invalid_interrupt_id(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+) -> None:
+    """Ensure that calling AcknowledgeInterrupt with an invalid interrupt_id fails gracefully"""
+    create_run_response = await create_run_factory(None)
+
+    with pytest.raises(GrpcAbort, match="NOT_FOUND:.*interrupt"):
+        await service.AcknowledgeInterrupt(
+            AcknowledgeInterruptRequest(
+                run_id=create_run_response.run_id, interrupt_id="", event_id=""
+            ),
+            fake_context,
+        )
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_interrupt_fails_no_active_event(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    action_bundle_factory: ActionBundleFactoryType,
+    setup_interrupt: SetupInterruptFactoryType,
+) -> None:
+    """Ensure that calling AcknowledgeInterrupt when no interrupt triggered fails gracefully"""
+    create_run_response = await create_run_factory(None)
+
+    subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getProgram",
+        object_id="fake_object",
+    )
+
+    subscribe_response = await service.Subscribe(
+        subscribe_request, fake_context
+    )
+
+    interrupt_session = await setup_interrupt(
+        create_run_response.run_id,
+        InterruptMetric(
+            subscription_fingerprint=subscribe_response.fingerprint,
+            value=Value(string_value="on"),
+            op=Operation.EQU,
+        ),
+    )
+
+    apply_actions_request = ApplyActionsRequest(
+        run_id=create_run_response.run_id,
+        action_bundle=action_bundle_factory(
+            [
+                GenericSetterType(
+                    domain="fake_domain",
+                    setter_name="setProgram",
+                    object_id="fake_object",
+                    parameters=[
+                        Parameter(name="value", value=Value(string_value="on"))
+                    ],
+                )
+            ]
+        ),
+    )
+
+    apply_actions_reponse = await service.ApplyActions(
+        apply_actions_request, fake_context
+    )
+
+    assert len(apply_actions_reponse.errors) == 0
+
+    async def manual_handle(
+        interrupt_event_stream: AsyncIterator[InterruptEvent],
+    ) -> str:
+        event = await anext(interrupt_event_stream)
+
+        await service.AcknowledgeInterrupt(
+            AcknowledgeInterruptRequest(
+                run_id=create_run_response.run_id,
+                interrupt_id=event.interrupt_id,
+                event_id=event.event_id,
+                new_interrupt_conditions=interrupt_session.original_interrupt_condition,
+            ),
+            fake_context,
+        )
+
+        return event.interrupt_id
+
+    _, interrupt_id = await asyncio.gather(
+        service.Run(
+            RunRequest(run_id=create_run_response.run_id, steps=1), fake_context
+        ),
+        manual_handle(interrupt_session.stream),
+    )
+
+    with pytest.raises(
+        GrpcAbort, match="FAILED_PRECONDITION:.*not interrupted"
+    ):
+        await service.AcknowledgeInterrupt(
+            AcknowledgeInterruptRequest(
+                run_id=create_run_response.run_id,
+                interrupt_id=interrupt_id,
+                event_id="",
+            ),
+            fake_context,
+        )
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_interrupt_fails_wrong_event_id(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType,
+    action_bundle_factory: ActionBundleFactoryType,
+    setup_interrupt: SetupInterruptFactoryType,
+) -> None:
+    """Ensure that calling AcknowledgeInterrupt when no interrupt triggered fails gracefully"""
+    create_run_response = await create_run_factory(None)
+
+    subscribe_request = SubscribeRequest(
+        run_id=create_run_response.run_id,
+        domain="fake_domain",
+        getter_name="getProgram",
+        object_id="fake_object",
+    )
+
+    subscribe_response = await service.Subscribe(
+        subscribe_request, fake_context
+    )
+
+    interrupt_session = await setup_interrupt(
+        create_run_response.run_id,
+        InterruptMetric(
+            subscription_fingerprint=subscribe_response.fingerprint,
+            value=Value(string_value="on"),
+            op=Operation.EQU,
+        ),
+    )
+
+    apply_actions_request = ApplyActionsRequest(
+        run_id=create_run_response.run_id,
+        action_bundle=action_bundle_factory(
+            [
+                GenericSetterType(
+                    domain="fake_domain",
+                    setter_name="setProgram",
+                    object_id="fake_object",
+                    parameters=[
+                        Parameter(name="value", value=Value(string_value="on"))
+                    ],
+                )
+            ]
+        ),
+    )
+
+    apply_actions_reponse = await service.ApplyActions(
+        apply_actions_request, fake_context
+    )
+
+    assert len(apply_actions_reponse.errors) == 0
+
+    async def manual_handle(
+        interrupt_event_stream: AsyncIterator[InterruptEvent],
+    ) -> str:
+        event = await anext(interrupt_event_stream)
+
+        await service.AcknowledgeInterrupt(
+            AcknowledgeInterruptRequest(
+                run_id=create_run_response.run_id,
+                interrupt_id=event.interrupt_id,
+                event_id="wrong event mate",
+            ),
+            fake_context,
+        )
+
+        return event.interrupt_id
+
+    with pytest.raises(GrpcAbort, match="ABORTED:.*wrong interrupt event!"):
+        _, _ = await asyncio.gather(
+            service.Run(
+                RunRequest(run_id=create_run_response.run_id, steps=1),
+                fake_context,
+            ),
+            manual_handle(interrupt_session.stream),
+        )
+
+
+# @pytest.mark.asyncio
+# async def test_acknowledge_interrupt_fails_wrong_event_id(
+#     service: EngineService,
+#     fake_context: ServicerContext,
+#     create_run_factory: CreateRunFactoryType,
+# ) -> None:
+#     create_run_response = await create_run_factory(None)
 
 
 @pytest.mark.parametrize("service", [FAKE_SERVICE_CONFIG], indirect=True)
@@ -1574,7 +1790,9 @@ async def test_register_interrupt_autocancel(
     assert len(apply_action_response.errors) == 0
 
     fetch_request = FetchRequest(
-        fingerprint=subscribe_response.fingerprint, requires_collect=True
+        run_id=create_run_response.run_id,
+        fingerprint=subscribe_response.fingerprint,
+        requires_collect=True,
     )
 
     first_fetch_response = await service.FetchSubscription(
@@ -1633,7 +1851,6 @@ async def test_register_interrupt_autocancel(
         await anext(interrupt_session.stream)
 
 
-
 def should_trigger(op: Operation.ValueType, i: int, trigger: int) -> bool:
     if op == Operation.EQU:
         return i == trigger
@@ -1649,6 +1866,7 @@ def should_trigger(op: Operation.ValueType, i: int, trigger: int) -> bool:
         return i < trigger
     else:
         raise ValueError(f"Unsupported operation: {op}")
+
 
 @pytest.mark.parametrize(
     "op",
@@ -1725,11 +1943,13 @@ async def test_all_interrupt_triggers(
     )
 
     fetch_interrupt_report_value_request = FetchRequest(
+        run_id=create_run_response.run_id,
         fingerprint=interrupt_report_subscribe_response.fingerprint,
         requires_collect=True,
     )
 
     fetch_interrupt_trigger_value_request = FetchRequest(
+        run_id=create_run_response.run_id,
         fingerprint=interrupt_trigger_subscribe_response.fingerprint,
         # requires_collect=True,
     )
@@ -1822,29 +2042,50 @@ async def test_all_interrupt_triggers(
             )
         ).fetched
 
-
         if should_trigger(op, i, INTERRUPT_TRIGGER):
             assert fetched_interrupt_report_value.has_value
-            assert float(
-                fetched_interrupt_report_value.value
-            ) == pytest.approx(float(i))
+            assert float(fetched_interrupt_report_value.value) == pytest.approx(
+                float(i)
+            )
         else:
             if fetched_interrupt_report_value.has_value:
                 assert float(
                     fetched_interrupt_report_value.value
                 ) != pytest.approx(float(i))
 
-        
     handler_task.cancel()
     with suppress(asyncio.CancelledError):
         await handler_task
 
+@pytest.mark.asyncio
+async def test_cancel_interrupt_wrong_run_id(
+    service: EngineService,
+    fake_context: ServicerContext,
+) -> None:
+    with pytest.raises(GrpcAbort, match="NOT_FOUND:.*run_id"):
+        await service.CancelInterrupt(CancelInterruptRequest(run_id="hifbs"), fake_context)
 
-# #Fails correctly with fetch before subscription
-# @pytest.mark.asyncio
-# async def test_fetch_subscription_fails_before_subscription() -> None:
-#     pass
 
+@pytest.mark.asyncio
+async def test_cancel_interrupt_wrong_interrupt_id(
+    service: EngineService,
+    fake_context: ServicerContext,
+    create_run_factory: CreateRunFactoryType
+) -> None:
+    create_run_response = await create_run_factory(None)
+
+    with pytest.raises(GrpcAbort, match="NOT_FOUND:.*Interrupt"):
+        await service.CancelInterrupt(CancelInterruptRequest(run_id=create_run_response.run_id, interrupt_id=""), fake_context)
+
+
+@pytest.mark.asyncio
+async def test_fetch_subscription_fails_wrong_run_id(
+    service: EngineService,
+    fake_context: ServicerContext,
+) -> None:
+    """Ensure calling FetchSubscription with an invalid run_id fails gracefully"""
+    with pytest.raises(GrpcAbort, match="NOT_FOUND:.*run_id"):
+        await service.FetchSubscription(FetchRequest(run_id="gaga", fingerprint=""), fake_context)
 
 ## ENSURE ALL FACTORIES CALL SUPER INIT
 

@@ -1,3 +1,9 @@
+/// TrafficGym Engine API
+///
+/// Manages SUMO Simulation runs via libusmo.
+/// Provides public API to implemnent an experimentation engine on top of SUMO.
+
+
 syntax = "proto3";
 
 import "google/protobuf/struct.proto";
@@ -145,11 +151,7 @@ message MetricNameAndValue {
 
 message RegisterInterruptRequest {
   string run_id = 1;
-  reserved "trigger_metric_name", "trigger_metric_value";
-  reserved 2, 3;
-  // string trigger_metric_name = 2;
-  // google.protobuf.Value trigger_metric_value = 3;
-  MetricNameAndValue trigger_metric = 4;
+  MetricNameAndValue trigger_metric = 2;
 }
 
 message InterruptEvent {
@@ -178,15 +180,29 @@ message CancelInterruptResponse {
 }
 
 message FetchRequest {
-  string fingerprint = 1;
-  bool requires_collect = 2;
+  string run_id = 1;
+  string fingerprint = 2;
+  bool requires_collect = 3;
 }
 
 message FetchResponse {
   KeyValue fetched = 1;
 }
 
+
+// EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
+//
+// Users can create runs, create subscriptions which will collect data from the simulation
+// and make it accessible via SubscriptionStream or FetchSubscription
+// 
+// Users step the simulation via Run and can change any simulation parameter accessible via
+// the TraCI API using ApplyActions. They can also set interrupts via RegisterInterrupt, which
+// will interrupt Run requests, by issuing an InterruptEvent. Users must then acknowledge the
+// interrupt via AcknowledgeInterrupt and can provide ApplyAction parameters to change the simulation
+// before any previously request Run continues. They can also provide new conditions for which the interrupt
+// should trigger; by default they are cancelled on acknowledgement.
 service EngineService {
+  // CreateRun initialises 
   rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
   rpc Run(RunRequest) returns (RunResponse);
   rpc CloseRun(CloseRunRequest) returns (CloseRunResponse);
