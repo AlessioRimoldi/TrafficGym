@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 from trafficgym.engine.server import EngineService
-from trafficgym.engine.client import sumocfg_path
+from trafficgym.engine.client.client import sumocfg_path
 from trafficgym.engine.adapters.factories import (
     FakeAdapterFactory,
     LibsumoAdapterFactory,
@@ -15,15 +15,14 @@ from trafficgym.engine.adapters.fake_adapter import (
     FakeStateDictKey,
 )
 from trafficgym.engine.ports.adapter_factory import AdapterFactory
-from google.protobuf.struct_pb2 import Value, NullValue
 from trafficgym.api.engine_pb2 import (
+    CustomValue,
     CreateRunRequest,
     CreateRunResponse,
     RunRequest,
     CloseRunRequest,
     ActionBundle,
     ApplyActionsRequest,
-    ApplyActionsResponse,
     Action,
     GenericSetter,
     Parameter,
@@ -32,13 +31,15 @@ from trafficgym.api.engine_pb2 import (
     FetchRequest,
     StreamRequest,
     RegisterInterruptRequest,
-    MetricNameAndValue,
+    TriggerMetricNameAndValue,
     Operation,
     InterruptEvent,
     AcknowledgeInterruptRequest,
     CancelInterruptRequest,
 )
-from grpc import ServicerContext, StatusCode
+from trafficgym.engine.helpers import extract_value
+from grpc.aio import ServicerContext
+from grpc import StatusCode
 from typing import (
     Literal,
     TypedDict,
@@ -47,6 +48,7 @@ from typing import (
     cast,
     Awaitable,
     AsyncIterator,
+    Any,
 )
 from typing_extensions import Never, NotRequired
 from dataclasses import dataclass, asdict
@@ -115,8 +117,8 @@ def service(request: pytest.FixtureRequest) -> EngineService:
 
 
 @pytest.fixture
-def fake_context() -> ServicerContext:
-    return cast(ServicerContext, FakeContext())
+def fake_context() -> ServicerContext[Any, Any]:
+    return cast(ServicerContext[Any, Any], FakeContext())
 
 
 CreateRunFactoryType = Callable[
@@ -127,7 +129,7 @@ CreateRunFactoryType = Callable[
 @pytest_asyncio.fixture
 async def create_run_factory(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
 ) -> CreateRunFactoryType:
     """Fixture which returns a function to create runs
     whose parameters can be overriden at creation time"""
@@ -136,11 +138,11 @@ async def create_run_factory(
         overrides: CreateRunParams | None = None,
     ) -> CreateRunResponse:
         overrides = overrides or {}
-        defaults: CreateRunParams = dict(
-            sumocfg_path=sumocfg_path,
-            sumo_binary="sumo",
-            step_length_ms=1000,
-        )
+        defaults: CreateRunParams = {
+            "sumocfg_path": sumocfg_path,
+            "sumo_binary": "sumo",
+            "step_length_ms": 1000,
+        }
 
         param: CreateRunParams = {**defaults, **overrides}
 
@@ -191,7 +193,7 @@ async def test_create_run_fails_invalid_sumo_parameters(
 @pytest.mark.asyncio
 async def test_run_after_create(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensures run state is correctly modified after
@@ -235,7 +237,7 @@ async def test_run_after_create(
 @pytest.mark.asyncio
 async def test_max_run_modes_unsupported(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure max_steps and max_time run modes are not used"""
@@ -263,7 +265,7 @@ async def test_max_run_modes_unsupported(
 @pytest.mark.asyncio
 async def test_run_missing_run_mode(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that starting a run without
@@ -289,7 +291,7 @@ async def test_run_missing_run_mode(
 async def test_run_invalid_run_id(
     invalid_id: str,
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that starting a run with an invalid run_id
@@ -311,7 +313,7 @@ async def test_run_invalid_run_id(
 @pytest.mark.asyncio
 async def test_run_again_before_exec_end(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that executing a run during another's
@@ -340,7 +342,7 @@ async def test_run_again_before_exec_end(
 async def test_close_run_fails_invalid_run_id(
     invalid_run_id: str,
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
 ) -> None:
     """Ensure close_run fails cleanly when provided invalid arguments"""
     request = CloseRunRequest(run_id=invalid_run_id)
@@ -352,7 +354,7 @@ async def test_close_run_fails_invalid_run_id(
 @pytest.mark.asyncio
 async def test_close_run(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that running a closed run fails"""
@@ -372,7 +374,7 @@ async def test_close_run(
 async def test_close_run_during_exec_triggers_warning(
     caplog: pytest.LogCaptureFixture,
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensures that a warning is issued on the server side
@@ -401,7 +403,7 @@ async def test_close_run_during_exec_triggers_warning(
 @pytest.mark.asyncio
 async def test_close_run_twice(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that closing an already closed run triggers an abort"""
@@ -418,7 +420,7 @@ async def test_close_run_twice(
 @pytest.mark.asyncio
 async def test_subscribe_invalid_run_id(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
 ) -> None:
     """Ensure subscribing with an invalid run_id fails gracefully"""
     with pytest.raises(GrpcAbort, match="NOT_FOUND"):
@@ -460,7 +462,7 @@ DEFAULT_LIBSUMO_ACTIONS = [
         setter_name="setProgram",
         object_id="TL0",
         parameters=[
-            Parameter(name="programID", value=Value(string_value="10")),
+            Parameter(name="programID", value=CustomValue(string_value="10")),
         ],
     ),
     GenericSetterType(
@@ -468,7 +470,7 @@ DEFAULT_LIBSUMO_ACTIONS = [
         setter_name="setRedYellowGreenState",
         object_id="TL0",
         parameters=[
-            Parameter(name="state", value=Value(string_value="rGrG")),
+            Parameter(name="state", value=CustomValue(string_value="rGrG")),
         ],
     ),
 ]
@@ -478,14 +480,14 @@ DEFAULT_FAKE_ACTIONS = [
         domain="fake_domain",
         setter_name="setDefaultNumber",
         object_id="default",
-        parameters=[Parameter(name="value", value=Value(number_value=42))],
+        parameters=[Parameter(name="value", value=CustomValue(int_value=42))],
     ),
     GenericSetterType(
         domain="fake_domain",
         setter_name="setDefaultString",
         object_id="default",
         parameters=[
-            Parameter(name="value", value=Value(string_value="foobar"))
+            Parameter(name="value", value=CustomValue(string_value="foobar"))
         ],
     ),
 ]
@@ -518,7 +520,7 @@ def action_bundle_factory(
 async def test_apply_action_invalid_run_id(
     invalid_run_id: str,
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
 ) -> None:
     """Ensure that apply action fails cleanly with invalid run_id"""
     apply_actions_request = ApplyActionsRequest(
@@ -532,7 +534,7 @@ async def test_apply_action_invalid_run_id(
 @pytest.mark.asyncio
 async def test_apply_action_step_unimplemented(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that apply action fails when trying to use step"""
@@ -556,7 +558,7 @@ FAKE_SERVICE_CONFIG = {
             domain="fake_domain",
             object_id="fake_object",
             attribute="Program",
-        ): Value(string_value="off")
+        ): CustomValue(string_value="off")
     },
 }
 
@@ -573,7 +575,7 @@ FAKE_SERVICE_CONFIG = {
 async def test_apply_actions_requires_collect_true_false(
     action_bundle_factory: ActionBundleFactoryType,
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     requires_collect: bool,
     expected: list[str | None],
@@ -623,7 +625,11 @@ async def test_apply_actions_requires_collect_true_false(
                     "fake_domain",
                     "setProgram",
                     "fake_object",
-                    [Parameter(name="value", value=Value(string_value="42"))],
+                    [
+                        Parameter(
+                            name="value", value=CustomValue(string_value="42")
+                        )
+                    ],
                 )
             ],
         ),
@@ -652,17 +658,50 @@ async def test_apply_actions_requires_collect_true_false(
     assert fourth_fetch_response.fetched.value == expected[3]
 
 
+@pytest.mark.parametrize(
+    [
+        "getter_name",
+        "setter_name",
+        "legal_value",
+        "illegal_value",
+        "expected_error_msg",
+    ],
+    [
+        (
+            "getNoNegativeInt",
+            "setNoNegativeInt",
+            CustomValue(int_value=10),
+            CustomValue(int_value=-1),
+            "Setter: invalid setter argument for noNegativeNumber",
+        ),
+        (
+            "getNoFloat",
+            "setNoFloat",
+            CustomValue(int_value=10),
+            CustomValue(float_value=10),
+            "Setter: Expected an int",
+        ),
+    ],
+)
 @pytest.mark.asyncio
 async def test_apply_actions_legal_illegal_negative(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
     caplog: pytest.LogCaptureFixture,
+    getter_name: str,
+    setter_name: str,
+    legal_value: CustomValue,
+    illegal_value: CustomValue,
+    expected_error_msg: str,
 ) -> None:
     """noNegativeNumber is a special property in the fake which simulates a property for which libsumo
     might reject a certain input. For example, libsumo.setSpeed() might accept -1 to reset the speed control
      but would reject other inputs. The fake will reject all negative numbers with a TraCIException.
+
+    noFloat is a special property in the fake which simulates a property in libsumo which expects a certain type
+    (float vs int). The fake will reject floats with a TypeError
 
     This test ensures that rejects are correctly handled, by issuing a warning to the server console, and returning
     evidence of the exception in the ApplyActions response."""
@@ -671,7 +710,7 @@ async def test_apply_actions_legal_illegal_negative(
     subscription_request = SubscribeRequest(
         run_id=create_run_response.run_id,
         domain="test_domain",
-        getter_name="getNoNegativeNumber",
+        getter_name=getter_name,
         object_id="veh1",
     )
 
@@ -683,9 +722,9 @@ async def test_apply_actions_legal_illegal_negative(
         [
             GenericSetterType(
                 "test_domain",
-                "setNoNegativeNumber",
+                setter_name,
                 "veh1",
-                [Parameter(name="value", value=Value(number_value=10))],
+                [Parameter(name="value", value=legal_value)],
             )
         ],
     )
@@ -701,9 +740,9 @@ async def test_apply_actions_legal_illegal_negative(
         [
             GenericSetterType(
                 "test_domain",
-                "setNoNegativeNumber",
+                setter_name,
                 "veh1",
-                [Parameter(name="value", value=Value(number_value=-1))],
+                [Parameter(name="value", value=illegal_value)],
             )
         ],
     )
@@ -719,10 +758,7 @@ async def test_apply_actions_legal_illegal_negative(
 
     assert len(legal_action_bundle_response.errors) == 0
     assert len(illegal_action_bundle_response.errors) == 1
-    assert (
-        illegal_action_bundle_response.errors[0]
-        == "Setter: invalid setter argument for noNegativeNumber"
-    )
+    assert illegal_action_bundle_response.errors[0] == expected_error_msg
 
     fetch_request = FetchRequest(
         run_id=create_run_response.run_id,
@@ -735,16 +771,16 @@ async def test_apply_actions_legal_illegal_negative(
     )
 
     assert fetch_response.fetched.has_value
-    assert float(fetch_response.fetched.value) == 10
+    assert float(fetch_response.fetched.value) == extract_value(legal_value)
 
 
 @pytest.mark.asyncio
 async def test_apply_actions_empty(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
-    action_bundle_factory: ActionBundleFactoryType,
 ) -> None:
+    """Ensures that apply actions does not fail for empty action bundles"""
     create_run_response = await create_run_factory(None)
 
     empty_actions_request = ApplyActionsRequest(
@@ -774,7 +810,7 @@ async def test_apply_actions_empty(
 @pytest.mark.asyncio
 async def test_telemetry_stream_reports_steps(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     steps: int,
     step_length_ms: int,
@@ -819,7 +855,7 @@ async def test_telemetry_stream_reports_steps(
 @pytest.mark.asyncio
 async def test_subscription_stream(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
 ) -> None:
@@ -868,7 +904,7 @@ async def test_subscription_stream(
                     setter_name="setDefaultNumber",
                     object_id="default",
                     parameters=[
-                        Parameter(name="value", value=Value(number_value=0))
+                        Parameter(name="value", value=CustomValue(int_value=0))
                     ],
                 )
             ],
@@ -938,7 +974,7 @@ async def test_subscription_stream(
 @pytest.mark.asyncio
 async def test_subscription_stream_fetch_subscription_with_requires_collect(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
 ) -> None:
@@ -1041,7 +1077,7 @@ async def test_subscription_stream_fetch_subscription_with_requires_collect(
 
 @pytest.mark.asyncio
 async def test_stream_invalid_run_id(
-    service: EngineService, fake_context: ServicerContext
+    service: EngineService, fake_context: ServicerContext[Any, Any]
 ) -> None:
     """Ensure that both streams raise a grpc error when the run_id is invalid"""
     stream_request = StreamRequest(run_id="bahahahhahaha")
@@ -1065,7 +1101,7 @@ async def test_stream_invalid_run_id(
 async def test_ensure_reject_actions_bundles_with_at_least_one_malformed_action(
     action_bundle_factory: ActionBundleFactoryType,
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that if an action is misformed, the entire bundle
@@ -1111,13 +1147,17 @@ async def test_ensure_reject_actions_bundles_with_at_least_one_malformed_action(
                     "fake_domain",
                     "setDefaultString",
                     "default",
-                    [Parameter(name="value", value=Value(string_value="baz"))],
+                    [
+                        Parameter(
+                            name="value", value=CustomValue(string_value="baz")
+                        )
+                    ],
                 ),
                 GenericSetterType(
                     "fake_domain",
                     "noNegativeNumber",
                     "default_object",
-                    [Parameter(name="value", value=Value(number_value=-10))],
+                    [Parameter(name="value", value=CustomValue(int_value=-10))],
                 ),
             ],
         ),
@@ -1143,7 +1183,7 @@ async def test_ensure_reject_actions_bundles_with_at_least_one_malformed_action(
 @pytest.mark.asyncio
 async def test_subscribe_rejects_private_name(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that subscriptions with private / dunder getters are rejected.
@@ -1181,7 +1221,7 @@ async def test_subscribe_rejects_private_name(
 @pytest.mark.asyncio
 async def test_thorough_getter_valdation(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Currently, any name starting with 'get' is allowed even though it may not be a
@@ -1203,7 +1243,7 @@ async def test_thorough_getter_valdation(
 @pytest.mark.asyncio
 async def test_rejects_duplicate_subscription_fingerprint(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensures new subscriptions with identical fingerprints are rejected.
@@ -1230,7 +1270,7 @@ async def test_rejects_duplicate_subscription_fingerprint(
 @pytest.mark.asyncio
 async def test_rejects_duplicate_subscription_name(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensures new subscriptions are rejected if their optional
@@ -1264,7 +1304,7 @@ async def test_rejects_duplicate_subscription_name(
 @pytest.mark.asyncio
 async def test_unsubscribe_unimplemented(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure calling unsubscribe throws an error.
@@ -1315,12 +1355,12 @@ async def test_unsubscribe_unimplemented(
 @dataclass
 class InterruptSession:
     service: EngineService
-    fake_context: ServicerContext
+    fake_context: ServicerContext[Any, Any]
     stream: AsyncIterator[InterruptEvent]
     event_callback: Callable[
         [InterruptEvent], tuple[ActionBundle | None, InterruptMetric | None]
     ] = lambda _: (None, None)
-    original_interrupt_condition: MetricNameAndValue | None = None
+    original_interrupt_condition: TriggerMetricNameAndValue | None = None
 
     async def handle_interrupt(
         self,
@@ -1346,7 +1386,7 @@ class InterruptSession:
                 event_id=interrupt_event.event_id,
                 actions=actions,
                 new_interrupt_conditions=(
-                    MetricNameAndValue(**new_conditions)
+                    TriggerMetricNameAndValue(**new_conditions)
                     if new_conditions is not None
                     else None
                 ),
@@ -1360,7 +1400,7 @@ class InterruptSession:
 class InterruptMetric(TypedDict, total=False):
     subscription_fingerprint: str
     """If not provided, a subscription will be created"""
-    value: Value
+    value: CustomValue
     op: Operation.ValueType
 
 
@@ -1387,7 +1427,7 @@ DEFAULT_INTERRUPT_SUBSCRIBE_DOMAIN_GETTER_OBJECT: SubscribeParameters = {
 @pytest.fixture
 def setup_interrupt(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
 ) -> SetupInterruptFactoryType:
     """Factory to setup interrupt testing.
 
@@ -1420,7 +1460,7 @@ def setup_interrupt(
             )
             name = subscription_response.fingerprint
 
-        value = override_metric.get("value", Value(number_value=10))
+        value = override_metric.get("value", CustomValue(int_value=10))
         op = override_metric.get("op", Operation.GEQ)
 
         metric = InterruptMetric(
@@ -1429,14 +1469,14 @@ def setup_interrupt(
 
         register_interrupt_request = RegisterInterruptRequest(
             run_id=run_id,
-            trigger_metric=MetricNameAndValue(**metric),
+            trigger_metric=TriggerMetricNameAndValue(**metric),
         )
 
         return InterruptSession(
             service,
             fake_context,
             service.RegisterInterrupt(register_interrupt_request, fake_context),
-            original_interrupt_condition=MetricNameAndValue(**metric),
+            original_interrupt_condition=TriggerMetricNameAndValue(**metric),
         )
 
     return _exec
@@ -1445,16 +1485,16 @@ def setup_interrupt(
 @pytest.mark.asyncio
 async def test_register_interrupt_rejects_invalid_run_id(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     await create_run_factory(None)
 
     register_interrupt_request = RegisterInterruptRequest(
         run_id="boo",
-        trigger_metric=MetricNameAndValue(
+        trigger_metric=TriggerMetricNameAndValue(
             subscription_fingerprint="fake",
-            value=Value(number_value=1),
+            value=CustomValue(int_value=1),
             op=Operation.GEQ,
         ),
     )
@@ -1470,7 +1510,7 @@ async def test_register_interrupt_rejects_invalid_run_id(
 @pytest.mark.asyncio
 async def test_register_interrupt_rejects_invalid_subscription(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     setup_interrupt: SetupInterruptFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
     create_run_factory: CreateRunFactoryType,
@@ -1494,7 +1534,7 @@ async def test_register_interrupt_rejects_invalid_subscription(
                     "fake_domain",
                     "setInterruptMetric",
                     "default_object",
-                    [Parameter(name="value", value=Value(number_value=10))],
+                    [Parameter(name="value", value=CustomValue(int_value=10))],
                 )
             ],
         ),
@@ -1517,7 +1557,7 @@ async def test_register_interrupt_rejects_invalid_subscription(
 
 @pytest.mark.asyncio
 async def test_acknowledge_interrupt_fails_invalid_run_id(
-    service: EngineService, fake_context: ServicerContext
+    service: EngineService, fake_context: ServicerContext[Any, Any]
 ) -> None:
     """Ensure that calling AcknowledgeInterrupt with an invalid run_id fails gracefully"""
     with pytest.raises(GrpcAbort, match="NOT_FOUND:.*run_id"):
@@ -1532,7 +1572,7 @@ async def test_acknowledge_interrupt_fails_invalid_run_id(
 @pytest.mark.asyncio
 async def test_acknowledge_interrupt_fails_invalid_interrupt_id(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
     """Ensure that calling AcknowledgeInterrupt with an invalid interrupt_id fails gracefully"""
@@ -1550,7 +1590,7 @@ async def test_acknowledge_interrupt_fails_invalid_interrupt_id(
 @pytest.mark.asyncio
 async def test_acknowledge_interrupt_fails_no_active_event(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
     setup_interrupt: SetupInterruptFactoryType,
@@ -1573,7 +1613,7 @@ async def test_acknowledge_interrupt_fails_no_active_event(
         create_run_response.run_id,
         InterruptMetric(
             subscription_fingerprint=subscribe_response.fingerprint,
-            value=Value(string_value="on"),
+            value=CustomValue(string_value="on"),
             op=Operation.EQU,
         ),
     )
@@ -1587,7 +1627,9 @@ async def test_acknowledge_interrupt_fails_no_active_event(
                     setter_name="setProgram",
                     object_id="fake_object",
                     parameters=[
-                        Parameter(name="value", value=Value(string_value="on"))
+                        Parameter(
+                            name="value", value=CustomValue(string_value="on")
+                        )
                     ],
                 )
             ]
@@ -1640,7 +1682,7 @@ async def test_acknowledge_interrupt_fails_no_active_event(
 @pytest.mark.asyncio
 async def test_acknowledge_interrupt_fails_wrong_event_id(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
     setup_interrupt: SetupInterruptFactoryType,
@@ -1663,7 +1705,7 @@ async def test_acknowledge_interrupt_fails_wrong_event_id(
         create_run_response.run_id,
         InterruptMetric(
             subscription_fingerprint=subscribe_response.fingerprint,
-            value=Value(string_value="on"),
+            value=CustomValue(string_value="on"),
             op=Operation.EQU,
         ),
     )
@@ -1677,7 +1719,9 @@ async def test_acknowledge_interrupt_fails_wrong_event_id(
                     setter_name="setProgram",
                     object_id="fake_object",
                     parameters=[
-                        Parameter(name="value", value=Value(string_value="on"))
+                        Parameter(
+                            name="value", value=CustomValue(string_value="on")
+                        )
                     ],
                 )
             ]
@@ -1719,7 +1763,7 @@ async def test_acknowledge_interrupt_fails_wrong_event_id(
 # @pytest.mark.asyncio
 # async def test_acknowledge_interrupt_fails_wrong_event_id(
 #     service: EngineService,
-#     fake_context: ServicerContext,
+#     fake_context: ServicerContext[Any, Any],
 #     create_run_factory: CreateRunFactoryType,
 # ) -> None:
 #     create_run_response = await create_run_factory(None)
@@ -1729,7 +1773,7 @@ async def test_acknowledge_interrupt_fails_wrong_event_id(
 @pytest.mark.asyncio
 async def test_register_interrupt_autocancel(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
     setup_interrupt: SetupInterruptFactoryType,
@@ -1758,7 +1802,7 @@ async def test_register_interrupt_autocancel(
         create_run_response.run_id,
         InterruptMetric(
             subscription_fingerprint=subscribe_response.fingerprint,
-            value=Value(string_value="on"),
+            value=CustomValue(string_value="on"),
             op=Operation.EQU,
         ),
     )
@@ -1777,7 +1821,11 @@ async def test_register_interrupt_autocancel(
                     "fake_domain",
                     "setProgram",
                     "fake_object",
-                    [Parameter(name="value", value=Value(string_value="on"))],
+                    [
+                        Parameter(
+                            name="value", value=CustomValue(string_value="on")
+                        )
+                    ],
                 )
             ],
         ),
@@ -1826,7 +1874,8 @@ async def test_register_interrupt_autocancel(
                         "fake_object",
                         [
                             Parameter(
-                                name="value", value=Value(string_value="off")
+                                name="value",
+                                value=CustomValue(string_value="off"),
                             )
                         ],
                     )
@@ -1893,7 +1942,7 @@ def should_trigger(op: Operation.ValueType, i: int, trigger: int) -> bool:
                         "object_id"
                     ],
                     attribute="InterruptMetric",
-                ): Value(number_value=9)
+                ): CustomValue(int_value=9)
             },
         }
     ],
@@ -1902,7 +1951,7 @@ def should_trigger(op: Operation.ValueType, i: int, trigger: int) -> bool:
 @pytest.mark.asyncio
 async def test_all_interrupt_triggers(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
     setup_interrupt: SetupInterruptFactoryType,
     create_run_factory: CreateRunFactoryType,
     action_bundle_factory: ActionBundleFactoryType,
@@ -1934,7 +1983,7 @@ async def test_all_interrupt_triggers(
 
     interrupt_metric = InterruptMetric(
         subscription_fingerprint=interrupt_trigger_subscribe_response.fingerprint,
-        value=Value(number_value=INTERRUPT_TRIGGER),
+        value=CustomValue(int_value=INTERRUPT_TRIGGER),
         op=op,
     )
 
@@ -1981,7 +2030,9 @@ async def test_all_interrupt_triggers(
                             "object_id"
                         ],
                         parameters=[
-                            Parameter(name="value", value=Value(number_value=i))
+                            Parameter(
+                                name="value", value=CustomValue(int_value=i)
+                            )
                         ],
                     )
                 ]
@@ -2019,8 +2070,8 @@ async def test_all_interrupt_triggers(
                             parameters=[
                                 Parameter(
                                     name="value",
-                                    value=Value(
-                                        number_value=float(
+                                    value=CustomValue(
+                                        float_value=float(
                                             fetched_interrupt_trigger_value.value
                                         )
                                         + 1
@@ -2057,35 +2108,46 @@ async def test_all_interrupt_triggers(
     with suppress(asyncio.CancelledError):
         await handler_task
 
+
 @pytest.mark.asyncio
 async def test_cancel_interrupt_wrong_run_id(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
 ) -> None:
     with pytest.raises(GrpcAbort, match="NOT_FOUND:.*run_id"):
-        await service.CancelInterrupt(CancelInterruptRequest(run_id="hifbs"), fake_context)
+        await service.CancelInterrupt(
+            CancelInterruptRequest(run_id="hifbs"), fake_context
+        )
 
 
 @pytest.mark.asyncio
 async def test_cancel_interrupt_wrong_interrupt_id(
     service: EngineService,
-    fake_context: ServicerContext,
-    create_run_factory: CreateRunFactoryType
+    fake_context: ServicerContext[Any, Any],
+    create_run_factory: CreateRunFactoryType,
 ) -> None:
     create_run_response = await create_run_factory(None)
 
     with pytest.raises(GrpcAbort, match="NOT_FOUND:.*Interrupt"):
-        await service.CancelInterrupt(CancelInterruptRequest(run_id=create_run_response.run_id, interrupt_id=""), fake_context)
+        await service.CancelInterrupt(
+            CancelInterruptRequest(
+                run_id=create_run_response.run_id, interrupt_id=""
+            ),
+            fake_context,
+        )
 
 
 @pytest.mark.asyncio
 async def test_fetch_subscription_fails_wrong_run_id(
     service: EngineService,
-    fake_context: ServicerContext,
+    fake_context: ServicerContext[Any, Any],
 ) -> None:
     """Ensure calling FetchSubscription with an invalid run_id fails gracefully"""
     with pytest.raises(GrpcAbort, match="NOT_FOUND:.*run_id"):
-        await service.FetchSubscription(FetchRequest(run_id="gaga", fingerprint=""), fake_context)
+        await service.FetchSubscription(
+            FetchRequest(run_id="gaga", fingerprint=""), fake_context
+        )
+
 
 ## ENSURE ALL FACTORIES CALL SUPER INIT
 
