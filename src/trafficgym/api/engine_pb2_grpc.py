@@ -26,7 +26,18 @@ if _version_not_supported:
 
 
 class EngineServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
+
+    Users can create runs, create subscriptions which will collect data from the simulation
+    and make it accessible via SubscriptionStream or FetchSubscription
+
+    Users step the simulation via Run and can change any simulation parameter accessible via
+    the TraCI API using ApplyActions. They can also set interrupts via RegisterInterrupt, which
+    will interrupt Run requests, by issuing an InterruptEvent. Users must then acknowledge the
+    interrupt via AcknowledgeInterrupt and can provide ApplyAction parameters to change the simulation
+    before any previously request Run continues. They can also provide new conditions for which the interrupt
+    should trigger; by default they are cancelled on acknowledgement.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -97,76 +108,179 @@ class EngineServiceStub(object):
 
 
 class EngineServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
+
+    Users can create runs, create subscriptions which will collect data from the simulation
+    and make it accessible via SubscriptionStream or FetchSubscription
+
+    Users step the simulation via Run and can change any simulation parameter accessible via
+    the TraCI API using ApplyActions. They can also set interrupts via RegisterInterrupt, which
+    will interrupt Run requests, by issuing an InterruptEvent. Users must then acknowledge the
+    interrupt via AcknowledgeInterrupt and can provide ApplyAction parameters to change the simulation
+    before any previously request Run continues. They can also provide new conditions for which the interrupt
+    should trigger; by default they are cancelled on acknowledgement.
+    """
 
     def CreateRun(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """CreateRun initialises the simulation engine in such a way that it can subsequently be stepped.
+
+        Input:
+
+        - `sumocfg_path` str: A path to a SUMO config file
+        - `sumo_binary` str: One of "sumo-gui" or "sumo". Running with "sumo-gui" is experiemental due to a `libsumo` limitation.
+        - `step_length_ms` int > 0: Optional integer value which sets how many milliseconds each simulation step should step.
+
+        Preconditions:
+
+        - `SUMO_HOME` must be declared with the correct path to a SUMO executable
+
+        Postconditions:
+
+        - A run_id is returned to the user. All preparations have been made, so any other coroutine can now be used.
+
+        Output:
+
+        - `run_id`: A string containing a UUID for the run that was just created.
+
+        Failure Modes:
+
+        - `INVALID_ARGUMENT`: The run could not be started, such as when the `sumocfg_path` is invalid
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def Run(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Run steps the simulation forward
+
+        Invoking run causes the simulation to step forward by `steps`, `time`, or until `max-steps` or `max-time` are reached.
+        For now, only `steps` is supported. Run can be interrupted by registering interrupts via RegisterInterrupt.
+
+        Input:
+
+        - `run_id` str: A valid `run_id`, obtained in the response of CreateRun
+        - `run_mode`: ONE OF `steps`, `time`, `max_steps`, or `max_time`. Not `max_steps` and `max_time` are currently unsupported.
+
+        Preconditions:
+
+        - The run was created (implicit because there is no other way to obtain `run_id`) 
+        - Only one run can be executing at a time (no concurrent runs).
+
+        Postconditions:
+
+        - The run is stepped as forward as requested. If multiple `run_modes` were specified, the last written field from gRPC's perspective will be used.
+        - If interrupt trigger conditions were met, their actions were applied before the next step occurred.
+
+        Output:
+
+        - `run_id`: The run that was just stepped
+        - `new_step`: The step number that was last applied; the next step will be `new_step` + 1.
+        - `new_time`: The timestamp (in seconds) of the simulation after this Run finished.
+
+        Failure Modes:
+
+        - `NOT_FOUND`: The `run_id` was not found in the list of created runs.
+        - `ALREADY_EXISTS`: A run is currently executing for this `run_id`.
+        - `ABORTED`: The run with id `run_id` was closed and can no longer be stepped.
+        - `UNIMPLEMENTED`: The request asked to step via `max_step` or `max_time`, these are currently unsupported.
+        - `INVALID_ARGUMENT`: The request did not specify the run_mode.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def CloseRun(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """CloseRun closes a run
+
+        Invoking CloseRun causes the specified run to transition to a state where it is no longer possible to call Run or ApplyActions for that run. The connection via `libsumo` is also severed.
+
+        Inputs:
+
+        - `run_id` str: A valid `run_id`, obtained in the response of CreateRun
+
+        Preconditions:
+
+        - A run is not currently executing for `run_id`. A warning will be issued, but the run will be left in an undefined state.
+        - The run is not already closed
+
+        Postconditions:
+
+        - All existing subscriptions for this run are cancelled
+        - run_id remains preserved to query historical run data.
+        - The run will no longer be modifiable via other coroutines.
+
+        Outputs:
+
+        - `run_id` str: The run_id of the run that was just closed.
+
+        Failure Modes:
+
+        - `NOT_FOUND`: The `run_id` was not found in the list of created runs.
+        - `INVALID_ARGUMENT`: The specified run was already closed.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ApplyActions(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """ApplyActions
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def StreamTelemetry(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """StreamTelemetry
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def StreamSubscriptions(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """StreamSubscriptions
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def Subscribe(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Subscribe
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def Unsubscribe(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Unsubscribe
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RegisterInterrupt(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """RegisterInterrupt
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def AcknowledgeInterrupt(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """AcknowledgeInterrupt
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def CancelInterrupt(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """CancelInterrupt
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def FetchSubscription(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """FetchSubscription
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -243,7 +357,18 @@ def add_EngineServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class EngineService(object):
-    """Missing associated documentation comment in .proto file."""
+    """EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
+
+    Users can create runs, create subscriptions which will collect data from the simulation
+    and make it accessible via SubscriptionStream or FetchSubscription
+
+    Users step the simulation via Run and can change any simulation parameter accessible via
+    the TraCI API using ApplyActions. They can also set interrupts via RegisterInterrupt, which
+    will interrupt Run requests, by issuing an InterruptEvent. Users must then acknowledge the
+    interrupt via AcknowledgeInterrupt and can provide ApplyAction parameters to change the simulation
+    before any previously request Run continues. They can also provide new conditions for which the interrupt
+    should trigger; by default they are cancelled on acknowledgement.
+    """
 
     @staticmethod
     def CreateRun(request,
