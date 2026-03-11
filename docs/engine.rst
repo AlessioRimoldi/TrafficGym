@@ -21,6 +21,14 @@ engine.client module
    :show-inheritance:
    :undoc-members:
 
+engine.helpers module
+---------------------
+
+.. automodule:: engine.helpers
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 engine.server module
 --------------------
 

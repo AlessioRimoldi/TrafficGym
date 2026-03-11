@@ -4,6 +4,14 @@ engine.adapters package
 Submodules
 ----------
 
+engine.adapters.factories module
+--------------------------------
+
+.. automodule:: engine.adapters.factories
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 engine.adapters.fake\_adapter module
 ------------------------------------
 

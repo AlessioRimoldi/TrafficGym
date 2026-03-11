@@ -4,6 +4,14 @@ engine.ports package
 Submodules
 ----------
 
+engine.ports.adapter\_factory module
+------------------------------------
+
+.. automodule:: engine.ports.adapter_factory
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 engine.ports.simulation module
 ------------------------------
 

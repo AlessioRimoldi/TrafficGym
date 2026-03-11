@@ -21,7 +21,7 @@ author = 'Diego Van Overberghe, Alessio Rimoldi'
 extensions = [
   "sphinx.ext.autodoc",
   "sphinx.ext.napoleon",
-  "sphinx_autodoc_typehints"
+  "sphinx_autodoc_typehints",
 ]
 
 autodoc_default_options = {
