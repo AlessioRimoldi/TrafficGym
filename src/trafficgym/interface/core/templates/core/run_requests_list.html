@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en-GB">
+    <head>
+        <meta charset="utf-8">
+        <title>Run Requests</title>
+    </head>
+
+<body>
+    <h1> Run Requests List </h1>
+    {% if run_requests_list %}
+        <ul>
+            {% for run_request in run_requests_list %}
+                <li><a href="/run_request/{{run_request.id}}">{{run_request.id}}</a> ({{run_request.created_at}}): {{run_request.status}}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p> No run requests to display </p>
+    {% endif %}
+</body>

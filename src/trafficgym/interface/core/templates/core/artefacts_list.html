@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en-GB">
+    <head>
+        <meta charset="utf-8">
+        <title>Artefacts List</title>
+    </head>
+
+<body>
+    <h1> Artefacts List </h1>
+    {% if artefacts_list %}
+        <ul>
+            {% for artefact in artefacts_list %}
+                <li>Artefact <a href="/artefact/{{artefact.sha256}}">{{artefact.original_name}}</a>, created at {{artefact.created_at}}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p> No artefacts to display </p>
+    {% endif %}
+</body>
