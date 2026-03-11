@@ -1,1 +1,5 @@
-__pycache__
+__pycache__/
+.vscode/
+.coverage
+src/sumo_workbench_engine.egg-info
+docs/_build

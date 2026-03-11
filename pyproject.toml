@@ -1,0 +1,34 @@
+[project]
+name = "sumo-workbench-engine"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+  "grpcio>=1.60",
+  "grpcio-tools>=1.60",
+  "protobuf>=4.25",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+mypy_path = ["src", "tests"]
+explicit_package_bases = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+exclude = ["src/trafficgym/api"]
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "trafficgym.interface.config.settings"
+
+[tool.coverage.run]
+omit = [
+  "src/trafficgym/api/*",
+  "src/trafficgym/engine/client.py",
+  "tests/*"
+]

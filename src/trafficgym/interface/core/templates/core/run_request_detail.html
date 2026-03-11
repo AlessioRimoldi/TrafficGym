@@ -1,0 +1,49 @@
+
+<!doctype html>
+<html lang="en-GB">
+    <head>
+        <meta charset="utf-8">
+        <title>Run Request Detail</title>
+    </head>
+
+<body>
+{% if run_request %}
+    <h1> Run Request Detail</h1>
+
+    <h2> Run Request Properties </h2>
+    <p> ID: {{run_request.id}} <p>
+    <p> Engine Run ID: {{run_request.engine_run_id}}</p>
+    <p> Status: {{run_request.status}}</p>
+
+    <h2> Experiment </h2>
+
+    <p> Name: {{run_request.experiment.name}} </p>
+    <p> Version: v{{run_request.experiment.version}} </p>
+
+    <h3> Artefact </h3>
+        <ul>
+            <li>
+                <a href="/artefact/{{run_request.experiment.artefact.sha256}}">{{run_request.experiment.artefact}}</a>
+            </li>
+        </ul>
+
+    <h2> Scenario </h2>
+    <h3> Properties </h3>
+    
+    <p>ID: {{run_request.scenario.id}}</p>
+    <p>Name: {{run_request.scenario.name}}</p>
+
+    <h3> Artefacts </h3>
+
+    <ul>
+    {% for artefact in run_request.scenario.artefacts.all %}
+        <li>
+            <a href="/artefact/{{artefact.sha256}}">{{artefact}}</a>
+        </li>
+    {% endfor %}
+    </ul>
+
+{% else %}
+    <p> No run_request detail to display </p>
+{% endif %}
+</body>

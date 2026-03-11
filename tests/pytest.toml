@@ -1,0 +1,5 @@
+[pytest]
+timeout = 1
+timeout_method = "signal"
+addopts = ["--import-mode=importlib"]
+strict = true

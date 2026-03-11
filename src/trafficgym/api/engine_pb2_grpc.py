@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import engine_pb2 as engine__pb2
+from trafficgym.api import engine_pb2 as trafficgym_dot_api_dot_engine__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in engine_pb2_grpc.py depends on'
+        + ' but the generated code in trafficgym/api/engine_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -26,7 +26,18 @@ if _version_not_supported:
 
 
 class EngineServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
+
+    Users can create runs, create subscriptions which will collect data from the simulation
+    and make it accessible via SubscriptionStream or FetchSubscription
+
+    Users step the simulation via Run and can change any simulation parameter accessible via
+    the TraCI API using ApplyActions. They can also set interrupts via RegisterInterrupt, which
+    will interrupt Run requests, by issuing an InterruptEvent. Users must then acknowledge the
+    interrupt via AcknowledgeInterrupt and can provide ApplyAction parameters to change the simulation
+    before any previously request Run continues. They can also provide new conditions for which the interrupt
+    should trigger; by default they are cancelled on acknowledgement.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -36,49 +47,240 @@ class EngineServiceStub(object):
         """
         self.CreateRun = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/CreateRun',
-                request_serializer=engine__pb2.CreateRunRequest.SerializeToString,
-                response_deserializer=engine__pb2.CreateRunResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.FromString,
                 _registered_method=True)
-        self.StartRun = channel.unary_unary(
-                '/sumo.engine.v1.EngineService/StartRun',
-                request_serializer=engine__pb2.StartRunRequest.SerializeToString,
-                response_deserializer=engine__pb2.StartRunResponse.FromString,
+        self.Run = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/Run',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.RunRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.RunResponse.FromString,
+                _registered_method=True)
+        self.CloseRun = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/CloseRun',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.FromString,
                 _registered_method=True)
         self.ApplyActions = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/ApplyActions',
-                request_serializer=engine__pb2.ActionBundle.SerializeToString,
-                response_deserializer=engine__pb2.ApplyActionsResponse.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
                 _registered_method=True)
         self.StreamTelemetry = channel.unary_stream(
                 '/sumo.engine.v1.EngineService/StreamTelemetry',
-                request_serializer=engine__pb2.StreamTelemetryRequest.SerializeToString,
-                response_deserializer=engine__pb2.TelemetryFrame.FromString,
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+                _registered_method=True)
+        self.StreamSubscriptions = channel.unary_stream(
+                '/sumo.engine.v1.EngineService/StreamSubscriptions',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+                _registered_method=True)
+        self.Subscribe = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/Subscribe',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.FromString,
+                _registered_method=True)
+        self.Unsubscribe = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/Unsubscribe',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.FromString,
+                _registered_method=True)
+        self.RegisterInterrupt = channel.unary_stream(
+                '/sumo.engine.v1.EngineService/RegisterInterrupt',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
+                _registered_method=True)
+        self.AcknowledgeInterrupt = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/AcknowledgeInterrupt',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
+                _registered_method=True)
+        self.CancelInterrupt = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/CancelInterrupt',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.FromString,
+                _registered_method=True)
+        self.FetchSubscription = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/FetchSubscription',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.FetchRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.FetchResponse.FromString,
                 _registered_method=True)
 
 
 class EngineServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
+
+    Users can create runs, create subscriptions which will collect data from the simulation
+    and make it accessible via SubscriptionStream or FetchSubscription
+
+    Users step the simulation via Run and can change any simulation parameter accessible via
+    the TraCI API using ApplyActions. They can also set interrupts via RegisterInterrupt, which
+    will interrupt Run requests, by issuing an InterruptEvent. Users must then acknowledge the
+    interrupt via AcknowledgeInterrupt and can provide ApplyAction parameters to change the simulation
+    before any previously request Run continues. They can also provide new conditions for which the interrupt
+    should trigger; by default they are cancelled on acknowledgement.
+    """
 
     def CreateRun(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """CreateRun initialises the simulation engine in such a way that it can subsequently be stepped.
+
+        Input:
+
+        - `sumocfg_path` str: A path to a SUMO config file
+        - `sumo_binary` str: One of "sumo-gui" or "sumo". Running with "sumo-gui" is experiemental due to a `libsumo` limitation.
+        - `step_length_ms` int > 0: Optional integer value which sets how many milliseconds each simulation step should step.
+
+        Preconditions:
+
+        - `SUMO_HOME` must be declared with the correct path to a SUMO executable
+
+        Postconditions:
+
+        - A run_id is returned to the user. All preparations have been made, so any other coroutine can now be used.
+
+        Output:
+
+        - `run_id`: A string containing a UUID for the run that was just created.
+
+        Failure Modes:
+
+        - `INVALID_ARGUMENT`: The run could not be started, such as when the `sumocfg_path` is invalid
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def StartRun(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+    def Run(self, request, context):
+        """Run steps the simulation forward
+
+        Invoking run causes the simulation to step forward by `steps`, `time`, or until `max-steps` or `max-time` are reached.
+        For now, only `steps` is supported. Run can be interrupted by registering interrupts via RegisterInterrupt.
+
+        Input:
+
+        - `run_id` str: A valid `run_id`, obtained in the response of CreateRun
+        - `run_mode`: ONE OF `steps`, `time`, `max_steps`, or `max_time`. Not `max_steps` and `max_time` are currently unsupported.
+
+        Preconditions:
+
+        - The run was created (implicit because there is no other way to obtain `run_id`) 
+        - Only one run can be executing at a time (no concurrent runs).
+
+        Postconditions:
+
+        - The run is stepped as forward as requested. If multiple `run_modes` were specified, the last written field from gRPC's perspective will be used.
+        - If interrupt trigger conditions were met, their actions were applied before the next step occurred.
+
+        Output:
+
+        - `run_id`: The run that was just stepped
+        - `new_step`: The step number that was last applied; the next step will be `new_step` + 1.
+        - `new_time`: The timestamp (in seconds) of the simulation after this Run finished.
+
+        Failure Modes:
+
+        - `NOT_FOUND`: The `run_id` was not found in the list of created runs.
+        - `ALREADY_EXISTS`: A run is currently executing for this `run_id`.
+        - `ABORTED`: The run with id `run_id` was closed and can no longer be stepped.
+        - `UNIMPLEMENTED`: The request asked to step via `max_step` or `max_time`, these are currently unsupported.
+        - `INVALID_ARGUMENT`: The request did not specify the run_mode.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CloseRun(self, request, context):
+        """CloseRun closes a run
+
+        Invoking CloseRun causes the specified run to transition to a state where it is no longer possible to call Run or ApplyActions for that run. The connection via `libsumo` is also severed.
+
+        Inputs:
+
+        - `run_id` str: A valid `run_id`, obtained in the response of CreateRun
+
+        Preconditions:
+
+        - A run is not currently executing for `run_id`. A warning will be issued, but the run will be left in an undefined state.
+        - The run is not already closed
+
+        Postconditions:
+
+        - All existing subscriptions for this run are cancelled
+        - run_id remains preserved to query historical run data.
+        - The run will no longer be modifiable via other coroutines.
+
+        Outputs:
+
+        - `run_id` str: The run_id of the run that was just closed.
+
+        Failure Modes:
+
+        - `NOT_FOUND`: The `run_id` was not found in the list of created runs.
+        - `INVALID_ARGUMENT`: The specified run was already closed.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ApplyActions(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """ApplyActions
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def StreamTelemetry(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """StreamTelemetry
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StreamSubscriptions(self, request, context):
+        """StreamSubscriptions
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Subscribe(self, request, context):
+        """Subscribe
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Unsubscribe(self, request, context):
+        """Unsubscribe
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RegisterInterrupt(self, request, context):
+        """RegisterInterrupt
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AcknowledgeInterrupt(self, request, context):
+        """AcknowledgeInterrupt
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelInterrupt(self, request, context):
+        """CancelInterrupt
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def FetchSubscription(self, request, context):
+        """FetchSubscription
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -88,23 +290,63 @@ def add_EngineServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateRun': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateRun,
-                    request_deserializer=engine__pb2.CreateRunRequest.FromString,
-                    response_serializer=engine__pb2.CreateRunResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.SerializeToString,
             ),
-            'StartRun': grpc.unary_unary_rpc_method_handler(
-                    servicer.StartRun,
-                    request_deserializer=engine__pb2.StartRunRequest.FromString,
-                    response_serializer=engine__pb2.StartRunResponse.SerializeToString,
+            'Run': grpc.unary_unary_rpc_method_handler(
+                    servicer.Run,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.RunRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.RunResponse.SerializeToString,
+            ),
+            'CloseRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.CloseRun,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.SerializeToString,
             ),
             'ApplyActions': grpc.unary_unary_rpc_method_handler(
                     servicer.ApplyActions,
-                    request_deserializer=engine__pb2.ActionBundle.FromString,
-                    response_serializer=engine__pb2.ApplyActionsResponse.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
             ),
             'StreamTelemetry': grpc.unary_stream_rpc_method_handler(
                     servicer.StreamTelemetry,
-                    request_deserializer=engine__pb2.StreamTelemetryRequest.FromString,
-                    response_serializer=engine__pb2.TelemetryFrame.SerializeToString,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.SerializeToString,
+            ),
+            'StreamSubscriptions': grpc.unary_stream_rpc_method_handler(
+                    servicer.StreamSubscriptions,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.StreamRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.SerializeToString,
+            ),
+            'Subscribe': grpc.unary_unary_rpc_method_handler(
+                    servicer.Subscribe,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.SerializeToString,
+            ),
+            'Unsubscribe': grpc.unary_unary_rpc_method_handler(
+                    servicer.Unsubscribe,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.SerializeToString,
+            ),
+            'RegisterInterrupt': grpc.unary_stream_rpc_method_handler(
+                    servicer.RegisterInterrupt,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.InterruptEvent.SerializeToString,
+            ),
+            'AcknowledgeInterrupt': grpc.unary_unary_rpc_method_handler(
+                    servicer.AcknowledgeInterrupt,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.SerializeToString,
+            ),
+            'CancelInterrupt': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelInterrupt,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.SerializeToString,
+            ),
+            'FetchSubscription': grpc.unary_unary_rpc_method_handler(
+                    servicer.FetchSubscription,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.FetchRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.FetchResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -115,7 +357,18 @@ def add_EngineServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class EngineService(object):
-    """Missing associated documentation comment in .proto file."""
+    """EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
+
+    Users can create runs, create subscriptions which will collect data from the simulation
+    and make it accessible via SubscriptionStream or FetchSubscription
+
+    Users step the simulation via Run and can change any simulation parameter accessible via
+    the TraCI API using ApplyActions. They can also set interrupts via RegisterInterrupt, which
+    will interrupt Run requests, by issuing an InterruptEvent. Users must then acknowledge the
+    interrupt via AcknowledgeInterrupt and can provide ApplyAction parameters to change the simulation
+    before any previously request Run continues. They can also provide new conditions for which the interrupt
+    should trigger; by default they are cancelled on acknowledgement.
+    """
 
     @staticmethod
     def CreateRun(request,
@@ -132,8 +385,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/CreateRun',
-            engine__pb2.CreateRunRequest.SerializeToString,
-            engine__pb2.CreateRunResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.CreateRunRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.CreateRunResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -145,7 +398,7 @@ class EngineService(object):
             _registered_method=True)
 
     @staticmethod
-    def StartRun(request,
+    def Run(request,
             target,
             options=(),
             channel_credentials=None,
@@ -158,9 +411,36 @@ class EngineService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/sumo.engine.v1.EngineService/StartRun',
-            engine__pb2.StartRunRequest.SerializeToString,
-            engine__pb2.StartRunResponse.FromString,
+            '/sumo.engine.v1.EngineService/Run',
+            trafficgym_dot_api_dot_engine__pb2.RunRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.RunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CloseRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/CloseRun',
+            trafficgym_dot_api_dot_engine__pb2.CloseRunRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.CloseRunResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -186,8 +466,8 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/ApplyActions',
-            engine__pb2.ActionBundle.SerializeToString,
-            engine__pb2.ApplyActionsResponse.FromString,
+            trafficgym_dot_api_dot_engine__pb2.ApplyActionsRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -213,8 +493,197 @@ class EngineService(object):
             request,
             target,
             '/sumo.engine.v1.EngineService/StreamTelemetry',
-            engine__pb2.StreamTelemetryRequest.SerializeToString,
-            engine__pb2.TelemetryFrame.FromString,
+            trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StreamSubscriptions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/StreamSubscriptions',
+            trafficgym_dot_api_dot_engine__pb2.StreamRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.TelemetryFrame.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Subscribe(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/Subscribe',
+            trafficgym_dot_api_dot_engine__pb2.SubscribeRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.SubscribeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Unsubscribe(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/Unsubscribe',
+            trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RegisterInterrupt(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/RegisterInterrupt',
+            trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AcknowledgeInterrupt(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/AcknowledgeInterrupt',
+            trafficgym_dot_api_dot_engine__pb2.AcknowledgeInterruptRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.ApplyActionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelInterrupt(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/CancelInterrupt',
+            trafficgym_dot_api_dot_engine__pb2.CancelInterruptRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.CancelInterruptResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def FetchSubscription(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/FetchSubscription',
+            trafficgym_dot_api_dot_engine__pb2.FetchRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.FetchResponse.FromString,
             options,
             channel_credentials,
             insecure,

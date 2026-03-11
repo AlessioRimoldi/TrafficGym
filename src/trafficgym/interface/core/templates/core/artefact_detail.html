@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en-GB">
+    <head>
+        <meta charset="utf-8">
+        <title>Artefact Detail</title>
+    </head>
+
+<body>
+{% if artefact %}
+    <h1> Artefact Detail</h1>
+
+    <h2> Artefact Properties </h2>
+    <p> Created at: {{artefact.created_at}}</p>
+    <p> Metadata: {{artefact.metadata}}</p>
+    <p> SHA256: {{artefact.sha256}}</p>
+    <p> Original Name: {{artefact.original_name}}</p>
+    <p> Path: <a target="_blank" href="{{artefact.file.url}}">{{artefact.file.url}}</a></p>
+{% else %}
+    <p> No artefact detail to display </p>
+{% endif %}
+</body>
