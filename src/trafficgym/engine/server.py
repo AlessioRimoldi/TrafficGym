@@ -1,12 +1,13 @@
 from __future__ import annotations
 import asyncio
 
-import grpc
+import grpc.aio
 
 # from .kernel import RunConfig, RunState, Interrupt, InterruptEvent, ValueType
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.api.engine_pb2 import (
-    KeyValue,
+    CustomValue,
+    NamedNullableString,
     EQU,
     NEQ,
     GRT,
@@ -36,9 +37,7 @@ from trafficgym.api.engine_pb2 import (
     FetchResponse,
 )
 
-from google.protobuf.struct_pb2 import Value
-
-from trafficgym.engine.helpers import extract_value, ExtractedValueType
+from trafficgym.engine.helpers import extract_value
 
 from trafficgym.engine.ports.simulation import (
     SimulationPort,
@@ -57,7 +56,7 @@ from dataclasses import dataclass
 # from trafficgym.engine.adapters.fake_adapter import FakeAdapter
 
 # from libsumo import DOMAINS
-from typing import Any, Callable, AsyncIterator, Literal, NoReturn
+from typing import cast, Callable, AsyncIterator, Literal
 
 from functools import partial
 
@@ -73,7 +72,7 @@ class Subscription:
         domain: str,
         getter_name: str,
         object_id: str,
-        parameters: dict[str, Value],
+        parameters: dict[str, CustomValue],
     ):
         self._domain = domain
         self._getter_name = getter_name
@@ -133,7 +132,7 @@ class SubscriptionManager:
         self,
         simulation: SimulationPort,
         subscription_queue: asyncio.Queue[TelemetryFrame | None],
-        frame_builder: Callable[[list[KeyValue]], TelemetryFrame],
+        frame_builder: Callable[[list[NamedNullableString]], TelemetryFrame],
     ):
         self.simulation = simulation
         self.subscription_queue = subscription_queue
@@ -169,7 +168,9 @@ class SubscriptionManager:
         q = self.subscription_queue
         frame = self._frame_builder(
             [
-                KeyValue(key=k, has_value=v is not None, value=v or "")
+                NamedNullableString(
+                    name=k, has_value=v is not None, value=v or ""
+                )
                 for k, v in self.newMetrics.items()
             ]
         )
@@ -177,7 +178,7 @@ class SubscriptionManager:
 
     def lookup_recent_collection(self, fingerprint: str) -> str | None:
         history = self.metrics.get(fingerprint)
-        if not history:
+        if history is None:
             return None
         else:
             return history[-1]
@@ -187,7 +188,7 @@ class SubscriptionManager:
         domain: str,
         getter_name: str,
         object_id: str,
-        parameters: dict[str, Value] | None = None,
+        parameters: dict[str, CustomValue] | None = None,
     ) -> str:
         parameters = parameters or {}
 
@@ -240,7 +241,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self._adapter_factory = adapter_factory
 
     def _build_frame(
-        self, metrics: list[KeyValue], run_id: str
+        self, metrics: list[NamedNullableString], run_id: str
     ) -> TelemetryFrame:
         if run_id not in self._runs:
             raise RuntimeError("Run ID not found")
@@ -265,7 +266,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         frame = self._build_frame(
             run_id=run_id,
-            metrics=[KeyValue(key=log_type, has_value=True, value=msg)],
+            metrics=[
+                NamedNullableString(name=log_type, has_value=True, value=msg)
+            ],
         )
 
         await self._runs[run_id].telemetry_queue.put(frame)
@@ -273,7 +276,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     async def CreateRun(
         self,
         request: CreateRunRequest,
-        context: grpc.ServicerContext,
+        context: grpc.aio.ServicerContext[CreateRunRequest, CreateRunResponse],
     ) -> CreateRunResponse:
         logging.debug(f"CreateRun: {request}")
         cfg = RunConfig(
@@ -292,7 +295,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         try:
             run.start()
         except libsumo.TraCIException as e:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, f"Error running SUMO: {e}"
             )
 
@@ -315,13 +318,15 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return CreateRunResponse(run_id=run.run_id, input_artifacts=[])
 
     async def Run(
-        self, request: RunRequest, context: grpc.ServicerContext
+        self,
+        request: RunRequest,
+        context: grpc.aio.ServicerContext[RunRequest, RunResponse],
     ) -> RunResponse:
         logging.debug(f"Run: {request}")
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
@@ -331,13 +336,13 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             logging.warning(
                 f"Trying to start a run in {run_id}, but this run is already executing."
             )
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.ALREADY_EXISTS,
                 "Run is already executing, maybe await its end",
             )
 
         if runContext.run.closed:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.ABORTED,
                 "Run was closed and can not longer be run",
             )
@@ -380,20 +385,22 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return RunResponse(run_id=run_id, new_step=new_step, new_time=new_time)
 
     async def CloseRun(
-        self, request: CloseRunRequest, context: grpc.ServicerContext
+        self,
+        request: CloseRunRequest,
+        context: grpc.aio.ServicerContext[CloseRunRequest, CloseRunResponse],
     ) -> CloseRunResponse:
         logging.debug(f"CloseRun: {request}")
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
         runContext = self._runs[run_id]
 
         if runContext.run.closed:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, "Run already closed"
             )
 
@@ -408,20 +415,24 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         return CloseRunResponse(run_id=run_id)
 
     async def ApplyActions(
-        self, request: ApplyActionsRequest, context: grpc.ServicerContext
+        self,
+        request: ApplyActionsRequest,
+        context: grpc.aio.ServicerContext[
+            ApplyActionsRequest, ApplyActionsResponse
+        ],
     ) -> ApplyActionsResponse:
         logging.debug(f"ApplyAction: {request}")
-        application_errors: list[KeyValue] = []
-        application_info: list[KeyValue] = []
+        application_errors: list[NamedNullableString] = []
+        application_info: list[NamedNullableString] = []
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
         if request.action_bundle.HasField("step"):
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.UNIMPLEMENTED,
                 "steps not supported in ApplyActions.",
             )
@@ -443,24 +454,24 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 except (AttributeError, TypeError, libsumo.TraCIException) as e:
                     logging.warning(
                         f"Received a malformed setter request: {a.setter.domain}."
-                        f"{a.setter.parameters})\n{e}"
+                        f"{str(a.setter.parameters).replace("\n", "").replace(" ", "")}\n{e}"
                     )
                     application_errors.append(
-                        KeyValue(
-                            key="Error",
+                        NamedNullableString(
+                            name="Error",
                             has_value=True,
                             value=f"Setter: {str(e)}",
                         )
                     )
                     # if we abort here, then next actions in bundle won't be applied
-                    # await context.abort(
+                    # await await context.abort(
                     #     grpc.StatusCode.INVALID_ARGUMENT,
                     #     "Setter not found or request malformed.",
                     # )
 
                 application_info.append(
-                    KeyValue(
-                        key="Info",
+                    NamedNullableString(
+                        name="Info",
                         has_value=True,
                         value=f"Setter Called {a.setter.domain}.{a.setter.setter_name}"
                         f"{a.setter.parameters})",
@@ -477,13 +488,17 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         )
 
     async def StreamTelemetry(
-        self, request: StreamRequest, context: grpc.ServicerContext
+        self,
+        request: StreamRequest,
+        context: grpc.aio.ServicerContext[
+            StreamRequest, AsyncIterator[TelemetryFrame]
+        ],
     ) -> AsyncIterator[TelemetryFrame]:
         logging.debug(f"StreamTelemetry: {request}")
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
@@ -497,13 +512,17 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             yield frame
 
     async def StreamSubscriptions(
-        self, request: StreamRequest, context: grpc.ServicerContext
+        self,
+        request: StreamRequest,
+        context: grpc.aio.ServicerContext[
+            StreamRequest, AsyncIterator[TelemetryFrame]
+        ],
     ) -> AsyncIterator[TelemetryFrame]:
         logging.debug(f"StreamSubscription: {request}")
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
@@ -519,12 +538,12 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     async def Subscribe(
         self,
         request: SubscribeRequest,
-        context: grpc.ServicerContext,
+        context: grpc.aio.ServicerContext[SubscribeRequest, SubscribeResponse],
     ) -> SubscribeResponse:
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
@@ -555,7 +574,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     async def Unsubscribe(
         self,
         request: UnsubscribeRequest,
-        context: grpc.ServicerContext,
+        context: grpc.aio.ServicerContext[
+            UnsubscribeRequest, UnsubscribeResponse
+        ],
     ) -> UnsubscribeResponse:
         await context.abort(
             grpc.StatusCode.UNIMPLEMENTED, "unsubscription not implemented"
@@ -564,7 +585,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     async def RegisterInterrupt(
         self,
         request: RegisterInterruptRequest,
-        context: grpc.ServicerContext,
+        context: grpc.aio.ServicerContext[
+            RegisterInterruptRequest, AsyncIterator[EngineInterruptEvent]
+        ],
     ) -> AsyncIterator[EngineInterruptEvent]:
         """CAUTION: Comparaison value must use the same subfield as the
         collected value, or the interrupt will never trigger
@@ -572,7 +595,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
-            yield context.abort(
+            await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
@@ -581,7 +604,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         if not runContext.subscription_manager.check_subscription(
             request.trigger_metric.subscription_fingerprint
         ):
-            yield context.abort(
+            await context.abort(
                 grpc.StatusCode.FAILED_PRECONDITION,
                 "The interrupt metric must first be subscribed to.",
             )
@@ -618,7 +641,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     async def AcknowledgeInterrupt(
         self,
         request: AcknowledgeInterruptRequest,
-        context: grpc.ServicerContext,
+        context: grpc.aio.ServicerContext[
+            AcknowledgeInterruptRequest, ApplyActionsResponse
+        ],
     ) -> ApplyActionsResponse:
         run_id = request.run_id
         if run_id not in self._runs:
@@ -663,7 +688,12 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         request=CancelInterruptRequest(
                             run_id=run_id, interrupt_id=request.interrupt_id
                         ),
-                        context=context,
+                        context=cast(
+                            grpc.aio.ServicerContext[
+                                CancelInterruptRequest, CancelInterruptResponse
+                            ],
+                            context,
+                        ),
                     )
 
                 else:
@@ -699,7 +729,12 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     ApplyActionsRequest(
                         run_id=run_id, action_bundle=request.actions
                     ),
-                    context,
+                    context=cast(
+                        grpc.aio.ServicerContext[
+                            ApplyActionsRequest, ApplyActionsResponse
+                        ],
+                        context,
+                    ),
                 )
                 acknowledged_interrupt.interrupt_requests.task_done()
                 logging.debug("Interrupt Acknoledge Received and Processed")
@@ -717,7 +752,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
     async def CancelInterrupt(
         self,
         request: CancelInterruptRequest,
-        context: grpc.ServicerContext,
+        context: grpc.aio.ServicerContext[
+            CancelInterruptRequest, CancelInterruptResponse
+        ],
     ) -> CancelInterruptResponse:
         run_id = request.run_id
         if run_id not in self._runs:
@@ -748,7 +785,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         )
 
     async def FetchSubscription(
-        self, request: FetchRequest, context: grpc.ServicerContext
+        self,
+        request: FetchRequest,
+        context: grpc.aio.ServicerContext[FetchRequest, FetchResponse],
     ) -> FetchResponse:
         run_id = request.run_id
         if run_id not in self._runs:
@@ -771,14 +810,14 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         if collected is None:
             return FetchResponse(
-                fetched=KeyValue(
-                    key=request.fingerprint, has_value=False, value=""
+                fetched=NamedNullableString(
+                    name=request.fingerprint, has_value=False, value=""
                 )
             )
 
         return FetchResponse(
-            fetched=KeyValue(
-                key=request.fingerprint, has_value=True, value=collected
+            fetched=NamedNullableString(
+                name=request.fingerprint, has_value=True, value=collected
             )
         )
 
@@ -836,12 +875,16 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
                         triggered = False
 
-                        if trigger_value_kind == "number_value":
+                        if (
+                            trigger_value_kind == "float_value"
+                            or trigger_value_kind == "int_value"
+                        ):
                             recent_collection = float(recent_collection_str)
-                            recent_collection_value = Value(
-                                number_value=recent_collection
+                            trigger = (
+                                i.trigger_metric_value.int_value
+                                if trigger_value_kind == "int_value"
+                                else i.trigger_metric_value.float_value
                             )
-                            trigger = i.trigger_metric_value.number_value
 
                             if i.trigger_metric_op == EQU:
                                 triggered = recent_collection == trigger
@@ -865,9 +908,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
                         elif trigger_value_kind == "string_value":
                             trigger = i.trigger_metric_value.string_value
-                            recent_collection_value = Value(
-                                string_value=recent_collection_str
-                            )
 
                             if i.trigger_metric_op == EQU:
                                 triggered = recent_collection_str == trigger
@@ -895,7 +935,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         if triggered:
                             logging.debug("Interrupt triggered")
                             event = SimulationInterruptEvent(
-                                observed_value=recent_collection_value
+                                observed_value=i.trigger_metric_value
                             )
                             i.active_interrupt_event = event
                             await i.interrupt_requests.put(event)
@@ -928,8 +968,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                     errors = []
                     for sub, exception in failed_getters_and_exceptions:
                         errors.append(
-                            KeyValue(
-                                key=f"Error",
+                            NamedNullableString(
+                                name=f"Error",
                                 has_value=True,
                                 value=f"Failed to collect for {sub.fingerprint}: "
                                 f"{exception}: {exception.__cause__}",
@@ -948,8 +988,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 frame = self._build_frame(
                     run_id=run_id,
                     metrics=[
-                        KeyValue(
-                            key=k, has_value=True, value=str(extract_value(v))
+                        NamedNullableString(
+                            name=k, has_value=True, value=str(extract_value(v))
                         )
                         for k, v in metrics.items()
                     ],

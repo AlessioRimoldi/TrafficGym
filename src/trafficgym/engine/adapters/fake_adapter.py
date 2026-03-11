@@ -3,7 +3,7 @@ from trafficgym.engine.ports.simulation import (
     ValDict,
     InvalidGetterError,
 )
-from google.protobuf.struct_pb2 import Value
+from trafficgym.api.engine_pb2 import CustomValue
 from dataclasses import dataclass
 from trafficgym.engine.helpers import extract_value
 from libsumo import TraCIException  # type: ignore[import-untyped]
@@ -17,7 +17,7 @@ class FakeStateDictKey:
     attribute: str
 
 
-FakeStateDict = dict[FakeStateDictKey, Value]
+FakeStateDict = dict[FakeStateDictKey, CustomValue]
 
 
 class FakeAdapter(SimulationPort):
@@ -66,18 +66,23 @@ class FakeAdapter(SimulationPort):
             raise RuntimeError("fake run already closed")
         guess_name = setter_name.removeprefix("set")
 
-        if guess_name == "NoNegativeNumber":
-            value = args.get("value")
-            if value is not None and value.WhichOneof("kind") == "number_value":
-                if value.number_value < 0:
+        value = args.get("value")
+
+        if value is None:
+            raise KeyError("'value' must be set in args for FakeState")
+
+        if guess_name == "NoNegativeInt":
+            if value.WhichOneof("kind") == "int_value":
+                if value.int_value < 0:
                     raise TraCIException(
                         "invalid setter argument for noNegativeNumber"
                     )
             else:
                 raise Exception("Could not set noNegativeNumber")
 
-        if not "value" in args:
-            raise KeyError("'value' must be set in args for FakeState")
+        elif guess_name == "NoFloat":
+            if value.WhichOneof("kind") != "int_value":
+                raise TypeError("Expected an int")
 
         self.state[
             FakeStateDictKey(

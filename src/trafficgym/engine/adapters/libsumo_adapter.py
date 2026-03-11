@@ -3,8 +3,8 @@ from trafficgym.engine.ports.simulation import (
     ValDict,
     RunConfig,
 )
-from google.protobuf.struct_pb2 import Value
-from dataclasses import dataclass
+from trafficgym.api.engine_pb2 import CustomValue
+from trafficgym.engine.helpers import extract_value
 import os
 import sys
 import logging
@@ -53,10 +53,10 @@ class LibsumoAdapter(SimulationPort):
         self.step += 1
         sim_time_s = float(libsumo.simulation.getTime())
 
-        remaining = float(libsumo.simulation.getMinExpectedNumber())
+        remaining = int(libsumo.simulation.getMinExpectedNumber())
 
         metrics = {
-            "sim.remaining_veh": Value(number_value=remaining),
+            "sim.remaining_veh": CustomValue(int_value=remaining),
         }
         self.last_metrics = metrics
 
@@ -72,12 +72,10 @@ class LibsumoAdapter(SimulationPort):
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
 
-        # try:
-        setter_handle(object_id, **args)
-        # except TypeError:
-        #     if "value" in args:
-        #         args_no_value = {k: v for k, v in args.items() if k != "value"}
-        #     setter_handle(object_id, value=int(args["value"]), **args_no_value)
+        setter_handle(
+            object_id,
+            **{name: extract_value(value) for name, value in args.items()},
+        )
 
         logging.debug(
             f"Invoked setter: {domain}.{object_id}.{setter_name}_{args}"

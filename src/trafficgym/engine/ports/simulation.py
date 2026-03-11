@@ -1,12 +1,12 @@
-from google.protobuf.struct_pb2 import Value
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from trafficgym.api import engine_pb2
+from typing import Any
 import asyncio
 import uuid
 import uuid
 
-ValDict = dict[str, Value]
+ValDict = dict[str, engine_pb2.CustomValue]
 
 
 @dataclass
@@ -18,13 +18,13 @@ class RunConfig:
 @dataclass
 class InterruptEvent:
     event_id = str(uuid.uuid4())
-    observed_value: Value
+    observed_value: engine_pb2.CustomValue
 
 
 @dataclass
 class Interrupt:
     trigger_metric_fingerprint: str
-    trigger_metric_value: Value
+    trigger_metric_value: engine_pb2.CustomValue
     trigger_metric_op: engine_pb2.Operation.ValueType
     interrupt_requests: asyncio.Queue[InterruptEvent | None]
     active_interrupt_event: InterruptEvent | None = None
