@@ -86,7 +86,7 @@ class Experiment(models.Model):
     name = models.CharField(max_length=64)
     version = models.IntegerField()
     artefact: models.ForeignKey[Artefact] = models.ForeignKey(
-        Artefact, on_delete=models.deletion.CASCADE
+        Artefact, on_delete=models.PROTECT
     )
 
     class Meta:
@@ -187,3 +187,13 @@ class RunRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.created_at}: {self.status}"
+
+class LogEntry(models.Model):
+    run: models.ForeignKey[RunRequest] = models.ForeignKey(RunRequest, on_delete=models.CASCADE, related_name="logs")
+    event_time = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    level = models.CharField(max_length=20)
+    message = models.TextField()
+
+    class Meta:
+        indexes = [ models.Index(fields=["run", "created_at"]) ]

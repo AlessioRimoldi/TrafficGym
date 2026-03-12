@@ -1,9 +1,12 @@
+import logging.handlers
 import tempfile
 import uuid
 import shutil
 import importlib.util
 import grpc.aio
 import hashlib
+import logging
+import queue
 
 from celery import shared_task, Task
 from django.db import transaction
@@ -16,8 +19,20 @@ from typing import Type, Any, ParamSpec
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.experiment_sdk.experiments.base import Experiment
 from trafficgym.engine.client.driver import EngineDriver, RunHandle
-from trafficgym.interface.core.models import RunRequest
+from trafficgym.interface.core.models import RunRequest, LogEntry
 
+class DBHandler(logging.Handler):
+    def __init__(self, run: RunRequest) -> None:
+        super().__init__()
+        self.run = run
+
+    def emit(self, record: logging.LogRecord) -> None:
+        LogEntry.objects.create(
+            run=self.run,
+            level=record.levelname,
+            message=self.format(record),
+            event_time=timezone.now()
+        )
 
 async def _async_process(
     sumocfg_path: Path, ExperimentClass: Type[Experiment]
@@ -100,6 +115,16 @@ def process_run_request(
                 update_fields=["status", "worker_id", "started_at"]
             )
 
+        log_queue = queue.Queue[logging.LogRecord]()
+        handler = DBHandler(run_request)
+
+        listener = logging.handlers.QueueListener(log_queue, handler)
+        listener.start()
+
+        root_logger = logging.getLogger()
+        root_logger.addHandler(logging.handlers.QueueHandler(log_queue))
+        
+
         scenario = run_request.scenario
 
         artefacts_from_scenario = scenario.artefacts.all()
@@ -151,9 +176,9 @@ def process_run_request(
             sumocfg_path = run_dir_path / sumocfg_file_name
             experiment_path = run_dir_path / experiment_file_name
 
-            print(sumocfg_path)
-            print(experiment_path)
-            print(artefact_paths)
+            logging.debug(sumocfg_path)
+            logging.debug(experiment_path)
+            logging.debug(artefact_paths)
 
             spec = importlib.util.spec_from_file_location(
                 "experiment_module", experiment_path
@@ -198,9 +223,13 @@ def process_run_request(
                     update_fields=["status", "finished_at", "engine_run_id"]
                 )
 
-    except Exception:
+    except Exception as e:
+        root_logger.error(f"{e}", exc_info=True)
         with transaction.atomic():
             run_request.status = "FAILED"
             run_request.finished_at = timezone.now()
             run_request.save(update_fields=["status", "finished_at"])
         raise
+
+    finally:
+        root_logger.removeHandler(handler)
