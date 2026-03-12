@@ -287,7 +287,6 @@ class RunHandle:
         fingerprint: str,
         immediate_collect: bool,
     ) -> sdk.KeyValue:
-        breakpoint()
         response = await self.driver.stub.FetchSubscription(
             engine_pb2.FetchRequest(
                 run_id=self.run_id,
