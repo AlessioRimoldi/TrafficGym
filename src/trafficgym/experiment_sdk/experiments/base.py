@@ -8,4 +8,3 @@ class Experiment(ABC):
 
     @abstractmethod
     async def run_experiment(self) -> None: ...
-

@@ -11,7 +11,11 @@ from typing import (
 from trafficgym.experiment_sdk import sdk
 from functools import wraps
 from contextlib import asynccontextmanager
+# from celery.utils.log import get_task_logger
+
+import logging
 import grpc.aio
+import uuid
 
 
 def _handle_rpc_error(err: grpc.aio.AioRpcError) -> Exception:
@@ -30,6 +34,29 @@ def _handle_rpc_error(err: grpc.aio.AioRpcError) -> Exception:
         return TimeoutError(details)
     else:
         return sdk.GrpcError(details)
+
+
+# log = get_task_logger(__name__)
+log = logging.getLogger("rpc")
+log.propagate = False
+
+
+def log_rpc(
+    rpc_call_id: uuid.UUID,
+    rpc_name: str,
+    direction: Literal["REQUEST", "RESPONSE"],
+    payload: object,
+) -> None:
+    log.info(
+        f"{rpc_name} {direction} ({rpc_call_id})",
+        extra={
+            "log_type": "rpc",
+            "request_or_response": direction,
+            "rpc_name": rpc_name,
+            "rpc_call_id": rpc_call_id,
+            "payload": payload,
+        },
+    )
 
 
 P = ParamSpec("P")
@@ -55,6 +82,7 @@ T = TypeVar("T")
 def _grpc_stream_error_handler(
     fn: Callable[P, AsyncIterable[T]],
 ) -> Callable[P, AsyncIterator[T]]:
+    @wraps(fn)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> AsyncIterator[T]:
         try:
             async for item in fn(*args, **kwargs):
@@ -98,13 +126,18 @@ class EngineDriver:
         sumo_binary: Literal["sumo", "sumo-gui"],
         step_length_ms: int,
     ) -> AsyncIterator[RunHandle]:
-        response = await self.stub.CreateRun(
-            engine_pb2.CreateRunRequest(
+        request = sdk.CreateRunRequest(
                 sumocfg_path=sumocfg_path,
                 sumo_binary=sumo_binary,
                 step_length_ms=step_length_ms,
             )
-        )
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(rpc_call_id, "create_run", "REQUEST", request.to_dict())
+
+        response = sdk.CreateRunResponse.from_proto(await self.stub.CreateRun(request.to_proto()))
+
+        log_rpc(rpc_call_id, "create_run", "RESPONSE", response.to_dict())
 
         handle = RunHandle(self, response.run_id)
 
@@ -129,31 +162,55 @@ class RunHandle:
 
     @_grpc_error_handler
     async def run_max_steps(self, max_steps: int) -> sdk.RunResponse:
-        response = await self.driver.stub.Run(
-            engine_pb2.RunRequest(run_id=self.run_id, max_steps=max_steps)
-        )
-        return sdk.RunResponse.from_proto(response)
+        request = sdk.RunRequest(self.run_id, ("max_steps", max_steps))
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(rpc_call_id, "run_max_steps", "REQUEST", request.to_dict())
+
+        response = sdk.RunResponse.from_proto(await self.driver.stub.Run(request.to_proto()))
+
+        log_rpc(rpc_call_id, "run_max_steps", "RESPONSE", response.to_dict())
+
+        return response
 
     @_grpc_error_handler
     async def run_max_time(self, max_time: float) -> sdk.RunResponse:
-        response = await self.driver.stub.Run(
-            engine_pb2.RunRequest(run_id=self.run_id, max_time=max_time)
-        )
-        return sdk.RunResponse.from_proto(response)
+        request = sdk.RunRequest(run_id=self.run_id, run_mode=("max_time", max_time))
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(rpc_call_id, "run_max_time", "REQUEST", request.to_dict())
+
+        response = sdk.RunResponse.from_proto(await self.driver.stub.Run(request.to_proto()))
+
+        log_rpc(rpc_call_id, "run_max_time", "RESPONSE", response.to_dict())
+
+        return response
 
     @_grpc_error_handler
     async def run_steps(self, steps: int) -> sdk.RunResponse:
-        response = await self.driver.stub.Run(
-            engine_pb2.RunRequest(run_id=self.run_id, steps=steps)
-        )
-        return sdk.RunResponse.from_proto(response)
+        request = sdk.RunRequest(self.run_id, ("steps", steps))
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(rpc_call_id, "run_steps", "REQUEST", request.to_dict())
+
+        response = sdk.RunResponse.from_proto(await self.driver.stub.Run(request.to_proto()))
+
+        log_rpc(rpc_call_id, "run_steps", "RESPONSE", response.to_dict())
+
+        return response
 
     @_grpc_error_handler
     async def run_time(self, seconds: float) -> sdk.RunResponse:
-        response = await self.driver.stub.Run(
-            engine_pb2.RunRequest(run_id=self.run_id, time=seconds)
-        )
-        return sdk.RunResponse.from_proto(response)
+        request = sdk.RunRequest(self.run_id, ("time", seconds))
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(rpc_call_id, "run_time", "RESPONSE", request.to_dict())
+
+        response = sdk.RunResponse.from_proto(await self.driver.stub.Run(request.to_proto()))
+
+        log_rpc(rpc_call_id, "run_time", "RESPONSE", response.to_dict())
+
+        return response
 
     @_grpc_error_handler
     async def close_run(self) -> None:
@@ -170,11 +227,27 @@ class RunHandle:
     async def apply_actions(
         self, action_bundle: sdk.ActionBundle
     ) -> sdk.ApplyActionsResponse:
-        response = await self.driver.stub.ApplyActions(
-            engine_pb2.ApplyActionsRequest(
-                run_id=self.run_id, action_bundle=action_bundle.to_proto()
-            )
+        request = engine_pb2.ApplyActionsRequest(
+            run_id=self.run_id, action_bundle=action_bundle.to_proto()
         )
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(
+            rpc_call_id,
+            "apply_actions",
+            "REQUEST",
+            sdk.ApplyActionsRequest.from_proto(request).to_dict(),
+        )
+
+        response = await self.driver.stub.ApplyActions(request)
+
+        log_rpc(
+            rpc_call_id,
+            "apply_actions",
+            "RESPONSE",
+            sdk.ApplyActionsResponse.from_proto(response).to_dict(),
+        )
+
         return sdk.ApplyActionsResponse.from_proto(response)
 
     def _convert_frame(

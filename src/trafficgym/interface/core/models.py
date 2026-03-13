@@ -188,12 +188,43 @@ class RunRequest(models.Model):
     def __str__(self) -> str:
         return f"{self.created_at}: {self.status}"
 
-class LogEntry(models.Model):
-    run: models.ForeignKey[RunRequest] = models.ForeignKey(RunRequest, on_delete=models.CASCADE, related_name="logs")
+
+class WorkerLogEntry(models.Model):
+    run: models.ForeignKey[RunRequest] = models.ForeignKey(
+        RunRequest, on_delete=models.CASCADE, related_name="logs"
+    )
     event_time = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     level = models.CharField(max_length=20)
     message = models.TextField()
 
     class Meta:
-        indexes = [ models.Index(fields=["run", "created_at"]) ]
+        indexes = [models.Index(fields=["run", "created_at"])]
+
+
+class EventLogType(models.TextChoices):
+    REQUEST = "REQUEST"
+    RESPONSE = "RESPONSE"
+
+
+class RPCLogEntry(models.Model):
+    engine_run_id = models.UUIDField()
+    event_time = models.DateTimeField()
+    rpc_name = models.CharField(max_length=64)
+    rpc_call_id = models.UUIDField()
+    request_or_response = models.CharField(choices=EventLogType.choices)
+    payload = models.JSONField()
+
+
+class SubscriptionLogEntry(models.Model):
+    engine_run_id = models.UUIDField()
+    event_time = models.DateTimeField()
+    subscription_fingerprint = models.CharField(max_length=256)
+    payload = models.JSONField()
+
+
+class TelemetryLogEntry(models.Model):
+    engine_run_id = models.UUIDField()
+    event_time = models.DateTimeField()
+    telemetry_name = models.CharField(max_length=256)
+    payload = models.JSONField()

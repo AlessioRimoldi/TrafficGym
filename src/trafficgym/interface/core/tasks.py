@@ -1,4 +1,3 @@
-import logging.handlers
 import tempfile
 import uuid
 import shutil
@@ -6,7 +5,6 @@ import importlib.util
 import grpc.aio
 import hashlib
 import logging
-import queue
 
 from celery import shared_task, Task
 from django.db import transaction
@@ -19,23 +17,18 @@ from typing import Type, Any, ParamSpec
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.experiment_sdk.experiments.base import Experiment
 from trafficgym.engine.client.driver import EngineDriver, RunHandle
-from trafficgym.interface.core.models import RunRequest, LogEntry
+from trafficgym.interface.core.models import RunRequest
+from trafficgym.interface.core.logging_setup import LogPersistenceHandler
 
-class DBHandler(logging.Handler):
-    def __init__(self, run: RunRequest) -> None:
-        super().__init__()
-        self.run = run
+# event_logger = logging.getLogger("event")
+# subscription_logger = logging.getLogger("subscription")
+# telemetry_logger = logging.getLogger("telemetry")
 
-    def emit(self, record: logging.LogRecord) -> None:
-        LogEntry.objects.create(
-            run=self.run,
-            level=record.levelname,
-            message=self.format(record),
-            event_time=timezone.now()
-        )
 
 async def _async_process(
-    sumocfg_path: Path, ExperimentClass: Type[Experiment]
+    log_handler: LogPersistenceHandler,
+    sumocfg_path: Path,
+    ExperimentClass: Type[Experiment],
 ) -> RunHandle:
     async with grpc.aio.insecure_channel("127.0.0.1:50051") as channel:
         stub = engine_pb2_grpc.EngineServiceStub(channel)
@@ -43,8 +36,9 @@ async def _async_process(
         engine_driver = EngineDriver(stub)
 
         async with engine_driver.create_run(
-            str(sumocfg_path), "sumo-gui", 1000
+            str(sumocfg_path), "sumo", 1000
         ) as run:
+            log_handler.set_engine_run_id(run.run_id)
             await ExperimentClass(run).run_experiment()
             return run
 
@@ -91,22 +85,23 @@ class RunTask(Task[P, None]):
 def process_run_request(
     self: RunTask[tuple[str | uuid.UUID], None], run_request_id: str | uuid.UUID
 ) -> None:
+    handler: LogPersistenceHandler | None = None
     try:
         import asyncio
 
+        run_request = (
+            RunRequest.objects.select_for_update()
+            .select_related("scenario")
+            .prefetch_related("scenario__artefacts")
+            .select_related("experiment")
+            .prefetch_related("experiment__artefact")
+            .get(id=run_request_id)
+        )
+
+        if run_request.status != "PENDING":
+            return
+
         with transaction.atomic():
-            run_request = (
-                RunRequest.objects.select_for_update()
-                .select_related("scenario")
-                .prefetch_related("scenario__artefacts")
-                .select_related("experiment")
-                .prefetch_related("experiment__artefact")
-                .get(id=run_request_id)
-            )
-
-            if run_request.status != "PENDING":
-                return
-
             run_request.status = "PREPARING"
             run_request.worker_id = uuid.uuid4()
             run_request.started_at = timezone.now()
@@ -115,15 +110,7 @@ def process_run_request(
                 update_fields=["status", "worker_id", "started_at"]
             )
 
-        log_queue = queue.Queue[logging.LogRecord]()
-        handler = DBHandler(run_request)
-
-        listener = logging.handlers.QueueListener(log_queue, handler)
-        listener.start()
-
-        root_logger = logging.getLogger()
-        root_logger.addHandler(logging.handlers.QueueHandler(log_queue))
-        
+        handler = LogPersistenceHandler(run_request)
 
         scenario = run_request.scenario
 
@@ -211,8 +198,10 @@ def process_run_request(
                 run_request.status = "RUNNING"
                 run_request.save(update_fields=["status"])
 
+            handler.flush_queue()
+
             run_handle = asyncio.run(
-                _async_process(sumocfg_path, ExperimentClass)
+                _async_process(handler, sumocfg_path, ExperimentClass)
             )
 
             with transaction.atomic():
@@ -224,7 +213,7 @@ def process_run_request(
                 )
 
     except Exception as e:
-        root_logger.error(f"{e}", exc_info=True)
+        logging.error(f"{e}", exc_info=True)
         with transaction.atomic():
             run_request.status = "FAILED"
             run_request.finished_at = timezone.now()
@@ -232,4 +221,6 @@ def process_run_request(
         raise
 
     finally:
-        root_logger.removeHandler(handler)
+        if handler is not None:
+            handler.flush_queue()
+            handler.deregister()

@@ -58,12 +58,12 @@ message ActionBundle {
   repeated Action actions = 3;
 }
 
-message Artifact {
-  string artifact_id = 1;
-  string type = 2;
-  string uri = 3;
-  string sha256 = 4;
-}
+// message Artifact {
+//   string artifact_id = 1;
+//   string type = 2;
+//   string uri = 3;
+//   string sha256 = 4;
+// }
 
 message CreateRunRequest {
   string sumocfg_path = 1;
@@ -73,7 +73,7 @@ message CreateRunRequest {
 
 message CreateRunResponse {
   string run_id = 1;
-  repeated Artifact input_artifacts = 2;
+  // repeated Artifact input_artifacts = 2;
 }
 
 message RunRequest {

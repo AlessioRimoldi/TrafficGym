@@ -232,32 +232,15 @@ class ActionBundle(_message.Message):
 Global___ActionBundle: _TypeAlias = ActionBundle  # noqa: Y015
 
 @_typing.final
-class Artifact(_message.Message):
-    DESCRIPTOR: _descriptor.Descriptor
-
-    ARTIFACT_ID_FIELD_NUMBER: _builtins.int
-    TYPE_FIELD_NUMBER: _builtins.int
-    URI_FIELD_NUMBER: _builtins.int
-    SHA256_FIELD_NUMBER: _builtins.int
-    artifact_id: _builtins.str
-    type: _builtins.str
-    uri: _builtins.str
-    sha256: _builtins.str
-    def __init__(
-        self,
-        *,
-        artifact_id: _builtins.str = ...,
-        type: _builtins.str = ...,
-        uri: _builtins.str = ...,
-        sha256: _builtins.str = ...,
-    ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["artifact_id", b"artifact_id", "sha256", b"sha256", "type", b"type", "uri", b"uri"]  # noqa: Y015
-    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-
-Global___Artifact: _TypeAlias = Artifact  # noqa: Y015
-
-@_typing.final
 class CreateRunRequest(_message.Message):
+    """message Artifact {
+      string artifact_id = 1;
+      string type = 2;
+      string uri = 3;
+      string sha256 = 4;
+    }
+    """
+
     DESCRIPTOR: _descriptor.Descriptor
 
     SUMOCFG_PATH_FIELD_NUMBER: _builtins.int
@@ -283,17 +266,14 @@ class CreateRunResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     RUN_ID_FIELD_NUMBER: _builtins.int
-    INPUT_ARTIFACTS_FIELD_NUMBER: _builtins.int
     run_id: _builtins.str
-    @_builtins.property
-    def input_artifacts(self) -> _containers.RepeatedCompositeFieldContainer[Global___Artifact]: ...
+    """repeated Artifact input_artifacts = 2;"""
     def __init__(
         self,
         *,
         run_id: _builtins.str = ...,
-        input_artifacts: _abc.Iterable[Global___Artifact] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["input_artifacts", b"input_artifacts", "run_id", b"run_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["run_id", b"run_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CreateRunResponse: _TypeAlias = CreateRunResponse  # noqa: Y015
