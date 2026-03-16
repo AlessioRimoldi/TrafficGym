@@ -592,6 +592,7 @@ class AcknowledgeInterruptRequest(
             ),
         }
 
+
 @dataclass(frozen=True)
 class CancelInterruptRequest(SdkBase[engine_pb2.CancelInterruptRequest]):
     run_id: str
@@ -602,10 +603,13 @@ class CancelInterruptRequest(SdkBase[engine_pb2.CancelInterruptRequest]):
         return cls(proto.run_id, proto.interrupt_id)
 
     def to_proto(self) -> engine_pb2.CancelInterruptRequest:
-        return engine_pb2.CancelInterruptRequest(run_id=self.run_id, interrupt_id=self.interrupt_id)
+        return engine_pb2.CancelInterruptRequest(
+            run_id=self.run_id, interrupt_id=self.interrupt_id
+        )
 
     def to_dict(self) -> dict[str, object]:
-        return { "run_id": self.run_id, "interrupt_id": self.interrupt_id }
+        return {"run_id": self.run_id, "interrupt_id": self.interrupt_id}
+
 
 @dataclass(frozen=True)
 class CancelInterruptResponse(SdkBase[engine_pb2.CancelInterruptResponse]):
@@ -616,12 +620,14 @@ class CancelInterruptResponse(SdkBase[engine_pb2.CancelInterruptResponse]):
         return cls(proto.interrupt_id)
 
     def to_proto(self) -> engine_pb2.CancelInterruptResponse:
-        return engine_pb2.CancelInterruptResponse(interrupt_id=self.interrupt_id)
+        return engine_pb2.CancelInterruptResponse(
+            interrupt_id=self.interrupt_id
+        )
 
     def to_dict(self) -> dict[str, object]:
-        return { "interrupt_id": self.interrupt_id }
+        return {"interrupt_id": self.interrupt_id}
 
-    
+
 @dataclass(frozen=True)
 class FetchRequest(SdkBase[engine_pb2.FetchRequest]):
     run_id: str
@@ -633,10 +639,18 @@ class FetchRequest(SdkBase[engine_pb2.FetchRequest]):
         return cls(proto.run_id, proto.fingerprint, proto.requires_collect)
 
     def to_proto(self) -> engine_pb2.FetchRequest:
-        return engine_pb2.FetchRequest(run_id=self.run_id, fingerprint=self.fingerprint, requires_collect=self.requires_collect)
+        return engine_pb2.FetchRequest(
+            run_id=self.run_id,
+            fingerprint=self.fingerprint,
+            requires_collect=self.requires_collect,
+        )
 
     def to_dict(self) -> dict[str, object]:
-        return { "run_id": self.run_id, "fingerprint": self.fingerprint, "requires_collect": self.requires_collect }
+        return {
+            "run_id": self.run_id,
+            "fingerprint": self.fingerprint,
+            "requires_collect": self.requires_collect,
+        }
 
 
 @dataclass(frozen=True)
@@ -651,4 +665,19 @@ class FetchResponse(SdkBase[engine_pb2.FetchResponse]):
         return engine_pb2.FetchResponse(fetched=self.fetched.to_proto())
 
     def to_dict(self) -> dict[str, object]:
-        return { "fetched": self.fetched.to_dict() }
+        return {"fetched": self.fetched.to_dict()}
+
+
+@dataclass(frozen=True)
+class StreamRequest(SdkBase[engine_pb2.StreamRequest]):
+    run_id: str
+
+    @classmethod
+    def from_proto(cls, proto: engine_pb2.StreamRequest) -> Self:
+        return cls(proto.run_id)
+
+    def to_proto(self) -> engine_pb2.StreamRequest:
+        return engine_pb2.StreamRequest(run_id=self.run_id)
+
+    def to_dict(self) -> dict[str, object]:
+        return {"run_id": self.run_id}

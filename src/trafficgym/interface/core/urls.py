@@ -14,6 +14,11 @@ urlpatterns = [
         views.run_request_detail_view,
         name="run_request_detail",
     ),
+    path(
+        "run_request/<uuid:pk>/subscription/<str:fingerprint>",
+        views.subscription_plot,
+        name="subscription_plot",
+    ),
     path("artefacts_list/", views.artefacts_list_view, name="artefacts_list"),
     path(
         "artefact/<str:pk>/",

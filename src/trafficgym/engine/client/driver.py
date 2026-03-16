@@ -7,6 +7,8 @@ from typing import (
     ParamSpec,
     Callable,
     Awaitable,
+    Any,
+    Coroutine,
 )
 from trafficgym.experiment_sdk import sdk
 from functools import wraps
@@ -14,6 +16,7 @@ from contextlib import asynccontextmanager
 
 # from celery.utils.log import get_task_logger
 
+import asyncio
 import logging
 import grpc.aio
 import uuid
@@ -38,8 +41,8 @@ def _handle_rpc_error(err: grpc.aio.AioRpcError) -> Exception:
 
 
 # log = get_task_logger(__name__)
-log = logging.getLogger("rpc")
-log.propagate = False
+rpc_logger = logging.getLogger("rpc")
+rpc_logger.propagate = False
 
 
 def log_rpc(
@@ -48,11 +51,11 @@ def log_rpc(
     direction: Literal["REQUEST", "RESPONSE", "OTHER"],
     payload: object,
 ) -> None:
-    log.info(
+    rpc_logger.info(
         f"{rpc_name} {direction} ({rpc_call_id})",
         extra={
             "log_type": "rpc",
-            "request_or_response": direction,
+            "direction": direction,
             "rpc_name": rpc_name,
             "rpc_call_id": rpc_call_id,
             "payload": payload,
@@ -60,13 +63,18 @@ def log_rpc(
     )
 
 
+subscription_logger = logging.getLogger("subscription")
+subscription_logger.propagate = False
+telemetry_logger = logging.getLogger("telemetry")
+telemetry_logger.propagate = False
+
 P = ParamSpec("P")
 R = TypeVar("R")
 
 
 def _grpc_error_handler(
-    fn: Callable[P, Awaitable[R]],
-) -> Callable[P, Awaitable[R]]:
+    fn: Callable[P, Coroutine[Any, Any, R]],
+) -> Callable[P, Coroutine[Any, Any, R]]:
     @wraps(fn)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         try:
@@ -164,6 +172,13 @@ class RunHandle:
         self.driver = driver
         self.run_id = run_id
         self.tls = TrafficLightController(self)
+
+        self._subscription_task: asyncio.Task[None] = asyncio.create_task(
+            self._handle_subscriptions()
+        )
+        self._telemetry_task: asyncio.Task[None] = asyncio.create_task(
+            self._handle_telemetry()
+        )
 
     async def __aenter__(self) -> RunHandle:
         return self
@@ -290,19 +305,59 @@ class RunHandle:
             [sdk.KeyValue.from_proto(m) for m in frame_pb.metrics],
         )
 
-    @_grpc_stream_error_handler
-    async def stream_telemetry(self) -> AsyncIterator[sdk.TelemetryFrame]:
-        async for frame in self.driver.stub.StreamTelemetry(
-            engine_pb2.StreamRequest(run_id=self.run_id)
-        ):
-            yield self._convert_frame(frame)
+    @_grpc_error_handler
+    async def _handle_telemetry(self) -> None:
+        request = sdk.StreamRequest(self.run_id)
 
-    @_grpc_stream_error_handler
-    async def stream_subscriptions(self) -> AsyncIterator[sdk.TelemetryFrame]:
+        rpc_call_id = uuid.uuid4()
+        log_rpc(rpc_call_id, "stream_telemetry", "REQUEST", request.to_dict())
+
+        async for frame in self.driver.stub.StreamTelemetry(request.to_proto()):
+            if frame is None:
+                return
+
+            sdk_frame = self._convert_frame(frame)
+            for metric in sdk_frame.metrics:
+                telemetry_logger.info(
+                    "Telemetry data received",
+                    extra={
+                        "telemetry_name": metric.key,
+                        "payload": (
+                            metric.value.to_dict()
+                            if metric.value is not None
+                            else ""
+                        ),
+                    },
+                )
+
+    @_grpc_error_handler
+    async def _handle_subscriptions(self) -> None:
+        request = sdk.StreamRequest(self.run_id)
+
+        log_rpc(
+            uuid.uuid4(), "stream_subscriptions", "REQUEST", request.to_dict()
+        )
+
         async for frame in self.driver.stub.StreamSubscriptions(
-            engine_pb2.StreamRequest(run_id=self.run_id)
+            request.to_proto()
         ):
-            yield self._convert_frame(frame)
+            if frame is None:
+                return
+
+            sdk_frame = self._convert_frame(frame)
+
+            for metric in sdk_frame.metrics:
+                subscription_logger.info(
+                    "Subscription data received",
+                    extra={
+                        "subscription_fingerprint": metric.key,
+                        "payload": (
+                            metric.value.to_dict()
+                            if metric.value is not None
+                            else ""
+                        ),
+                    },
+                )
 
     @_grpc_error_handler
     async def subscribe(
@@ -384,19 +439,29 @@ class RunHandle:
         )
 
         rpc_call_id = uuid.uuid4()
-        log_rpc(rpc_call_id, "acknowledge_interrupt", "REQUEST", request.to_dict())
+        log_rpc(
+            rpc_call_id, "acknowledge_interrupt", "REQUEST", request.to_dict()
+        )
 
-        response = sdk.ApplyActionsResponse.from_proto(await self.driver.stub.AcknowledgeInterrupt(
-            engine_pb2.AcknowledgeInterruptRequest(
-                run_id=self.run_id,
-                interrupt_id=interrupt_id,
-                event_id=event_id,
-                actions=action_bundle.to_proto(),
-                new_interrupt_conditions=new_trigger_conditions.to_proto() if new_trigger_conditions is not None else None,
+        response = sdk.ApplyActionsResponse.from_proto(
+            await self.driver.stub.AcknowledgeInterrupt(
+                engine_pb2.AcknowledgeInterruptRequest(
+                    run_id=self.run_id,
+                    interrupt_id=interrupt_id,
+                    event_id=event_id,
+                    actions=action_bundle.to_proto(),
+                    new_interrupt_conditions=(
+                        new_trigger_conditions.to_proto()
+                        if new_trigger_conditions is not None
+                        else None
+                    ),
+                )
             )
-        ))
+        )
 
-        log_rpc(rpc_call_id, "acknowledge_interrupt", "RESPONSE", response.to_dict())
+        log_rpc(
+            rpc_call_id, "acknowledge_interrupt", "RESPONSE", response.to_dict()
+        )
 
         return response
 
@@ -407,7 +472,9 @@ class RunHandle:
         rpc_call_id = uuid.uuid4()
         log_rpc(rpc_call_id, "cancel_interrupt", "REQUEST", request.to_dict())
 
-        response = sdk.CancelInterruptResponse.from_proto(await self.driver.stub.CancelInterrupt(request.to_proto()))
+        response = sdk.CancelInterruptResponse.from_proto(
+            await self.driver.stub.CancelInterrupt(request.to_proto())
+        )
 
         log_rpc(rpc_call_id, "cancel_interrupt", "RESPONSE", response.to_dict())
 
@@ -422,8 +489,12 @@ class RunHandle:
         rpc_call_id = uuid.uuid4()
         log_rpc(rpc_call_id, "fetch_subscription", "REQUEST", request.to_dict())
 
-        response = sdk.FetchResponse.from_proto(await self.driver.stub.FetchSubscription(request.to_proto()))
+        response = sdk.FetchResponse.from_proto(
+            await self.driver.stub.FetchSubscription(request.to_proto())
+        )
 
-        log_rpc(rpc_call_id, "fetch_subscription", "RESPONSE", response.to_dict())
+        log_rpc(
+            rpc_call_id, "fetch_subscription", "RESPONSE", response.to_dict()
+        )
 
         return response.fetched

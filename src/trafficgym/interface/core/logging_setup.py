@@ -66,7 +66,7 @@ class LogPersistenceHandler(logging.Handler):
 
             if record.name not in self.logger_names:
                 WorkerLogEntry.objects.create(
-                    run=self.run,
+                    run_request=self.run,
                     event_time=event_time,
                     level=record.levelname,
                     message=self.format(record),
@@ -85,15 +85,17 @@ class LogPersistenceHandler(logging.Handler):
 
             if record.name == "rpc":
                 RPCLogEntry.objects.create(
+                    run_request=self.run,
                     engine_run_id=self.engine_run_id,
                     event_time=event_time,
-                    request_or_response=getattr(record, "request_or_response"),
+                    direction=getattr(record, "direction"),
                     rpc_name=getattr(record, "rpc_name"),
                     rpc_call_id=getattr(record, "rpc_call_id"),
                     payload=getattr(record, "payload"),
                 )
             elif record.name == "subscription":
                 SubscriptionLogEntry.objects.create(
+                    run_request=self.run,
                     engine_run_id=self.engine_run_id,
                     event_time=event_time,
                     subscription_fingerprint=getattr(
@@ -103,6 +105,7 @@ class LogPersistenceHandler(logging.Handler):
                 )
             elif record.name == "telemetry":
                 TelemetryLogEntry.objects.create(
+                    run_request=self.run,
                     engine_run_id=self.engine_run_id,
                     event_time=event_time,
                     telemetry_name=getattr(record, "telemetry_name"),

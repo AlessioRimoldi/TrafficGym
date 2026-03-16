@@ -3,7 +3,7 @@ from django.shortcuts import render, get_object_or_404
 
 # Create your views here.
 
-from .models import RunRequest, Artefact
+from .models import RunRequest, Artefact, SubscriptionLogEntry
 from django.conf import settings
 from django.http import FileResponse, Http404
 from pathlib import Path
@@ -49,3 +49,33 @@ def media_view(_: HttpRequest, filepath: Path) -> StreamingHttpResponse:
         raise Http404("File not Found")
 
     return FileResponse(open(system_path, "rb"), content_type="text/plain")
+
+
+def subscription_plot(
+    request: HttpRequest, pk: str, fingerprint: str
+) -> HttpResponse:
+    run_request = get_object_or_404(RunRequest, pk=pk)
+
+    logs = (
+        SubscriptionLogEntry.objects.filter(
+            run_request=run_request, subscription_fingerprint=fingerprint
+        )
+        .order_by("event_time")
+        .values("event_time", "payload")
+    )
+
+    timestamps = []
+    values = []
+
+    for entry in logs:
+        timestamps.append(entry["event_time"].isoformat())
+        values.append(float(entry["payload"]["value"]))
+
+    context = {
+        "timestamps": timestamps,
+        "values": values,
+        "fingerprint": fingerprint,
+        "run_request": run_request,
+    }
+
+    return render(request, "core/subscription_plot.html", context)

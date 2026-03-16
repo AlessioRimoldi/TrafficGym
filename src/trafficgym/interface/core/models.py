@@ -186,12 +186,13 @@ class RunRequest(models.Model):
     #     super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"{self.created_at}: {self.status}"
+        return str(self.id)
+    #     return f"{self.created_at}: {self.status}"
 
 
 class WorkerLogEntry(models.Model):
-    run: models.ForeignKey[RunRequest] = models.ForeignKey(
-        RunRequest, on_delete=models.CASCADE, related_name="logs"
+    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
+        RunRequest, on_delete=models.CASCADE, related_name="worker_logs"
     )
     event_time = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -199,7 +200,7 @@ class WorkerLogEntry(models.Model):
     message = models.TextField()
 
     class Meta:
-        indexes = [models.Index(fields=["run", "created_at"])]
+        indexes = [models.Index(fields=["run_request", "created_at"])]
 
 
 class EventLogType(models.TextChoices):
@@ -209,22 +210,34 @@ class EventLogType(models.TextChoices):
 
 
 class RPCLogEntry(models.Model):
+    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
+        RunRequest, on_delete=models.CASCADE, related_name="rpc_logs"
+    )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()
     rpc_name = models.CharField(max_length=64)
     rpc_call_id = models.UUIDField()
-    request_or_response = models.CharField(choices=EventLogType.choices)
+    direction = models.CharField(choices=EventLogType.choices)
     payload = models.JSONField()
 
 
 class SubscriptionLogEntry(models.Model):
+    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
+        RunRequest, on_delete=models.CASCADE, related_name="subscription_logs"
+    )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()
     subscription_fingerprint = models.CharField(max_length=256)
     payload = models.JSONField()
 
+    def __str__(self) -> str:
+        return f"{self.subscription_fingerprint}"
+
 
 class TelemetryLogEntry(models.Model):
+    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
+        RunRequest, on_delete=models.CASCADE, related_name="telemetry_logs"
+    )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()
     telemetry_name = models.CharField(max_length=256)
