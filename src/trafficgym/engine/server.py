@@ -315,7 +315,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
         self._runs[run.run_id] = new_run_context
 
-        return CreateRunResponse(run_id=run.run_id, input_artifacts=[])
+        return CreateRunResponse(run_id=run.run_id)
 
     async def Run(
         self,

@@ -98,6 +98,8 @@ def process_run_request(
             .get(id=run_request_id)
         )
 
+        handler = LogPersistenceHandler(run_request)
+
         if run_request.status != "PENDING":
             return
 
@@ -109,8 +111,6 @@ def process_run_request(
             run_request.save(
                 update_fields=["status", "worker_id", "started_at"]
             )
-
-        handler = LogPersistenceHandler(run_request)
 
         scenario = run_request.scenario
 

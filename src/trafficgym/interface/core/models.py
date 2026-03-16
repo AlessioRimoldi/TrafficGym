@@ -205,6 +205,7 @@ class WorkerLogEntry(models.Model):
 class EventLogType(models.TextChoices):
     REQUEST = "REQUEST"
     RESPONSE = "RESPONSE"
+    INFO = "INFO"
 
 
 class RPCLogEntry(models.Model):

@@ -83,7 +83,6 @@ class LogPersistenceHandler(logging.Handler):
                     f"engine_run_id not linked to logging infrastructure for {record.name}"
                 )
 
-
             if record.name == "rpc":
                 RPCLogEntry.objects.create(
                     engine_run_id=self.engine_run_id,

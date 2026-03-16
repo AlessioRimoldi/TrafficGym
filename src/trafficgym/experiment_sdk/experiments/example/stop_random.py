@@ -53,13 +53,17 @@ class stop_random(Experiment):
                         "vehicle",
                         "setSpeed",
                         chosen_veh_id,
-                        [("speed", sdk.Value(0.0))],
+                        [sdk.Parameter("speed", sdk.Value(0.0))],
                     ),
                     sdk.Action(
                         "vehicle",
                         "setSignals",
                         chosen_veh_id,
-                        [("signals", sdk.Value((1 << 2) + (1 << 10)))],
+                        [
+                            sdk.Parameter(
+                                "signals", sdk.Value((1 << 2) + (1 << 10))
+                            )
+                        ],
                     ),
                 ]
             )
@@ -76,13 +80,13 @@ class stop_random(Experiment):
                         "vehicle",
                         "setSpeed",
                         chosen_veh_id,
-                        [("speed", sdk.Value(-1.0))],
+                        [sdk.Parameter("speed", sdk.Value(-1.0))],
                     ),
                     sdk.Action(
                         "vehicle",
                         "setSignals",
                         chosen_veh_id,
-                        [("signals", sdk.Value(-1))],
+                        [sdk.Parameter("signals", sdk.Value(-1))],
                     ),
                 ]
             )
