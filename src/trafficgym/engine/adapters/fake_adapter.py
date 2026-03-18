@@ -13,7 +13,7 @@ import logging
 @dataclass(frozen=True, eq=True)
 class FakeStateDictKey:
     domain: str
-    object_id: str
+    object_id: str | None
     attribute: str
 
 
@@ -50,7 +50,7 @@ class FakeAdapter(SimulationPort):
         self,
         domain: str,
         setter_name: str,
-        object_id: str,
+        object_id: str | None,
         args: ValDict,
     ) -> None:
         """Will set the fake state for the Value of the attribute whose
@@ -98,7 +98,7 @@ class FakeAdapter(SimulationPort):
         self,
         domain: str,
         getter_name: str,
-        object_id: str,
+        object_id: str | None,
         args: ValDict,  # not sure what to do with args here...
     ) -> str:
         """Will query the fake state for the Value of the attribute whose

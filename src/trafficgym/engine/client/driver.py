@@ -130,6 +130,81 @@ class TrafficLightController:
             sdk.ActionBundle([set_trafficlight_action])
         )
 
+    @_grpc_error_handler
+    async def run_tls_program(
+        self,
+        signal_id: str,
+        phases: list[str],
+        durations: list[int],
+        initial_step: int,
+    ) -> asyncio.Task[None]:
+        """Run through the phases provided as strings.
+        Once the corresponding duration has elapsed since
+        the signal changed, switch to the next phase."""
+        assert len(phases) == len(durations)
+
+        await self.set_signal(signal_id, phases[0])
+
+        get_time_subscription = await self.run.subscribe(
+            "simulation", "getTime", None
+        )
+        # Will not work if multiple TLS programs are running as
+        # double subscription to time will raise an exception
+
+        time_subscription_name = get_time_subscription.fingerprint
+
+        interrupt_event_stream = self.run.register_interrupt(
+            sdk.TriggerConditions(
+                time_subscription_name,
+                sdk.Value(durations[0] + initial_step),
+                sdk.Operation.GEQ,
+            )
+        )
+        logging.debug("TLS Program interrupt registration sent")
+
+        async def tls_program_async() -> None:
+            i = 0
+            async for interrupt_event in interrupt_event_stream:
+                if not interrupt_event:
+                    return
+                i += 1  # start at 1 because we have already initialised state 0
+
+                try:
+                    observed_value = float(interrupt_event.observed_value)
+                except:
+                    message = "Failed to read interrupt observed value"
+                    logging.warning(message)
+                    observed_value = 0.0
+
+                await self.run.acknowledge_interrupt(
+                    interrupt_event.interrupt_id,
+                    interrupt_event.event_id,
+                    sdk.ActionBundle(
+                        [
+                            sdk.Action(
+                                "trafficlight",
+                                "setRedYellowGreenState",
+                                signal_id,
+                                [
+                                    sdk.Parameter(
+                                        "state",
+                                        sdk.Value(phases[i % len(phases)]),
+                                    )
+                                ],
+                            )
+                        ]
+                    ),
+                    sdk.TriggerConditions(
+                        time_subscription_name,
+                        sdk.Value(
+                            float(durations[i % len(phases)] + observed_value)
+                        ),
+                        sdk.Operation.GEQ,
+                    ),
+                )
+
+        return asyncio.create_task(tls_program_async(), name="tls_program")
+
 
 class EngineDriver:
     def __init__(self, stub: engine_pb2_grpc.EngineServiceAsyncStub) -> None:
@@ -364,7 +439,7 @@ class RunHandle:
         self,
         domain: str,
         getter_name: str,
-        object_id: str,
+        object_id: str | None,
         parameters: list[sdk.Parameter] | None = None,
         name: str | None = None,
     ) -> sdk.SubscriptionResponse:

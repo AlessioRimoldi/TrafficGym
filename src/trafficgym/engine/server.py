@@ -71,7 +71,7 @@ class Subscription:
         # domain: Domain,
         domain: str,
         getter_name: str,
-        object_id: str,
+        object_id: str | None,
         parameters: dict[str, CustomValue],
     ):
         self._domain = domain
@@ -187,10 +187,12 @@ class SubscriptionManager:
         self,
         domain: str,
         getter_name: str,
-        object_id: str,
+        object_id: str | None,  # Will always be str here
         parameters: dict[str, CustomValue] | None = None,
     ) -> str:
         parameters = parameters or {}
+        if object_id == "":
+            object_id = None
 
         if getter_name.startswith("_"):
             raise SubscriptionInvalidGetterError(

@@ -76,14 +76,22 @@ class SimulationPort(ABC):
 
     @abstractmethod
     def query(
-        self, domain: str, getter_name: str, object_id: str, args: ValDict
+        self,
+        domain: str,
+        getter_name: str,
+        object_id: str | None,
+        args: ValDict,
     ) -> str: ...
 
     """query simulation state"""
 
     @abstractmethod
     def apply(
-        self, domain: str, setter_name: str, onject_id: str, args: ValDict
+        self,
+        domain: str,
+        setter_name: str,
+        onject_id: str | None,
+        args: ValDict,
     ) -> None: ...
 
     """set simulation state"""

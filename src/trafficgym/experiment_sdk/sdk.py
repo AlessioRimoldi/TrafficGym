@@ -235,6 +235,9 @@ class Operation(Enum):
     def to_proto(self) -> engine_pb2.Operation.ValueType:
         return self.value
 
+    def to_dict(self) -> str:
+        return self.name
+
 
 @dataclass(frozen=True)
 class InterruptEvent(SdkBase[engine_pb2.InterruptEvent]):
@@ -294,7 +297,7 @@ class TriggerConditions(SdkBase[engine_pb2.TriggerMetricNameAndValue]):
         return {
             "subscription_fingerprint": self.subscription_fingerprint,
             "value": self.value.to_dict(),
-            "operation": self.operation,
+            "operation": self.operation.to_dict(),
         }
 
 
@@ -439,7 +442,7 @@ class SubscriptionRequest(SdkBase[engine_pb2.SubscribeRequest]):
     run_id: str
     domain: str
     getter_name: str
-    object_id: str
+    object_id: str | None
     parameters: list[Parameter]
 
     @staticmethod
@@ -457,7 +460,7 @@ class SubscriptionRequest(SdkBase[engine_pb2.SubscribeRequest]):
             run_id=self.run_id,
             domain=self.domain,
             getter_name=self.getter_name,
-            object_id=self.object_id,
+            object_id=self.object_id if self.object_id is not None else "",
             parameters=[param.to_proto() for param in self.parameters],
         )
 

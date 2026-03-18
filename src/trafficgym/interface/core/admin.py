@@ -1,3 +1,4 @@
+from typing import Any
 from django.contrib import admin
 from django.http import HttpRequest
 from django.db.models import QuerySet
@@ -17,7 +18,7 @@ from .models import (
 
 
 def duplicate_run_request(
-    modeladmin: admin.ModelAdmin[RunRequest],
+    model_admin: admin.ModelAdmin[RunRequest],
     request: HttpRequest,
     queryset: QuerySet[RunRequest],
 ) -> None:
@@ -25,9 +26,25 @@ def duplicate_run_request(
         RunRequest.objects.create(
             scenario=run_request.scenario, experiment=run_request.experiment
         )
-    modeladmin.message_user(
+    model_admin.message_user(
         request, f"{queryset.count()} run request(s) duplicated."
     )
+
+
+# RunRequestOrderByDateCompatibleModels = WorkerLogEntry | RPCLogEntry | SubscriptionLogEntry | TelemetryLogEntry
+# class RunRequestOrderByDateFilter(admin.SimpleListFilter):
+#     title = 'run_id'
+#     parameter_name = 'run_id'
+
+#     def lookups(self, request: HttpRequest, model_admin: admin.ModelAdmin[RunRequestOrderByDateCompatibleModels]) -> list[tuple[Any, str]]:
+#         qs = model_admin.get_queryset(request).select_related("run_request").order_by("-run_request__created_at")
+#         return [(str(d), str(d)) for d in qs[:50]]
+
+
+#     def queryset(self, _: HttpRequest, queryset: QuerySet[RunRequestOrderByDateCompatibleModels]) -> QuerySet[RunRequestOrderByDateCompatibleModels]:
+#         if self.value():
+#             return queryset.filter(id=self.value())
+#         return queryset
 
 
 @admin.register(RunRequest)
