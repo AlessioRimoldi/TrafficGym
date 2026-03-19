@@ -105,6 +105,22 @@ class Action(SdkBase[engine_pb2.Action]):
     parameters: list[Parameter]
 
     @classmethod
+    def one_param_action(
+        cls,
+        domain: str,
+        setter_name: str,
+        param_name: str,
+        value: ValueType,
+        object_id: str,
+    ) -> Self:
+        return cls(
+            domain,
+            setter_name,
+            object_id,
+            [Parameter(param_name, Value(value))],
+        )
+
+    @classmethod
     def from_proto(cls, proto: engine_pb2.Action) -> Self:
         return cls(
             proto.setter.domain,

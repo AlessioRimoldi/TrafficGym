@@ -69,7 +69,7 @@ def subscription_plot(
 
     for entry in logs:
         timestamps.append(entry["event_time"].isoformat())
-        values.append(float(entry["payload"]["value"]))
+        values.append(float(entry["payload"]))
 
     context = {
         "timestamps": timestamps,

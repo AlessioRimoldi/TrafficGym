@@ -6,13 +6,13 @@ from typing import (
     TypeVar,
     ParamSpec,
     Callable,
-    Awaitable,
     Any,
     Coroutine,
 )
 from trafficgym.experiment_sdk import sdk
 from functools import wraps
 from contextlib import asynccontextmanager
+from enum import Enum, auto
 
 # from celery.utils.log import get_task_logger
 
@@ -20,6 +20,8 @@ import asyncio
 import logging
 import grpc.aio
 import uuid
+
+InterruptStream = AsyncIterable[sdk.InterruptEvent | None]
 
 
 def _handle_rpc_error(err: grpc.aio.AioRpcError) -> Exception:
@@ -109,7 +111,7 @@ class TrafficLightController:
     @_grpc_error_handler
     async def set_signal(
         self,
-        signal_id: str,
+        tls_id: str,
         state: str,
     ) -> sdk.ApplyActionsResponse:
 
@@ -117,21 +119,38 @@ class TrafficLightController:
             uuid.uuid4(),
             "set_signal",
             "OTHER",
-            {"signal_id": signal_id, "state": state},
+            {"tls_id": tls_id, "state": state},
         )
 
-        set_trafficlight_action = sdk.Action(
-            "trafficlight",
-            "setRedYellowGreenState",
-            signal_id,
-            [sdk.Parameter("state", sdk.Value(state))],
+        set_trafficlight_action = sdk.Action.one_param_action(
+            "trafficlight", "setRedYellowGreenState", "state", state, tls_id
         )
+
         return await self.run.apply_actions(
             sdk.ActionBundle([set_trafficlight_action])
         )
 
     @_grpc_error_handler
-    async def run_tls_program(
+    async def set_program(
+        self, tls_id: str, program_id: str
+    ) -> sdk.ApplyActionsResponse:
+        log_rpc(
+            uuid.uuid4(),
+            "set_program",
+            "OTHER",
+            {"tls_id": tls_id, "programID": program_id},
+        )
+
+        set_program_action = sdk.Action.one_param_action(
+            "trafficlight", "setProgram", "programID", program_id, tls_id
+        )
+
+        return await self.run.apply_actions(
+            sdk.ActionBundle([set_program_action])
+        )
+
+    @_grpc_error_handler
+    async def static_tls_controller(
         self,
         signal_id: str,
         phases: list[str],
@@ -204,6 +223,216 @@ class TrafficLightController:
                 )
 
         return asyncio.create_task(tls_program_async(), name="tls_program")
+
+    async def _wait_for_interrupt(
+        self,
+        stream: InterruptStream,
+    ) -> sdk.InterruptEvent | None:
+        interrupt_id: str | None = None
+
+        try:
+            async for event in stream:
+                if event is None:
+                    return None
+
+                interrupt_id = event.interrupt_id
+                return event
+        except asyncio.CancelledError:
+            if interrupt_id is not None:
+                logging.debug(
+                    f"Cancelling from wait_for_interrupt() {interrupt_id}"
+                )
+                await self.run.cancel_interrupt(interrupt_id)
+
+        return None
+
+    @_grpc_error_handler
+    async def meter_controller(
+        self, tls_id: str, det_id: str
+    ) -> asyncio.Task[None]:
+        def gen_traffic_interrupt(
+            trigger: float, operation: sdk.Operation
+        ) -> InterruptStream:
+            return self.run.register_interrupt(
+                sdk.TriggerConditions(
+                    detector_nearside.fingerprint,
+                    sdk.Value(trigger),
+                    operation,
+                )
+            )
+
+        async def acknowledge_interrupt(
+            interrupt_event: sdk.InterruptEvent, new_program_id: str
+        ) -> None:
+            await self.run.acknowledge_interrupt(
+                interrupt_event.interrupt_id,
+                interrupt_event.event_id,
+                sdk.ActionBundle(
+                    [
+                        sdk.Action.one_param_action(
+                            "trafficlight",
+                            "setProgram",
+                            "programID",
+                            new_program_id,
+                            tls_id,
+                        )
+                    ]
+                ),
+                None,
+            )
+
+        detector_nearside = await self.run.subscribe(
+            "inductionloop", "getLastIntervalOccupancy", det_id
+        )
+
+        await self.run.apply_actions(
+            sdk.ActionBundle(
+                [
+                    sdk.Action.one_param_action(
+                        "trafficlight", "setProgram", "programID", "0", tls_id
+                    ),
+                ]
+            )
+        )
+
+        interrupt_event: sdk.InterruptEvent | None = None
+
+        async def meter_controller_async() -> None:
+            class MeterState(Enum):
+                OFF = auto()
+                QUARTER = auto()
+                TENTH = auto()
+                CHOKE = auto()
+
+            meter_state: MeterState = MeterState.OFF
+
+            while True:
+                if meter_state is MeterState.OFF:
+                    high_traffic_interrupts = gen_traffic_interrupt(
+                        15.0, sdk.Operation.GEQ
+                    )
+
+                    interrupt_event = None
+
+                    async for event in high_traffic_interrupts:
+                        if not event:
+                            return
+                        interrupt_event = event
+                        logging.info("Setting meter to 1/4 mode")
+                        await acknowledge_interrupt(interrupt_event, "1")
+                        meter_state = MeterState.QUARTER
+                        break
+
+                elif meter_state is MeterState.QUARTER:
+                    high_traffic_interrupts = gen_traffic_interrupt(
+                        20.0, sdk.Operation.GEQ
+                    )
+                    low_traffic_interrupts = gen_traffic_interrupt(
+                        10.0, sdk.Operation.LEQ
+                    )
+
+                    high_traffic_task = asyncio.create_task(
+                        self._wait_for_interrupt(high_traffic_interrupts)
+                    )
+                    low_traffic_task = asyncio.create_task(
+                        self._wait_for_interrupt(low_traffic_interrupts)
+                    )
+
+                    done, pending = await asyncio.wait(
+                        {high_traffic_task, low_traffic_task},
+                        return_when="FIRST_COMPLETED",
+                    )
+
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            logging.debug(f"Cancelled {task}")
+
+                    finished = done.pop()
+
+                    interrupt_event = finished.result()
+                    if interrupt_event is None:
+                        return
+
+                    if finished is high_traffic_task:
+                        logging.info("Setting meter to 1/10 mode")
+                        await acknowledge_interrupt(interrupt_event, "2")
+                        meter_state = MeterState.TENTH
+
+                    else:
+                        logging.info("Setting meter OFF")
+                        await acknowledge_interrupt(interrupt_event, "off")
+                        meter_state = MeterState.OFF
+
+                elif meter_state is MeterState.TENTH:
+                    high_traffic_interrupts = gen_traffic_interrupt(
+                        30.0, sdk.Operation.GEQ
+                    )
+                    low_traffic_interrupts = gen_traffic_interrupt(
+                        15.0, sdk.Operation.LEQ
+                    )
+
+                    interrupt_event = None
+
+                    high_traffic_task = asyncio.create_task(
+                        self._wait_for_interrupt(high_traffic_interrupts)
+                    )
+                    low_traffic_task = asyncio.create_task(
+                        self._wait_for_interrupt(low_traffic_interrupts)
+                    )
+
+                    done, pending = await asyncio.wait(
+                        {high_traffic_task, low_traffic_task},
+                        return_when="FIRST_COMPLETED",
+                    )
+
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            logging.debug(f"Cancelled {task}")
+
+                    finished = done.pop()
+
+                    interrupt_event = finished.result()
+                    if interrupt_event is None:
+                        return
+
+                    if finished is high_traffic_task:
+                        logging.info("Setting meter to CHOKE mode")
+                        await acknowledge_interrupt(interrupt_event, "3")
+                        meter_state = MeterState.CHOKE
+
+                    else:
+                        logging.info("Setting meter to 1/4 mode")
+                        await acknowledge_interrupt(interrupt_event, "1")
+                        meter_state = MeterState.QUARTER
+
+                elif meter_state is MeterState.CHOKE:
+                    low_traffic_interrupts = gen_traffic_interrupt(
+                        25.0, sdk.Operation.LEQ
+                    )
+
+                    interrupt_event = None
+
+                    async for event in low_traffic_interrupts:
+                        if not event:
+                            return
+                        interrupt_event = event
+                        logging.info("Setting meter to 1/10 mode")
+                        await acknowledge_interrupt(interrupt_event, "2")
+                        meter_state = MeterState.TENTH
+                        break
+
+                else:
+                    logging.warning("Unknown meter state, resetting to OFF")
+                    meter_state = MeterState.OFF
+                    await self.run.tls.set_program(tls_id, "0")
+
+        return asyncio.create_task(meter_controller_async())
 
 
 class EngineDriver:
@@ -427,7 +656,7 @@ class RunHandle:
                     extra={
                         "subscription_fingerprint": metric.key,
                         "payload": (
-                            metric.value.to_dict()
+                            metric.value.to_dict()["value"]
                             if metric.value is not None
                             else ""
                         ),

@@ -18,7 +18,7 @@ class stop_random_async_tls(Experiment):
         )
         await self.run.subscribe("trafficlight", "getSpentDuration", tls_id)
 
-        tls_program = await self.run.tls.run_tls_program(
+        tls_program = await self.run.tls.static_tls_controller(
             tls_id,
             ["rGrG", "ryry", "GrGr", "yryr"],
             [30, 3, 30, 3],

@@ -36,7 +36,7 @@ async def _async_process(
         engine_driver = EngineDriver(stub)
 
         async with engine_driver.create_run(
-            str(sumocfg_path), "sumo-gui", 1000
+            str(sumocfg_path), "sumo", 1000
         ) as run:
             log_handler.set_engine_run_id(run.run_id)
             await ExperimentClass(run).run_experiment()

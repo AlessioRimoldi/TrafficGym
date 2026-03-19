@@ -187,6 +187,7 @@ class RunRequest(models.Model):
 
     def __str__(self) -> str:
         return str(self.id)
+
     #     return f"{self.created_at}: {self.status}"
 
 
