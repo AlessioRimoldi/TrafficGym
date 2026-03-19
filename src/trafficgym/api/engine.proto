@@ -157,6 +157,15 @@ message RegisterInterruptRequest {
   TriggerMetricNameAndValue trigger_metric = 2;
 }
 
+message RegisterInterruptResponse {
+  string interrupt_id = 1;
+}
+
+message StreamInterruptsRequest {
+  string run_id = 1;
+  string interrupt_id = 2;
+}
+
 message InterruptEvent {
   string run_id = 1;
   string interrupt_id = 2;
@@ -311,7 +320,9 @@ service EngineService {
   rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
 
   // RegisterInterrupt
-  rpc RegisterInterrupt(RegisterInterruptRequest) returns (stream InterruptEvent);
+  rpc RegisterInterrupt(RegisterInterruptRequest) returns (RegisterInterruptResponse);
+
+  rpc StreamInterrupts(StreamInterruptsRequest) returns (stream InterruptEvent);
 
   // AcknowledgeInterrupt
   rpc AcknowledgeInterrupt(AcknowledgeInterruptRequest) returns (ApplyActionsResponse);

@@ -85,9 +85,14 @@ class EngineServiceStub(object):
                 request_serializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.SerializeToString,
                 response_deserializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.FromString,
                 _registered_method=True)
-        self.RegisterInterrupt = channel.unary_stream(
+        self.RegisterInterrupt = channel.unary_unary(
                 '/sumo.engine.v1.EngineService/RegisterInterrupt',
                 request_serializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptResponse.FromString,
+                _registered_method=True)
+        self.StreamInterrupts = channel.unary_stream(
+                '/sumo.engine.v1.EngineService/StreamInterrupts',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.StreamInterruptsRequest.SerializeToString,
                 response_deserializer=trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
                 _registered_method=True)
         self.AcknowledgeInterrupt = channel.unary_unary(
@@ -264,6 +269,12 @@ class EngineServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def StreamInterrupts(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def AcknowledgeInterrupt(self, request, context):
         """AcknowledgeInterrupt
         """
@@ -328,9 +339,14 @@ def add_EngineServiceServicer_to_server(servicer, server):
                     request_deserializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeRequest.FromString,
                     response_serializer=trafficgym_dot_api_dot_engine__pb2.UnsubscribeResponse.SerializeToString,
             ),
-            'RegisterInterrupt': grpc.unary_stream_rpc_method_handler(
+            'RegisterInterrupt': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterInterrupt,
                     request_deserializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.RegisterInterruptResponse.SerializeToString,
+            ),
+            'StreamInterrupts': grpc.unary_stream_rpc_method_handler(
+                    servicer.StreamInterrupts,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.StreamInterruptsRequest.FromString,
                     response_serializer=trafficgym_dot_api_dot_engine__pb2.InterruptEvent.SerializeToString,
             ),
             'AcknowledgeInterrupt': grpc.unary_unary_rpc_method_handler(
@@ -597,11 +613,38 @@ class EngineService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_stream(
+        return grpc.experimental.unary_unary(
             request,
             target,
             '/sumo.engine.v1.EngineService/RegisterInterrupt',
             trafficgym_dot_api_dot_engine__pb2.RegisterInterruptRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.RegisterInterruptResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StreamInterrupts(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/StreamInterrupts',
+            trafficgym_dot_api_dot_engine__pb2.StreamInterruptsRequest.SerializeToString,
             trafficgym_dot_api_dot_engine__pb2.InterruptEvent.FromString,
             options,
             channel_credentials,

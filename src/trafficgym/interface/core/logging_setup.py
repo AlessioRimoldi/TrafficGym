@@ -98,6 +98,8 @@ class LogPersistenceHandler(logging.Handler):
                     run_request=self.run,
                     engine_run_id=self.engine_run_id,
                     event_time=event_time,
+                    simulation_time=getattr(record, "simulation_time"),
+                    simulation_step=getattr(record, "simulation_step"),
                     subscription_fingerprint=getattr(
                         record, "subscription_fingerprint"
                     ),
@@ -108,6 +110,8 @@ class LogPersistenceHandler(logging.Handler):
                     run_request=self.run,
                     engine_run_id=self.engine_run_id,
                     event_time=event_time,
+                    simulation_time=getattr(record, "simulation_time"),
+                    simulation_step=getattr(record, "simulation_step"),
                     telemetry_name=getattr(record, "telemetry_name"),
                     payload=getattr(record, "payload"),
                 )

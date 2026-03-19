@@ -1,5 +1,6 @@
 from trafficgym.experiment_sdk.experiments.base import Experiment
 
+
 class service_station(Experiment):
     async def run_experiment(self) -> None:
         tls_id = "TL0"
@@ -28,6 +29,9 @@ class service_station(Experiment):
         await self.run.run_time(300)
 
         controller = await self.run.tls.meter_controller(tls_id, "e1_1")
+        await self.run.subscribe(
+            "inductionloop", "getLastStepOccupancy", "e1_1"
+        )
 
         await self.run.run_time(600)
 

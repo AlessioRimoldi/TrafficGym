@@ -18,6 +18,7 @@ class RunConfig:
 @dataclass
 class InterruptEvent:
     event_id = str(uuid.uuid4())
+    ack = asyncio.Event()
     observed_value: engine_pb2.CustomValue
 
 

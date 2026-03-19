@@ -172,12 +172,16 @@ class TrafficLightController:
 
         time_subscription_name = get_time_subscription.fingerprint
 
-        interrupt_event_stream = self.run.register_interrupt(
+        interrupt_registration = await self.run.register_interrupt(
             sdk.TriggerConditions(
                 time_subscription_name,
                 sdk.Value(durations[0] + initial_step),
                 sdk.Operation.GEQ,
             )
+        )
+
+        interrupt_event_stream = self.run.stream_interrupts(
+            interrupt_registration.interrupt_id
         )
         logging.debug("TLS Program interrupt registration sent")
 
@@ -250,15 +254,19 @@ class TrafficLightController:
     async def meter_controller(
         self, tls_id: str, det_id: str
     ) -> asyncio.Task[None]:
-        def gen_traffic_interrupt(
+        async def gen_traffic_interrupt(
             trigger: float, operation: sdk.Operation
         ) -> InterruptStream:
-            return self.run.register_interrupt(
+            interrupt_registration = await self.run.register_interrupt(
                 sdk.TriggerConditions(
                     detector_nearside.fingerprint,
                     sdk.Value(trigger),
                     operation,
                 )
+            )
+
+            return self.run.stream_interrupts(
+                interrupt_registration.interrupt_id
             )
 
         async def acknowledge_interrupt(
@@ -314,7 +322,7 @@ class TrafficLightController:
 
                     interrupt_event = None
 
-                    async for event in high_traffic_interrupts:
+                    async for event in await high_traffic_interrupts:
                         if not event:
                             return
                         interrupt_event = event
@@ -332,10 +340,10 @@ class TrafficLightController:
                     )
 
                     high_traffic_task = asyncio.create_task(
-                        self._wait_for_interrupt(high_traffic_interrupts)
+                        self._wait_for_interrupt(await high_traffic_interrupts)
                     )
                     low_traffic_task = asyncio.create_task(
-                        self._wait_for_interrupt(low_traffic_interrupts)
+                        self._wait_for_interrupt(await low_traffic_interrupts)
                     )
 
                     done, pending = await asyncio.wait(
@@ -377,10 +385,10 @@ class TrafficLightController:
                     interrupt_event = None
 
                     high_traffic_task = asyncio.create_task(
-                        self._wait_for_interrupt(high_traffic_interrupts)
+                        self._wait_for_interrupt(await high_traffic_interrupts)
                     )
                     low_traffic_task = asyncio.create_task(
-                        self._wait_for_interrupt(low_traffic_interrupts)
+                        self._wait_for_interrupt(await low_traffic_interrupts)
                     )
 
                     done, pending = await asyncio.wait(
@@ -418,7 +426,7 @@ class TrafficLightController:
 
                     interrupt_event = None
 
-                    async for event in low_traffic_interrupts:
+                    async for event in await low_traffic_interrupts:
                         if not event:
                             return
                         interrupt_event = event
@@ -542,7 +550,7 @@ class RunHandle:
         request = sdk.RunRequest(self.run_id, ("time", seconds))
 
         rpc_call_id = uuid.uuid4()
-        log_rpc(rpc_call_id, "run_time", "RESPONSE", request.to_dict())
+        log_rpc(rpc_call_id, "run_time", "REQUEST", request.to_dict())
 
         response = sdk.RunResponse.from_proto(
             await self.driver.stub.Run(request.to_proto())
@@ -625,6 +633,8 @@ class RunHandle:
                 telemetry_logger.info(
                     "Telemetry data received",
                     extra={
+                        "simulation_time": sdk_frame.sim_time_s,
+                        "simulation_step": sdk_frame.step,
                         "telemetry_name": metric.key,
                         "payload": (
                             metric.value.to_dict()
@@ -654,6 +664,8 @@ class RunHandle:
                 subscription_logger.info(
                     "Subscription data received",
                     extra={
+                        "simulation_time": sdk_frame.sim_time_s,
+                        "simulation_step": sdk_frame.step,
                         "subscription_fingerprint": metric.key,
                         "payload": (
                             metric.value.to_dict()["value"]
@@ -694,12 +706,11 @@ class RunHandle:
     async def unsubscribe(self) -> None:
         raise NotImplementedError("Unsubscribe not implemented")
 
-    @_grpc_stream_error_handler
+    @_grpc_error_handler
     async def register_interrupt(
         self,
         trigger_conditions: sdk.TriggerConditions,
-    ) -> AsyncIterator[sdk.InterruptEvent]:
-
+    ) -> sdk.RegisterInterruptResponse:
         request = sdk.RegisterInterruptRequest(
             run_id=self.run_id, trigger_metric=trigger_conditions
         )
@@ -707,7 +718,26 @@ class RunHandle:
         rpc_call_id = uuid.uuid4()
         log_rpc(rpc_call_id, "register_interrupt", "REQUEST", request.to_dict())
 
-        async for interrupt_event in self.driver.stub.RegisterInterrupt(
+        response = sdk.RegisterInterruptResponse.from_proto(
+            await self.driver.stub.RegisterInterrupt(request.to_proto())
+        )
+
+        log_rpc(
+            rpc_call_id, "register_interrupt", "RESPONSE", response.to_dict()
+        )
+
+        return response
+
+    @_grpc_stream_error_handler
+    async def stream_interrupts(
+        self, interrupt_id: str
+    ) -> AsyncIterator[sdk.InterruptEvent]:
+        request = sdk.StreamInterruptsRequest(self.run_id, interrupt_id)
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(rpc_call_id, "stream_interrupts", "REQUEST", request.to_dict())
+
+        async for interrupt_event in self.driver.stub.StreamInterrupts(
             request.to_proto()
         ):
             sdk_event = sdk.InterruptEvent(
@@ -719,7 +749,7 @@ class RunHandle:
 
             log_rpc(
                 rpc_call_id,
-                "register_interrupt",
+                "stream_interrupts",
                 "RESPONSE",
                 sdk_event.to_dict(),
             )

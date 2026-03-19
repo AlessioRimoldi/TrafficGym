@@ -147,8 +147,9 @@ class EngineServiceStub:
     """Subscribe"""
     Unsubscribe: _grpc.UnaryUnaryMultiCallable[_engine_pb2.UnsubscribeRequest, _engine_pb2.UnsubscribeResponse]
     """Unsubscribe"""
-    RegisterInterrupt: _grpc.UnaryStreamMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.InterruptEvent]
+    RegisterInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.RegisterInterruptResponse]
     """RegisterInterrupt"""
+    StreamInterrupts: _grpc.UnaryStreamMultiCallable[_engine_pb2.StreamInterruptsRequest, _engine_pb2.InterruptEvent]
     AcknowledgeInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.ApplyActionsResponse]
     """AcknowledgeInterrupt"""
     CancelInterrupt: _grpc.UnaryUnaryMultiCallable[_engine_pb2.CancelInterruptRequest, _engine_pb2.CancelInterruptResponse]
@@ -271,8 +272,9 @@ class EngineServiceAsyncStub(EngineServiceStub):
     """Subscribe"""
     Unsubscribe: _aio.UnaryUnaryMultiCallable[_engine_pb2.UnsubscribeRequest, _engine_pb2.UnsubscribeResponse]  # type: ignore[assignment]
     """Unsubscribe"""
-    RegisterInterrupt: _aio.UnaryStreamMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.InterruptEvent]  # type: ignore[assignment]
+    RegisterInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.RegisterInterruptRequest, _engine_pb2.RegisterInterruptResponse]  # type: ignore[assignment]
     """RegisterInterrupt"""
+    StreamInterrupts: _aio.UnaryStreamMultiCallable[_engine_pb2.StreamInterruptsRequest, _engine_pb2.InterruptEvent]  # type: ignore[assignment]
     AcknowledgeInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.AcknowledgeInterruptRequest, _engine_pb2.ApplyActionsResponse]  # type: ignore[assignment]
     """AcknowledgeInterrupt"""
     CancelInterrupt: _aio.UnaryUnaryMultiCallable[_engine_pb2.CancelInterruptRequest, _engine_pb2.CancelInterruptResponse]  # type: ignore[assignment]
@@ -446,8 +448,15 @@ class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
         self,
         request: _engine_pb2.RegisterInterruptRequest,
         context: _ServicerContext,
-    ) -> _typing.Union[_abc.Iterator[_engine_pb2.InterruptEvent], _abc.AsyncIterator[_engine_pb2.InterruptEvent]]:
+    ) -> _typing.Union[_engine_pb2.RegisterInterruptResponse, _abc.Awaitable[_engine_pb2.RegisterInterruptResponse]]:
         """RegisterInterrupt"""
+
+    @_abc_1.abstractmethod
+    def StreamInterrupts(
+        self,
+        request: _engine_pb2.StreamInterruptsRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_abc.Iterator[_engine_pb2.InterruptEvent], _abc.AsyncIterator[_engine_pb2.InterruptEvent]]: ...
 
     @_abc_1.abstractmethod
     def AcknowledgeInterrupt(

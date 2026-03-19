@@ -560,6 +560,41 @@ class RegisterInterruptRequest(SdkBase[engine_pb2.RegisterInterruptRequest]):
 
 
 @dataclass(frozen=True)
+class RegisterInterruptResponse(SdkBase[engine_pb2.RegisterInterruptResponse]):
+    interrupt_id: str
+
+    @classmethod
+    def from_proto(cls, proto: engine_pb2.RegisterInterruptResponse) -> Self:
+        return cls(interrupt_id=proto.interrupt_id)
+
+    def to_proto(self) -> engine_pb2.RegisterInterruptResponse:
+        return engine_pb2.RegisterInterruptResponse(
+            interrupt_id=self.interrupt_id
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {"interrupt_id": self.interrupt_id}
+
+
+@dataclass(frozen=True)
+class StreamInterruptsRequest(SdkBase[engine_pb2.StreamInterruptsRequest]):
+    run_id: str
+    interrupt_id: str
+
+    @classmethod
+    def from_proto(cls, proto: engine_pb2.StreamInterruptsRequest) -> Self:
+        return cls(proto.run_id, proto.interrupt_id)
+
+    def to_proto(self) -> engine_pb2.StreamInterruptsRequest:
+        return engine_pb2.StreamInterruptsRequest(
+            run_id=self.run_id, interrupt_id=self.interrupt_id
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {"run_id": self.run_id, "interrupt_id": self.interrupt_id}
+
+
+@dataclass(frozen=True)
 class AcknowledgeInterruptRequest(
     SdkBase[engine_pb2.AcknowledgeInterruptRequest]
 ):

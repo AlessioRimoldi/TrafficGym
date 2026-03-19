@@ -555,6 +555,41 @@ class RegisterInterruptRequest(_message.Message):
 Global___RegisterInterruptRequest: _TypeAlias = RegisterInterruptRequest  # noqa: Y015
 
 @_typing.final
+class RegisterInterruptResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    INTERRUPT_ID_FIELD_NUMBER: _builtins.int
+    interrupt_id: _builtins.str
+    def __init__(
+        self,
+        *,
+        interrupt_id: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["interrupt_id", b"interrupt_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___RegisterInterruptResponse: _TypeAlias = RegisterInterruptResponse  # noqa: Y015
+
+@_typing.final
+class StreamInterruptsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RUN_ID_FIELD_NUMBER: _builtins.int
+    INTERRUPT_ID_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
+    interrupt_id: _builtins.str
+    def __init__(
+        self,
+        *,
+        run_id: _builtins.str = ...,
+        interrupt_id: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["interrupt_id", b"interrupt_id", "run_id", b"run_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___StreamInterruptsRequest: _TypeAlias = StreamInterruptsRequest  # noqa: Y015
+
+@_typing.final
 class InterruptEvent(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

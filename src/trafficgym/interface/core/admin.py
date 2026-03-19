@@ -82,7 +82,7 @@ class RPCLogEntryAdmin(admin.ModelAdmin[RPCLogEntry]):
 class SubscriptionLogEntryAdmin(admin.ModelAdmin[SubscriptionLogEntry]):
     list_display = (
         "run_request__id",
-        "event_time",
+        "simulation_step",
         "subscription_fingerprint",
         "payload",
     )
@@ -93,7 +93,7 @@ class SubscriptionLogEntryAdmin(admin.ModelAdmin[SubscriptionLogEntry]):
 class TelemetryLogEntryAdmin(admin.ModelAdmin[TelemetryLogEntry]):
     list_display = (
         "run_request__id",
-        "event_time",
+        "simulation_step",
         "telemetry_name",
         "payload",
     )

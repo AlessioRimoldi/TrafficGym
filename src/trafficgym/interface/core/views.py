@@ -61,14 +61,14 @@ def subscription_plot(
             run_request=run_request, subscription_fingerprint=fingerprint
         )
         .order_by("event_time")
-        .values("event_time", "payload")
+        .values("simulation_time", "payload")
     )
 
     timestamps = []
     values = []
 
     for entry in logs:
-        timestamps.append(entry["event_time"].isoformat())
+        timestamps.append(entry["simulation_time"])
         values.append(float(entry["payload"]))
 
     context = {

@@ -228,6 +228,8 @@ class SubscriptionLogEntry(models.Model):
     )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()
+    simulation_time = models.FloatField()
+    simulation_step = models.IntegerField()
     subscription_fingerprint = models.CharField(max_length=256)
     payload = models.JSONField()
 
@@ -241,5 +243,7 @@ class TelemetryLogEntry(models.Model):
     )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()
+    simulation_time = models.FloatField()
+    simulation_step = models.IntegerField()
     telemetry_name = models.CharField(max_length=256)
     payload = models.JSONField()

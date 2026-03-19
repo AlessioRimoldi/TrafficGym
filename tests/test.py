@@ -31,6 +31,7 @@ from trafficgym.api.engine_pb2 import (
     FetchRequest,
     StreamRequest,
     RegisterInterruptRequest,
+    StreamInterruptsRequest,
     TriggerMetricNameAndValue,
     Operation,
     InterruptEvent,
@@ -1472,10 +1473,18 @@ def setup_interrupt(
             trigger_metric=TriggerMetricNameAndValue(**metric),
         )
 
+        interrupt_registration = await service.RegisterInterrupt(
+            register_interrupt_request, fake_context
+        )
+
+        stream_interrupt_request = StreamInterruptsRequest(
+            run_id=run_id, interrupt_id=interrupt_registration.interrupt_id
+        )
+
         return InterruptSession(
             service,
             fake_context,
-            service.RegisterInterrupt(register_interrupt_request, fake_context),
+            service.StreamInterrupts(stream_interrupt_request, fake_context),
             original_interrupt_condition=TriggerMetricNameAndValue(**metric),
         )
 
@@ -1488,6 +1497,11 @@ async def test_register_interrupt_rejects_invalid_run_id(
     fake_context: ServicerContext[Any, Any],
     create_run_factory: CreateRunFactoryType,
 ) -> None:
+    """Ensures that registering an interrupt with a non-valid
+    run_id raises a GrpcAbort. This test was more useful before
+    register_interrupt and stream_interrupts where separated as
+    the exception would only be raised when fetching the first event
+    from the stream. Now it is pretty similar to other RPCs."""
     await create_run_factory(None)
 
     register_interrupt_request = RegisterInterruptRequest(
@@ -1499,12 +1513,10 @@ async def test_register_interrupt_rejects_invalid_run_id(
         ),
     )
 
-    interrupt_stream = service.RegisterInterrupt(
-        register_interrupt_request, fake_context
-    )
-
     with pytest.raises(GrpcAbort, match="run.*not found."):
-        await anext(interrupt_stream)
+        await service.RegisterInterrupt(
+            register_interrupt_request, fake_context
+        )
 
 
 @pytest.mark.asyncio
@@ -1522,37 +1534,16 @@ async def test_register_interrupt_rejects_invalid_subscription(
     """
     create_run_response = await create_run_factory(None)
 
-    interrupt_session = await setup_interrupt(
-        create_run_response.run_id,
-        InterruptMetric(subscription_fingerprint="non-existing subscription"),
-    )
-
-    interrupt_session.event_callback = lambda _: (
-        action_bundle_factory(
-            [
-                GenericSetterType(
-                    "fake_domain",
-                    "setInterruptMetric",
-                    "default_object",
-                    [Parameter(name="value", value=CustomValue(int_value=10))],
-                )
-            ],
-        ),
-        None,
-    )
-
-    handler_task = asyncio.create_task(interrupt_session.handle_interrupt())
-
-    await service.Run(
-        RunRequest(run_id=create_run_response.run_id, steps=10),
-        fake_context,
-    )
-
     with pytest.raises(
         GrpcAbort,
         match="FAILED_PRECONDITION.*The interrupt metric must first be subscribed to.",
     ):
-        await handler_task
+        await setup_interrupt(
+            create_run_response.run_id,
+            InterruptMetric(
+                subscription_fingerprint="non-existing subscription"
+            ),
+        )
 
 
 @pytest.mark.asyncio

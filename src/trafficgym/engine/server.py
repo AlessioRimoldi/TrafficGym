@@ -29,6 +29,8 @@ from trafficgym.api.engine_pb2 import (
     UnsubscribeRequest,
     UnsubscribeResponse,
     RegisterInterruptRequest,
+    RegisterInterruptResponse,
+    StreamInterruptsRequest,
     InterruptEvent as EngineInterruptEvent,
     AcknowledgeInterruptRequest,
     CancelInterruptRequest,
@@ -588,12 +590,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         self,
         request: RegisterInterruptRequest,
         context: grpc.aio.ServicerContext[
-            RegisterInterruptRequest, AsyncIterator[EngineInterruptEvent]
+            RegisterInterruptRequest, RegisterInterruptResponse
         ],
-    ) -> AsyncIterator[EngineInterruptEvent]:
-        """CAUTION: Comparaison value must use the same subfield as the
-        collected value, or the interrupt will never trigger
-        TODO Improve this!"""
+    ) -> RegisterInterruptResponse:
         run_id = request.run_id
         if run_id not in self._runs:
             logging.warning(f"Could not find run '{run_id}'.")
@@ -601,9 +600,9 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                 grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
             )
 
-        runContext = self._runs[run_id]
+        run_context = self._runs[run_id]
 
-        if not runContext.subscription_manager.check_subscription(
+        if not run_context.subscription_manager.check_subscription(
             request.trigger_metric.subscription_fingerprint
         ):
             await context.abort(
@@ -622,23 +621,59 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             interrupt_requests=interrupt_requests,
         )
 
-        runContext.run.interrupts[new_interrupt.interrupt_id] = new_interrupt
+        run_context.run.interrupts[new_interrupt.interrupt_id] = new_interrupt
         logging.debug(
             f"Registered new Interrupt {new_interrupt.trigger_metric_fingerprint}_{new_interrupt.trigger_metric_value}"
         )
+
+        return RegisterInterruptResponse(
+            interrupt_id=new_interrupt.interrupt_id
+        )
+
+    async def StreamInterrupts(
+        self,
+        request: StreamInterruptsRequest,
+        context: grpc.aio.ServicerContext[
+            StreamInterruptsRequest, AsyncIterator[EngineInterruptEvent]
+        ],
+    ) -> AsyncIterator[EngineInterruptEvent]:
+        run_id = request.run_id
+        if run_id not in self._runs:
+            logging.warning(f"Could not find run '{run_id}'.")
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"run_id '{run_id}' not found."
+            )
+
+        run_context = self._runs[run_id]
+
+        if request.interrupt_id not in run_context.run.interrupts:
+            logging.warning(
+                f"Could not find interrupt '{request.interrupt_id}'."
+            )
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND,
+                f"interrupt_id '{request.interrupt_id}' not found.",
+            )
+
+        interrupt_requests = run_context.run.interrupts[
+            request.interrupt_id
+        ].interrupt_requests
 
         while True:
             frame = await interrupt_requests.get()
             if frame is None:
                 return
 
-            yield EngineInterruptEvent(
-                run_id=run_id,
-                interrupt_id=new_interrupt.interrupt_id,
-                event_id=frame.event_id,
-                observed_value=str(extract_value(frame.observed_value)),
-            )
-            logging.debug("Issued Interrupt Event")
+            try:
+                yield EngineInterruptEvent(
+                    run_id=run_id,
+                    interrupt_id=request.interrupt_id,
+                    event_id=frame.event_id,
+                    observed_value=str(extract_value(frame.observed_value)),
+                )
+                logging.debug("Issued Interrupt Event")
+            finally:
+                interrupt_requests.task_done()
 
     async def AcknowledgeInterrupt(
         self,
@@ -738,8 +773,8 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         context,
                     ),
                 )
-                acknowledged_interrupt.interrupt_requests.task_done()
-                logging.debug("Interrupt Acknoledge Received and Processed")
+                acknowledged_interrupt.active_interrupt_event.ack.set()
+                logging.debug("Interrupt Acknowledge Received and Processed")
                 acknowledged_interrupt.active_interrupt_event = None
 
                 return apply_actions_response
@@ -827,7 +862,6 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         runContext = self._runs[run_id]
 
         try:
-            # run.start(max_steps=max_steps) # run already started in create run
             for _ in range(steps):
                 _, _, metrics = runContext.run.tick()
 
@@ -937,7 +971,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         if triggered:
                             logging.debug("Interrupt triggered")
                             event = SimulationInterruptEvent(
-                                observed_value=i.trigger_metric_value
+                                observed_value=i.trigger_metric_value, 
                             )
                             i.active_interrupt_event = event
                             await i.interrupt_requests.put(event)
@@ -949,7 +983,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                                     f"Awiting Interrupt processing! {i.trigger_metric_fingerprint} val {i.trigger_metric_value}"
                                 )
                                 await asyncio.wait_for(
-                                    i.interrupt_requests.join(), 1
+                                    event.ack.wait(), 1
                                 )
                                 logging.debug("Interrupts done processing.")
                             except TimeoutError:
