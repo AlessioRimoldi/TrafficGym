@@ -5,6 +5,8 @@ class service_station(Experiment):
     async def run_experiment(self) -> None:
         tls_id = "TL0"
 
+        await self.run.subscribe("simulation", "getTime", None)
+
         # await stub.Subscribe(
         #     engine_pb2.SubscribeRequest(
         #         name="CAPass",
