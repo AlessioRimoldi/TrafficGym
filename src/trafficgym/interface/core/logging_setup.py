@@ -61,9 +61,12 @@ class LogPersistenceHandler(logging.Handler):
                 batch.append(record)
                 self._log_queue.task_done()
 
-            if len(batch) >= self.BATCH_SIZE or (record is None and batch):
+            if len(batch) >= self.BATCH_SIZE:
                 self._emit_batch(batch)
                 batch = []
+
+        if batch:
+            self._emit_batch(batch)
 
     def set_engine_run_id(self, engine_run_id: str) -> None:
         self.engine_run_id = engine_run_id
