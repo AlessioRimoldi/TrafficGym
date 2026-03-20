@@ -4,6 +4,8 @@ from django.shortcuts import render, get_object_or_404
 # Create your views here.
 
 from .models import RunRequest, Artefact, SubscriptionLogEntry
+from django.db.models import Min, Max, Count
+from django.core.paginator import Paginator
 from django.conf import settings
 from django.http import FileResponse, Http404
 from pathlib import Path
@@ -22,7 +24,34 @@ def run_requests_list_view(request: HttpRequest) -> HttpResponse:
 
 def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
     run_request = get_object_or_404(RunRequest, pk=pk)
-    context = {"run_request": run_request}
+    subscription_data = (
+        run_request.subscription_logs.values("subscription_fingerprint")
+        .annotate(
+            first_step=Min("simulation_step"), last_step=Max("simulation_step"), count=Count("*")
+        )
+        .order_by("subscription_fingerprint")
+    )
+
+    level_filter = request.GET.get("level")
+
+    logs_qs = run_request.worker_logs.all()
+
+    if level_filter:
+        logs_qs = logs_qs.filter(level=level_filter)
+
+    logs_qs = logs_qs.order_by("-event_time")
+
+    paginator = Paginator(logs_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        "run_request": run_request,
+        "subscription_data": subscription_data,
+        "worker_log_count": logs_qs.count(),
+        "worker_logs": page_obj,
+        "level_filter": level_filter,
+    }
 
     return render(request, "core/run_request_detail.html", context)
 

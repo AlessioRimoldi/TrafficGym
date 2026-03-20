@@ -578,7 +578,11 @@ class RunHandle:
 
         self._closed = True
 
-        await asyncio.gather(self._subscription_task, self._telemetry_task, return_exceptions=False)
+        await asyncio.gather(
+            self._subscription_task,
+            self._telemetry_task,
+            return_exceptions=False,
+        )
 
         return response
 

@@ -971,7 +971,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                         if triggered:
                             logging.debug("Interrupt triggered")
                             event = SimulationInterruptEvent(
-                                observed_value=i.trigger_metric_value, 
+                                observed_value=i.trigger_metric_value,
                             )
                             i.active_interrupt_event = event
                             await i.interrupt_requests.put(event)
@@ -982,9 +982,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
                                 logging.debug(
                                     f"Awiting Interrupt processing! {i.trigger_metric_fingerprint} val {i.trigger_metric_value}"
                                 )
-                                await asyncio.wait_for(
-                                    event.ack.wait(), 1
-                                )
+                                await asyncio.wait_for(event.ack.wait(), 1)
                                 logging.debug("Interrupts done processing.")
                             except TimeoutError:
                                 message = "Interrupt execution timeout!"

@@ -1,6 +1,6 @@
 from django.db import models, IntegrityError
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, TYPE_CHECKING
 import json
 import uuid
 import hashlib
@@ -152,6 +152,9 @@ class RunRequest(models.Model):
     run_signature = models.CharField(
         null=True, blank=True, max_length=64, editable=False
     )
+
+    subscription_logs: models.Manager[SubscriptionLogEntry]
+    worker_logs: models.Manager[WorkerLogEntry]
 
     class Meta:
         ordering = ["-created_at"]

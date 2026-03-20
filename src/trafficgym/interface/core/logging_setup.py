@@ -86,7 +86,9 @@ class LogPersistenceHandler(logging.Handler):
 
         for record in records:
             try:
-                event_time = datetime.fromtimestamp(record.created, tz=timezone.utc)
+                event_time = datetime.fromtimestamp(
+                    record.created, tz=timezone.utc
+                )
 
                 if record.name not in self.logger_names:
                     worker_objs.append(
