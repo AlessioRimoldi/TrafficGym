@@ -110,31 +110,48 @@ def media_view(_: HttpRequest, filepath: Path) -> StreamingHttpResponse:
     return FileResponse(open(system_path, "rb"), content_type="text/plain")
 
 
-def subscription_plot(
+def subscription_view(
     request: HttpRequest, pk: str, fingerprint: str
 ) -> HttpResponse:
+    view_type = request.GET.get("view", "table")
+
     run_request = get_object_or_404(RunRequest, pk=pk)
 
-    logs = (
-        SubscriptionLogEntry.objects.filter(
-            run_request=run_request, subscription_fingerprint=fingerprint
+    subscription_data = (
+        run_request.subscription_logs.filter(
+            subscription_fingerprint=fingerprint
         )
-        .order_by("event_time")
+        .order_by("simulation_time")
         .values("simulation_time", "payload")
     )
 
-    timestamps = []
-    values = []
+    if view_type == "graph":
+        template_name = "core/subscription_plot.html"
 
-    for entry in logs:
-        timestamps.append(entry["simulation_time"])
-        values.append(float(entry["payload"]))
+        timestamps = []
+        values = []
 
-    context = {
-        "timestamps": timestamps,
-        "values": values,
-        "fingerprint": fingerprint,
-        "run_request": run_request,
-    }
+        for entry in subscription_data:
+            timestamps.append(entry["simulation_time"])
+            values.append(float(entry["payload"]))
 
-    return render(request, "core/subscription_plot.html", context)
+        context = {
+            "timestamps": timestamps,
+            "values": values,
+            "fingerprint": fingerprint,
+            "run_request": run_request,
+        }
+    else:
+        template_name = "core/subscription_table.html"
+
+        paginator = Paginator(subscription_data, 100)
+        page_number = request.GET.get("page", 1)
+        page_obj = paginator.get_page(page_number)
+
+        context = {
+            "subscription_data": page_obj,
+            "fingerprint": fingerprint,
+            "run_request": run_request,
+        }
+
+    return render(request, template_name, context)

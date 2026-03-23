@@ -116,6 +116,7 @@
                         <th class="text-center">Last Step</th>
                         <th class="text-center">Count</th>
                         <th><!--Open Graph--></th>
+                        <th><!--Open Table--></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -125,7 +126,16 @@
                         <td class="text-center">{{ data.first_step }}</td>
                         <td class="text-center">{{ data.last_step }}</td>
                         <td class="text-center">{{ data.count }}</td>
-                        <td class="text-center"><a class="btn btn-sm btn-primary" target="_blank" href="subscription/{{ data.subscription_fingerprint }}">Open Graph&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
+                        <td class="text-center">
+                            <a class="btn btn-sm btn-primary" target="_blank" href="subscription_view/{{ data.subscription_fingerprint }}?view=graph">
+                                Open Graph&nbsp;<i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                        </td>
+                        <td class="text-center">
+                            <a class="btn btn-sm btn-primary" target="_blank" href="subscription_view/{{ data.subscription_fingerprint }}?view=table">
+                                Open Table&nbsp;<i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -173,6 +183,7 @@
                         <td>{{ log.event_time }}</td>
                         <td>{{ log.level }}</td>
                         <td>{{ log.message }}</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
