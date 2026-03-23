@@ -1,5 +1,9 @@
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% extends "core/base.html" %}
+{% block title %}Subscription Graph{% endblock %}
 
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <h2>{{ fingerprint }}</h2>
 
 <canvas id="chart"></canvas>
@@ -31,3 +35,4 @@ new Chart(document.getElementById("chart"), {
     }
 });
 </script>
+{% endblock %}

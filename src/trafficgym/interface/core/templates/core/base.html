@@ -1,0 +1,70 @@
+{% load static %}
+
+<!doctype html>
+<html lang="en-GB">
+    <head>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+        <style>
+            .caret-icon {
+                display: inline-block;
+                transition: transform 0.2s ease;
+            }
+
+            .card-header:not(.collapsed) > .caret-icon {
+                transform: rotate(90deg);
+            }
+
+        </style>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{% block title %}Default Title{% endblock %}</title>
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <div class="container-fluid">
+                <a href="/" class="navbar-brand "><img style="max-width: 100px; padding-top: 15px;" src="{% static 'core/unjam.png' %}" alt="Unjam Logo"></a>
+                {% comment %} <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"> <span class="navbar-toggler-icon"></span>
+                </button> {% endcomment %}
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a href="{% url 'run_requests_list' %}" class="nav-link">Run Requests</a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/" class="nav-link">Simulation Data</a>
+                        </li>
+                    </ul>
+                    {% comment %} <button id="openCreateRunModal" class="btn btn-success ms-auto" data-bs-toggle="modal" data-bs-target="#createRunModal">Create new Run Request</button> {% endcomment %}
+                    <button id="openCreateRunModal" class="btn btn-success ms-auto">Create new Run Request</button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="modal fade" id="createRunModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content" id="createRunModalContent">
+                    <!-- Modal content will be inserted here on click -->
+                </div>
+            </div>
+        </div>
+
+        <div class="container mt-4">
+            {% block content %}
+            {% endblock %}
+        </div>
+
+        <script>
+            document.getElementById("openCreateRunModal").addEventListener("click", () => {
+                fetch("{% url 'create_run_modal' %}")
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById("createRunModalContent").innerHTML = html;
+                    const modal = new bootstrap.Modal(document.getElementById('createRunModal'));
+                    modal.show()
+                })
+            });
+        </script>
+    </body>
+</html>

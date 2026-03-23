@@ -15,7 +15,7 @@ urlpatterns = [
         name="run_request_detail",
     ),
     path(
-        "run_request/<uuid:pk>/subscription/<str:fingerprint>",
+        "run_request/<uuid:pk>/subplot/<str:fingerprint>",
         views.subscription_plot,
         name="subscription_plot",
     ),
@@ -26,4 +26,6 @@ urlpatterns = [
         name="artefact_detail",
     ),
     path("media/<path:filepath>", views.media_view, name="media_view"),
+    path("create_run_modal", views.create_run_modal, name="create_run_modal"),
+    path("create_run_request", views.create_run_request, name="create_run_request")
 ]

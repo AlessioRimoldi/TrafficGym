@@ -1,17 +1,18 @@
 from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
-from django.shortcuts import render, get_object_or_404
-
-# Create your views here.
-
-from .models import RunRequest, Artefact, SubscriptionLogEntry
+from django.shortcuts import render, get_object_or_404, redirect
+from .models import RunRequest, Artefact, SubscriptionLogEntry, Scenario, Experiment
+from django.views.decorators.http import require_POST
 from django.db.models import Min, Max, Count
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.http import FileResponse, Http404
 from pathlib import Path
+from django.contrib.admin.views.decorators import staff_member_required
+
+import json
 
 
-def index(request: HttpRequest) -> HttpResponse:
+def index(_: HttpRequest) -> HttpResponse:
     return HttpResponse("Help world")
 
 
@@ -20,6 +21,35 @@ def run_requests_list_view(request: HttpRequest) -> HttpResponse:
     context = {"run_requests_list": run_requests_list}
 
     return render(request, "core/run_requests_list.html", context)
+
+@staff_member_required
+def create_run_modal(request: HttpRequest) -> HttpResponse:
+    scenarios = Scenario.objects.only("id", "name").order_by("name")
+    experiments = Experiment.objects.only("sha256", "name", "version").order_by("name", "version")
+
+    context = {"scenarios": scenarios, "experiments": experiments}
+
+    return render(request, "core/create_run_modal.html", context)
+
+@require_POST
+def create_run_request(request: HttpRequest) -> HttpResponse:
+    scenario_id = request.POST.get("scenario")
+    experiment_id = request.POST.get("experiment")
+    simulation_parameters = request.POST.get("simulation_parameters", "{}")
+
+    scenario = get_object_or_404(Scenario, pk=scenario_id)
+    experiment = get_object_or_404(Experiment, pk=experiment_id)
+
+    run = RunRequest(
+        scenario=scenario,
+        experiment=experiment,
+        simulation_parameters=json.loads(simulation_parameters)
+    )
+
+    run.save()
+
+    return redirect("run_request_detail", pk=run.pk)
+
 
 
 def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:

@@ -1,50 +1,44 @@
-<!doctype html>
-<html lang="en-GB">
-    <head>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Run Requests</title>
-    </head>
+{% extends "core/base.html" %}
+{% block title %}Run Requests{% endblock %}
 
-<body>
-    <div class="container mt-4">
-    <h1> Run Requests List </h1>
-    {% if run_requests_list %}
-        <table class="table table-striped table-hover">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Created</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for run_request in run_requests_list %}
-                <tr data-run-id="{{ run_request.id }}">
-                    <td><a href="/run_request/{{run_request.id}}">{{run_request.id}}</a></td>
-                    <td>{{run_request.created_at}}</td>
-                    <td class="status">
-                        {% if run_request.status == "COMPLETE" %}
-                            <span class="badge text-bg-success">Success</span>
-                        {% elif run_request.status == "FAILED" %}
-                            <span class="badge text-bg-danger">Failed</span>
-                        {% elif run_request.status == "PREPARING" %}
-                            <span class="badge text-bg-primary">Preparing</span>
-                        {% elif run_request.status == "RUNNING" %}
-                            <span class="badge text-bg-primary">Running</span>
-                        {% elif run_request.status == "PENDING" %}
-                            <span class="badge text-bg-secondary">Pending</span>
-                        {% else %}
-                            <span class="badge text-bg-light">{{ run_request.status }}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p> No run requests to display </p>
-    {% endif %}
-    </div>
-</body>
+{% block content %}
+<div class="container mt-4">
+<h1> Run Requests List </h1>
+{% if run_requests_list %}
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Created</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for run_request in run_requests_list %}
+            <tr data-run-id="{{ run_request.id }}">
+                <td><a href="/run_request/{{run_request.id}}">{{run_request.id}}</a></td>
+                <td>{{run_request.created_at}}</td>
+                <td class="status">
+                    {% if run_request.status == "COMPLETE" %}
+                        <span class="badge text-bg-success">Success</span>
+                    {% elif run_request.status == "FAILED" %}
+                        <span class="badge text-bg-danger">Failed</span>
+                    {% elif run_request.status == "PREPARING" %}
+                        <span class="badge text-bg-primary">Preparing</span>
+                    {% elif run_request.status == "RUNNING" %}
+                        <span class="badge text-bg-primary">Running</span>
+                    {% elif run_request.status == "PENDING" %}
+                        <span class="badge text-bg-secondary">Pending</span>
+                    {% else %}
+                        <span class="badge text-bg-light">{{ run_request.status }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p> No run requests to display </p>
+{% endif %}
+</div>
+{% endblock %}

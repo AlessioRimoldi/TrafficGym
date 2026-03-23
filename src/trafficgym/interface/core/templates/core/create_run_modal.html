@@ -1,0 +1,33 @@
+<form action="{% url 'create_run_request' %}" method="POST" id="createRunForm">
+    {% csrf_token %}
+    <div class="modal-header">
+        <h5 class="modal-title">Create new Run Request</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <div class="mb-4">
+            <label for="scenarioSelect" class="form-label">Scenario</label>
+            <select name="scenario" id="scenarioSelect" class="form-select" required>
+            {% for scenario in scenarios %}
+                <option value="{{ scenario.id }}">{{ scenario.name }}</option>
+            {% endfor %}
+            </select>
+        </div>
+        <div class="mb-4">
+            <label for="experimentSelect" class="form-label">Experiment</label>
+            <select id="experimentSelect" name="experiment" class="form-select" required>
+            {% for experiment in experiments %}
+                <option value="{{ experiment.sha256 }}">{{ experiment.name }} v{{ experiment.version}}</option>
+            {% endfor %}
+            </select>
+        </div>
+        <div class="mb-4">
+            <label for="simParams" class="form-label">Simulation Parameters (JSON)</label>
+            <textarea name="simulation_parameters" class="form-control" id="simParams" rows="3">{}</textarea>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create</button>
+    </div>
+</form>
