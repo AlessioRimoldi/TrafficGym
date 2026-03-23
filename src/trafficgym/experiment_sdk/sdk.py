@@ -322,11 +322,15 @@ class CreateRunRequest(SdkBase[engine_pb2.CreateRunRequest]):
     sumocfg_path: str
     sumo_binary: str
     step_length_ms: int
+    seed: int
 
     @staticmethod
     def from_proto(proto: engine_pb2.CreateRunRequest) -> CreateRunRequest:
         return CreateRunRequest(
-            proto.sumocfg_path, proto.sumo_binary, proto.step_length_ms
+            proto.sumocfg_path,
+            proto.sumo_binary,
+            proto.step_length_ms,
+            proto.seed,
         )
 
     def to_proto(self) -> engine_pb2.CreateRunRequest:
@@ -334,6 +338,7 @@ class CreateRunRequest(SdkBase[engine_pb2.CreateRunRequest]):
             sumocfg_path=self.sumocfg_path,
             sumo_binary=self.sumo_binary,
             step_length_ms=self.step_length_ms,
+            seed=self.seed,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -341,6 +346,7 @@ class CreateRunRequest(SdkBase[engine_pb2.CreateRunRequest]):
             "sumocfg_path": self.sumocfg_path,
             "sumo_binary": self.sumo_binary,
             "step_length_ms": self.step_length_ms,
+            "seed": self.seed,
         }
 
 

@@ -286,6 +286,7 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
         cfg = RunConfig(
             sumocfg_path=request.sumocfg_path,
             sumo_binary=request.sumo_binary or "sumo",
+            seed=request.seed,
         )
         step_length_ms = (
             request.step_length_ms

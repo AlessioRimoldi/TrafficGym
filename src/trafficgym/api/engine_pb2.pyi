@@ -246,17 +246,20 @@ class CreateRunRequest(_message.Message):
     SUMOCFG_PATH_FIELD_NUMBER: _builtins.int
     SUMO_BINARY_FIELD_NUMBER: _builtins.int
     STEP_LENGTH_MS_FIELD_NUMBER: _builtins.int
+    SEED_FIELD_NUMBER: _builtins.int
     sumocfg_path: _builtins.str
     sumo_binary: _builtins.str
     step_length_ms: _builtins.int
+    seed: _builtins.int
     def __init__(
         self,
         *,
         sumocfg_path: _builtins.str = ...,
         sumo_binary: _builtins.str = ...,
         step_length_ms: _builtins.int = ...,
+        seed: _builtins.int = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["step_length_ms", b"step_length_ms", "sumo_binary", b"sumo_binary", "sumocfg_path", b"sumocfg_path"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["seed", b"seed", "step_length_ms", b"step_length_ms", "sumo_binary", b"sumo_binary", "sumocfg_path", b"sumocfg_path"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CreateRunRequest: _TypeAlias = CreateRunRequest  # noqa: Y015

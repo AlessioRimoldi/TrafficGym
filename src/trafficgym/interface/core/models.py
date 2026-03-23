@@ -127,18 +127,13 @@ class RunStatus(models.TextChoices):
 
 class RunRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    engine_run_id = models.UUIDField(
-        null=True, blank=True, unique=True, editable=False
-    )
     worker_id = models.UUIDField(null=True, blank=True, editable=False)
-
     scenario: models.ForeignKey[Scenario] = models.ForeignKey(
         Scenario, on_delete=models.deletion.PROTECT
     )
     experiment: models.ForeignKey[Experiment] = models.ForeignKey(
         Experiment, on_delete=models.deletion.PROTECT
     )
-
     simulation_parameters = models.JSONField[Any](blank=True, default=dict)
     status = models.CharField(
         choices=RunStatus.choices,
@@ -146,6 +141,7 @@ class RunRequest(models.Model):
         blank=True,
         editable=False,
     )
+    rerun_count = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
     started_at = models.DateTimeField(null=True, blank=True, editable=False)
     finished_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -153,8 +149,8 @@ class RunRequest(models.Model):
         null=True, blank=True, max_length=64, editable=False
     )
 
-    subscription_logs: models.Manager[SubscriptionLogEntry]
-    worker_logs: models.Manager[WorkerLogEntry]
+    worker_logs: models.Manager[WorkerLogEntryRunRequest]
+    executions: models.Manager[RunExecution]
 
     class Meta:
         ordering = ["-created_at"]
@@ -194,9 +190,36 @@ class RunRequest(models.Model):
     #     return f"{self.created_at}: {self.status}"
 
 
-class WorkerLogEntry(models.Model):
-    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
-        RunRequest, on_delete=models.CASCADE, related_name="worker_logs"
+class RunExecution(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run_request = models.ForeignKey(
+        RunRequest, on_delete=models.CASCADE, related_name="executions"
+    )
+    engine_run_id = models.UUIDField(
+        null=True, blank=True, unique=True, editable=False
+    )
+    worker_id = models.UUIDField(null=True, blank=True, editable=False)
+    seed = models.BigIntegerField()
+    status = models.CharField(
+        choices=RunStatus.choices,
+        default=RunStatus.PENDING,
+        blank=True,
+        editable=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+    started_at = models.DateTimeField(null=True, blank=True, editable=False)
+    finished_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    subscription_logs: models.Manager[SubscriptionLogEntry]
+    worker_logs: models.Manager[WorkerLogEntryRunExecution]
+
+
+class WorkerLogEntryRunRequest(models.Model):
+    run_request: models.ForeignKey[RunRequest | None] = models.ForeignKey(
+        RunRequest,
+        on_delete=models.CASCADE,
+        related_name="worker_logs",
+        null=True,
     )
     event_time = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -207,6 +230,22 @@ class WorkerLogEntry(models.Model):
         indexes = [models.Index(fields=["run_request", "created_at"])]
 
 
+class WorkerLogEntryRunExecution(models.Model):
+    run_execution: models.ForeignKey[RunExecution | None] = models.ForeignKey(
+        RunExecution,
+        on_delete=models.CASCADE,
+        related_name="worker_logs",
+        null=True,
+    )
+    event_time = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    level = models.CharField(max_length=20)
+    message = models.TextField()
+
+    class Meta:
+        indexes = [models.Index(fields=["run_execution", "created_at"])]
+
+
 class EventLogType(models.TextChoices):
     REQUEST = "REQUEST"
     RESPONSE = "RESPONSE"
@@ -214,8 +253,8 @@ class EventLogType(models.TextChoices):
 
 
 class RPCLogEntry(models.Model):
-    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
-        RunRequest, on_delete=models.CASCADE, related_name="rpc_logs"
+    run_execution: models.ForeignKey[RunExecution] = models.ForeignKey(
+        RunExecution, on_delete=models.CASCADE, related_name="rpc_logs"
     )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()
@@ -226,8 +265,8 @@ class RPCLogEntry(models.Model):
 
 
 class SubscriptionLogEntry(models.Model):
-    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
-        RunRequest, on_delete=models.CASCADE, related_name="subscription_logs"
+    run_execution: models.ForeignKey[RunExecution] = models.ForeignKey(
+        RunExecution, on_delete=models.CASCADE, related_name="subscription_logs"
     )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()
@@ -241,8 +280,8 @@ class SubscriptionLogEntry(models.Model):
 
 
 class TelemetryLogEntry(models.Model):
-    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
-        RunRequest, on_delete=models.CASCADE, related_name="telemetry_logs"
+    run_execution: models.ForeignKey[RunExecution] = models.ForeignKey(
+        RunExecution, on_delete=models.CASCADE, related_name="telemetry_logs"
     )
     engine_run_id = models.UUIDField()
     event_time = models.DateTimeField()

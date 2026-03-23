@@ -454,11 +454,13 @@ class EngineDriver:
         sumocfg_path: str,
         sumo_binary: Literal["sumo", "sumo-gui"],
         step_length_ms: int,
+        seed: int,
     ) -> AsyncIterator[RunHandle]:
         request = sdk.CreateRunRequest(
             sumocfg_path=sumocfg_path,
             sumo_binary=sumo_binary,
             step_length_ms=step_length_ms,
+            seed=seed,
         )
 
         rpc_call_id = uuid.uuid4()

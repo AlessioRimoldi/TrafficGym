@@ -1,6 +1,13 @@
 from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
-from .models import RunRequest, Artefact, SubscriptionLogEntry, Scenario, Experiment
+from .models import (
+    RunRequest,
+    RunExecution,
+    Artefact,
+    SubscriptionLogEntry,
+    Scenario,
+    Experiment,
+)
 from django.views.decorators.http import require_POST
 from django.db.models import Min, Max, Count
 from django.core.paginator import Paginator
@@ -22,19 +29,24 @@ def run_requests_list_view(request: HttpRequest) -> HttpResponse:
 
     return render(request, "core/run_requests_list.html", context)
 
-@staff_member_required
+
+# @staff_member_required
 def create_run_modal(request: HttpRequest) -> HttpResponse:
     scenarios = Scenario.objects.only("id", "name").order_by("name")
-    experiments = Experiment.objects.only("sha256", "name", "version").order_by("name", "version")
+    experiments = Experiment.objects.only("sha256", "name", "version").order_by(
+        "name", "version"
+    )
 
     context = {"scenarios": scenarios, "experiments": experiments}
 
     return render(request, "core/create_run_modal.html", context)
 
+
 @require_POST
 def create_run_request(request: HttpRequest) -> HttpResponse:
     scenario_id = request.POST.get("scenario")
     experiment_id = request.POST.get("experiment")
+    rerun_count = int(request.POST.get("rerun_count", "1"))
     simulation_parameters = request.POST.get("simulation_parameters", "{}")
 
     scenario = get_object_or_404(Scenario, pk=scenario_id)
@@ -43,7 +55,8 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
     run = RunRequest(
         scenario=scenario,
         experiment=experiment,
-        simulation_parameters=json.loads(simulation_parameters)
+        rerun_count=rerun_count,
+        simulation_parameters=json.loads(simulation_parameters),
     )
 
     run.save()
@@ -51,20 +64,12 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
     return redirect("run_request_detail", pk=run.pk)
 
 
-
 def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
     run_request = get_object_or_404(RunRequest, pk=pk)
-    subscription_data = (
-        run_request.subscription_logs.values("subscription_fingerprint")
-        .annotate(
-            first_step=Min("simulation_step"), last_step=Max("simulation_step"), count=Count("*")
-        )
-        .order_by("subscription_fingerprint")
-    )
 
     level_filter = request.GET.get("level")
 
-    logs_qs = run_request.worker_logs.all()
+    logs_qs = run_request.worker_logs
 
     if level_filter:
         logs_qs = logs_qs.filter(level=level_filter)
@@ -77,13 +82,48 @@ def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
 
     context = {
         "run_request": run_request,
-        "subscription_data": subscription_data,
         "worker_log_count": logs_qs.count(),
         "worker_logs": page_obj,
         "level_filter": level_filter,
     }
 
     return render(request, "core/run_request_detail.html", context)
+
+
+def run_execution_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
+    run_execution = get_object_or_404(RunExecution, pk=pk)
+    subscription_data = (
+        run_execution.subscription_logs.values("subscription_fingerprint")
+        .annotate(
+            first_step=Min("simulation_step"),
+            last_step=Max("simulation_step"),
+            count=Count("*"),
+        )
+        .order_by("subscription_fingerprint")
+    )
+
+    level_filter = request.GET.get("level")
+
+    logs_qs = run_execution.worker_logs.all()
+
+    if level_filter:
+        logs_qs = logs_qs.filter(level=level_filter)
+
+    logs_qs = logs_qs.order_by("-event_time")
+
+    paginator = Paginator(logs_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        "run_execution": run_execution,
+        "subscription_data": subscription_data,
+        "worker_log_count": logs_qs.count(),
+        "worker_logs": page_obj,
+        "level_filter": level_filter,
+    }
+
+    return render(request, "core/run_execution_detail.html", context)
 
 
 def artefacts_list_view(request: HttpRequest) -> HttpResponse:
@@ -115,10 +155,10 @@ def subscription_view(
 ) -> HttpResponse:
     view_type = request.GET.get("view", "table")
 
-    run_request = get_object_or_404(RunRequest, pk=pk)
+    run_execution = get_object_or_404(RunExecution, pk=pk)
 
     subscription_data = (
-        run_request.subscription_logs.filter(
+        run_execution.subscription_logs.filter(
             subscription_fingerprint=fingerprint
         )
         .order_by("simulation_time")
@@ -139,7 +179,7 @@ def subscription_view(
             "timestamps": timestamps,
             "values": values,
             "fingerprint": fingerprint,
-            "run_request": run_request,
+            "run_execution": run_execution,
         }
     else:
         template_name = "core/subscription_table.html"
@@ -151,7 +191,7 @@ def subscription_view(
         context = {
             "subscription_data": page_obj,
             "fingerprint": fingerprint,
-            "run_request": run_request,
+            "run_execution": run_execution,
         }
 
     return render(request, template_name, context)

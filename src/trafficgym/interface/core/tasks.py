@@ -5,6 +5,7 @@ import importlib.util
 import grpc.aio
 import hashlib
 import logging
+import random
 
 from celery import shared_task, Task
 from django.db import transaction
@@ -12,13 +13,17 @@ from django.utils import timezone
 from django.core.files import File
 from pathlib import Path
 from django.core.files.storage import default_storage
-from typing import Type, Any, ParamSpec
+from typing import Type, Any, ParamSpec, cast
 
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.experiment_sdk.experiments.base import Experiment
 from trafficgym.engine.client.driver import EngineDriver, RunHandle
-from trafficgym.interface.core.models import RunRequest
-from trafficgym.interface.core.logging_setup import LogPersistenceHandler
+from trafficgym.interface.core.models import RunRequest, RunExecution
+from trafficgym.interface.core.logging_setup import (
+    BaseLogPersistenceHandler,
+    LogPersistenceHandlerRunRequest,
+    LogPersistenceHandlerRunExecution,
+)
 
 # event_logger = logging.getLogger("event")
 # subscription_logger = logging.getLogger("subscription")
@@ -26,7 +31,8 @@ from trafficgym.interface.core.logging_setup import LogPersistenceHandler
 
 
 async def _async_process(
-    log_handler: LogPersistenceHandler,
+    execution: RunExecution,
+    log_handler: LogPersistenceHandlerRunExecution,
     sumocfg_path: Path,
     ExperimentClass: Type[Experiment],
 ) -> RunHandle:
@@ -36,7 +42,7 @@ async def _async_process(
         engine_driver = EngineDriver(stub)
 
         async with engine_driver.create_run(
-            str(sumocfg_path), "sumo", 1000
+            str(sumocfg_path), "sumo", 1000, cast(int, execution.seed)
         ) as run:
             log_handler.set_engine_run_id(run.run_id)
             await ExperimentClass(run).run_experiment()
@@ -85,7 +91,7 @@ class RunTask(Task[P, None]):
 def process_run_request(
     self: RunTask[tuple[str | uuid.UUID], None], run_request_id: str | uuid.UUID
 ) -> None:
-    handler: LogPersistenceHandler | None = None
+    handler: BaseLogPersistenceHandler | None = None
     try:
         import asyncio
 
@@ -98,7 +104,7 @@ def process_run_request(
             .get(id=run_request_id)
         )
 
-        handler = LogPersistenceHandler(run_request)
+        handler = LogPersistenceHandlerRunRequest(run_request)
 
         if run_request.status != "PENDING":
             return
@@ -198,19 +204,54 @@ def process_run_request(
                 run_request.status = "RUNNING"
                 run_request.save(update_fields=["status"])
 
-            handler.flush_queue()
+            for i in range(cast(int, run_request.rerun_count)):
+                seed = int(random.random() * (2**31 - 1))
+                RunExecution.objects.create(run_request=run_request, seed=seed, status="PENDING")
 
-            run_handle = asyncio.run(
-                _async_process(handler, sumocfg_path, ExperimentClass)
-            )
+            for execution in run_request.executions.all():
+                with transaction.atomic():
+                    execution.status = "RUNNING"
+                    execution.save(update_fields=["status"])
+
+                handler.flush_queue()
+                handler.deregister()
+                handler = LogPersistenceHandlerRunExecution(execution)
+
+                try:
+                    run_handle = asyncio.run(
+                        _async_process(
+                            execution,
+                            handler,
+                            sumocfg_path,
+                            ExperimentClass,
+                        )
+                    )
+
+                    with transaction.atomic():
+                        execution.status = "COMPLETE"
+                        execution.finished_at = timezone.now()
+                        execution.engine_run_id = run_handle.run_id
+                        execution.save(update_fields=["status", "finished_at", "engine_run_id"])
+
+                except Exception as e:
+                    logging.error(f"{e}", exc_info=True)
+                    with transaction.atomic():
+                        execution.status = "FAILED"
+                        execution.finished_at = timezone.now()
+                        execution.save(update_fields=["status", "finished_at"])
+                    raise Exception(
+                        f"Run execution {i + 1} of {run_request.rerun_count} failed. ({execution.id})"
+                    ) from e
+                finally:
+                    execution.save()
+                    handler.flush_queue()
+                    handler.deregister()
+                    handler = LogPersistenceHandlerRunRequest(run_request)
 
             with transaction.atomic():
                 run_request.status = "COMPLETE"
                 run_request.finished_at = timezone.now()
-                run_request.engine_run_id = run_handle.run_id
-                run_request.save(
-                    update_fields=["status", "finished_at", "engine_run_id"]
-                )
+                run_request.save(update_fields=["status", "finished_at"])
 
     except Exception as e:
         logging.error(f"{e}", exc_info=True)

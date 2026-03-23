@@ -15,7 +15,12 @@ urlpatterns = [
         name="run_request_detail",
     ),
     path(
-        "run_request/<uuid:pk>/subscription_view/<str:fingerprint>",
+        "run_execution/<uuid:pk>/",
+        views.run_execution_detail_view,
+        name="run_execution_detail",
+    ),
+    path(
+        "run_execution/<uuid:pk>/subscription_view/<str:fingerprint>",
         views.subscription_view,
         name="subscription_view",
     ),
@@ -27,5 +32,9 @@ urlpatterns = [
     ),
     path("media/<path:filepath>", views.media_view, name="media_view"),
     path("create_run_modal", views.create_run_modal, name="create_run_modal"),
-    path("create_run_request", views.create_run_request, name="create_run_request")
+    path(
+        "create_run_request",
+        views.create_run_request,
+        name="create_run_request",
+    ),
 ]

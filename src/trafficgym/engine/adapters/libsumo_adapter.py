@@ -33,6 +33,8 @@ class LibsumoAdapter(SimulationPort):
             "--step-length",
             str(self.seconds_per_step),
             "--no-warnings",
+            "--seed",
+            str(self.cfg.seed),
         ]
         libsumo.start(cmd)
         self.edge_ids = list(libsumo.edge.getIDList())

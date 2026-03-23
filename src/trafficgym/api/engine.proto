@@ -69,6 +69,7 @@ message CreateRunRequest {
   string sumocfg_path = 1;
   string sumo_binary = 2;
   int32 step_length_ms = 3;
+  int32 seed = 4;
 }
 
 message CreateRunResponse {

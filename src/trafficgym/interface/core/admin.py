@@ -10,7 +10,8 @@ from .models import (
     Scenario,
     Artefact,
     Experiment,
-    WorkerLogEntry,
+    WorkerLogEntryRunRequest,
+    WorkerLogEntryRunExecution,
     RPCLogEntry,
     SubscriptionLogEntry,
     TelemetryLogEntry,
@@ -60,8 +61,16 @@ admin.site.register(Scenario)
 admin.site.register(Experiment)
 
 
-@admin.register(WorkerLogEntry)
-class WorkerLogEntryAdmin(admin.ModelAdmin[WorkerLogEntry]):
+@admin.register(WorkerLogEntryRunExecution)
+class WorkerLogEntryRunExecutionAdmin(
+    admin.ModelAdmin[WorkerLogEntryRunExecution]
+):
+    list_display = ("run_execution__id", "level", "event_time", "message")
+    list_filter = ("run_execution__id", "level", "event_time")
+
+
+@admin.register(WorkerLogEntryRunRequest)
+class WorkerLogEntryRunRequestAdmin(admin.ModelAdmin[WorkerLogEntryRunRequest]):
     list_display = ("run_request__id", "level", "event_time", "message")
     list_filter = ("run_request__id", "level", "event_time")
 
@@ -69,32 +78,36 @@ class WorkerLogEntryAdmin(admin.ModelAdmin[WorkerLogEntry]):
 @admin.register(RPCLogEntry)
 class RPCLogEntryAdmin(admin.ModelAdmin[RPCLogEntry]):
     list_display = (
-        "run_request__id",
+        "run_execution__id",
         "event_time",
         "rpc_name",
         "direction",
         "rpc_call_id",
     )
-    list_filter = ("run_request__id", "event_time", "rpc_name", "direction")
+    list_filter = ("run_execution__id", "event_time", "rpc_name", "direction")
 
 
 @admin.register(SubscriptionLogEntry)
 class SubscriptionLogEntryAdmin(admin.ModelAdmin[SubscriptionLogEntry]):
     list_display = (
-        "run_request__id",
+        "run_execution__id",
         "simulation_step",
         "subscription_fingerprint",
         "payload",
     )
-    list_filter = ("run_request_id", "event_time", "subscription_fingerprint")
+    list_filter = (
+        "run_execution__id",
+        "event_time",
+        "subscription_fingerprint",
+    )
 
 
 @admin.register(TelemetryLogEntry)
 class TelemetryLogEntryAdmin(admin.ModelAdmin[TelemetryLogEntry]):
     list_display = (
-        "run_request__id",
+        "run_execution__id",
         "simulation_step",
         "telemetry_name",
         "payload",
     )
-    list_filter = ("run_request__id", "event_time", "telemetry_name")
+    list_filter = ("run_execution__id", "event_time", "telemetry_name")

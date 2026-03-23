@@ -13,6 +13,7 @@ ValDict = dict[str, engine_pb2.CustomValue]
 class RunConfig:
     sumocfg_path: str
     sumo_binary: str
+    seed: int
 
 
 @dataclass

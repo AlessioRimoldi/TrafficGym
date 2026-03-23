@@ -26,7 +26,7 @@ async def main() -> None:
         engine_driver = EngineDriver(stub)
 
         async with engine_driver.create_run(
-            str(sumocfg_path), "sumo", 1000
+            str(sumocfg_path), "sumo", 1000, 42
         ) as run:
             await ExperimentClass(run).run_experiment()
 
