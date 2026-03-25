@@ -10,7 +10,7 @@
     {% if artefacts_list %}
         <ul>
             {% for artefact in artefacts_list %}
-                <li>Artefact <a href="/artefact/{{artefact.sha256}}">{{artefact.original_name}}</a>, created at {{artefact.created_at}}</li>
+                <li>Artefact <a href="{% url "artefact_detail" pk=artefact.sha256 %}">{{artefact.original_name}}</a>, created at {{artefact.created_at}}</li>
             {% endfor %}
         </ul>
     {% else %}

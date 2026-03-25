@@ -8,7 +8,7 @@
     <div class="card m-4">
         <div class="card-header fs-4 fw-bold py-3">Properties</div>
         <div class="card-body">
-            <p><strong>Run Request ID:</strong> {{ run_execution.run_request }}</p>
+        <p><strong>Run Request ID:</strong> <a href="{% url "run_request_detail" run_execution.run_request %}">{{ run_execution.run_request }}</a></p>
         <p><strong>Run Execution ID:</strong> {{ run_execution.id }}</p>
         <p><strong>Engine Run ID:</strong> {{ run_execution.engine_run_id }}</p>
         <p><strong>Seed:</strong> {{ run_execution.seed }}</p>
@@ -53,8 +53,8 @@
                     <tr>
                         <td>{{ run_execution.run_request.experiment.artefact.original_name }}</td>
                         {% comment %} <td>{{ run_execution.experiment.artefact.sha256 }}</td> {% endcomment %}
-                        <td><a class="btn btn-sm btn-primary" href="/artefact/{{ run_execution.run_request.experiment.artefact.sha256 }}">View Detail</a></td>
-                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{{ run_execution.run_request.experiment.artefact.file.url }}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
+                        <td><a class="btn btn-sm btn-primary" href="{% url "artefact_detail" run_execution.run_request.experiment.artefact.sha256 %}">View Detail</a></td>
+                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{% url "media_view" run_execution.run_request.experiment.artefact.file.name %}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
                     </tr>
                 </tbody>
             </table>
@@ -89,8 +89,8 @@
                     <tr>
                         <td>{{ artefact.original_name }}</td>
                         {% comment %} <td>{{ artefact.sha256 }}</td> {% endcomment %}
-                        <td><a class="btn btn-sm btn-primary" href="/artefact/{{ artefact.sha256 }}">View Detail</a></td>
-                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{{ artefact.file.url }}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
+                        <td><a class="btn btn-sm btn-primary" href="{% url "artefact_detail" pk=artefact.sha256 %}">View Detail</a></td>
+                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{% url "media_view" filepath=artefact.file.name %}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -129,12 +129,12 @@
                         <td class="text-center">{{ data.last_step }}</td>
                         <td class="text-center">{{ data.count }}</td>
                         <td class="text-center">
-                            <a class="btn btn-sm btn-primary" target="_blank" href="subscription_view/{{ data.subscription_fingerprint }}?view=graph">
+                            <a class="btn btn-sm btn-primary" target="_blank" href="{% url "subscription_view" run_execution.id data.subscription_fingerprint %}?view=graph">
                                 Open Graph&nbsp;<i class="bi bi-box-arrow-up-right"></i>
                             </a>
                         </td>
                         <td class="text-center">
-                            <a class="btn btn-sm btn-primary" target="_blank" href="subscription_view/{{ data.subscription_fingerprint }}?view=table">
+                            <a class="btn btn-sm btn-primary" target="_blank" href="{% url "subscription_view" run_execution.id data.subscription_fingerprint }}?view=table">
                                 Open Table&nbsp;<i class="bi bi-box-arrow-up-right"></i>
                             </a>
                         </td>

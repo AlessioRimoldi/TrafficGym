@@ -50,9 +50,8 @@
                 <tbody>
                     <tr>
                         <td>{{ run_request.experiment.artefact.original_name }}</td>
-                        {% comment %} <td>{{ run_request.experiment.artefact.sha256 }}</td> {% endcomment %}
-                        <td><a class="btn btn-sm btn-primary" href="/artefact/{{ run_request.experiment.artefact.sha256 }}">View Detail</a></td>
-                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{{ run_request.experiment.artefact.file.url }}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
+                        <td><a class="btn btn-sm btn-primary" href="{% url "artefact_detail" run_request.experiment.artefact.sha256 %}">View Detail</a></td>
+                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{% url 'media_view' run_request.experiment.artefact.file.name %}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
                     </tr>
                 </tbody>
             </table>
@@ -87,8 +86,8 @@
                     <tr>
                         <td>{{ artefact.original_name }}</td>
                         {% comment %} <td>{{ artefact.sha256 }}</td> {% endcomment %}
-                        <td><a class="btn btn-sm btn-primary" href="/artefact/{{ artefact.sha256 }}">View Detail</a></td>
-                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{{ artefact.file.url }}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
+                        <td><a class="btn btn-sm btn-primary" href="{% url "artefact_detail" artefact.sha256 %}">View Detail</a></td>
+                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{% url 'media_view' artefact.file.name %}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -134,7 +133,7 @@
                                 <span class="badge text-bg-light">{{ execution.status }}</span>
                             {% endif %}
                         </td>
-                        <td><a href="/run_execution/{{ execution.id }}">{{ execution.id }}</a></td>
+                        <td><a href="{% url "run_execution_detail" execution.id %}">{{ execution.id }}</a></td>
                         <td>{{ execution.engine_run_id }}</td>
                     </tr>
                     {% endfor %}

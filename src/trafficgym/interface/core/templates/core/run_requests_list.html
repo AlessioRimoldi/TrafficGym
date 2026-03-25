@@ -16,7 +16,7 @@
         <tbody>
             {% for run_request in run_requests_list %}
             <tr data-run-id="{{ run_request.id }}">
-                <td><a href="/run_request/{{run_request.id}}">{{run_request.id}}</a></td>
+                <td><a href="{% url "run_request_detail" run_request.id %}">{{ run_request.id }}</a></td>
                 <td>{{run_request.created_at}}</td>
                 <td class="status">
                     {% if run_request.status == "COMPLETE" %}
