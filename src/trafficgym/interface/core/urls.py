@@ -19,11 +19,11 @@ urlpatterns = [
         views.run_execution_detail_view,
         name="run_execution_detail",
     ),
-    path(
-        "run_execution/<uuid:pk>/subscription_view/<str:fingerprint>",
-        views.subscription_view,
-        name="subscription_view",
-    ),
+    # path(
+    #     "run_execution/<uuid:pk>/subscription_view/<str:fingerprint>",
+    #     views.subscription_view,
+    #     name="subscription_view",
+    # ),
     path("artefacts_list/", views.artefacts_list_view, name="artefacts_list"),
     path(
         "artefact/<str:pk>/",
@@ -36,5 +36,25 @@ urlpatterns = [
         "create_run_request",
         views.create_run_request,
         name="create_run_request",
+    ),
+    path(
+        "analytics_overview",
+        views.analytics_overview_view,
+        name="analytics_overview",
+    ),
+    path(
+        "analytics_run_request/<uuid:pk>",
+        views.analytics_run_request_view,
+        name="analytics_run_request",
+    ),
+    path(
+        "analytics_run_execution/<uuid:pk>",
+        views.analytics_run_execution_view,
+        name="analytics_run_execution",
+    ),
+    path(
+        "analytics_run_request/<uuid:pk>/subscriptions_data",
+        views.subscription_data,
+        name="subscription_data",
     ),
 ]

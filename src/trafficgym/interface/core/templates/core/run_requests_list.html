@@ -9,6 +9,8 @@
         <thead>
             <tr>
                 <th>ID</th>
+                <th>Scenario</th>
+                <th>Experiment</th>
                 <th>Created</th>
                 <th>Status</th>
             </tr>
@@ -17,7 +19,9 @@
             {% for run_request in run_requests_list %}
             <tr data-run-id="{{ run_request.id }}">
                 <td><a href="{% url "run_request_detail" run_request.id %}">{{ run_request.id }}</a></td>
-                <td>{{run_request.created_at}}</td>
+                <td>{{ run_request.scenario.name }}</td>
+                <td>{{ run_request.experiment.name }}</td>
+                <td>{{ run_request.created_at|date:"m.d.y H:i:s" }}</td>
                 <td class="status">
                     {% if run_request.status == "COMPLETE" %}
                         <span class="badge text-bg-success">Success</span>

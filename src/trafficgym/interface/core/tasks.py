@@ -35,7 +35,7 @@ async def _async_process(
     log_handler: LogPersistenceHandlerRunExecution,
     sumocfg_path: Path,
     ExperimentClass: Type[Experiment],
-) -> RunHandle:
+) -> str:
     async with grpc.aio.insecure_channel("127.0.0.1:50051") as channel:
         stub = engine_pb2_grpc.EngineServiceStub(channel)
 
@@ -46,7 +46,7 @@ async def _async_process(
         ) as run:
             log_handler.set_engine_run_id(run.run_id)
             await ExperimentClass(run).run_experiment()
-            return run
+            return run.run_id
 
 
 def _compute_file_sha256(file: File) -> str:
@@ -206,7 +206,9 @@ def process_run_request(
 
             for i in range(cast(int, run_request.rerun_count)):
                 seed = int(random.random() * (2**31 - 1))
-                RunExecution.objects.create(run_request=run_request, seed=seed, status="PENDING")
+                RunExecution.objects.create(
+                    run_request=run_request, seed=seed, status="PENDING"
+                )
 
             for execution in run_request.executions.all():
                 with transaction.atomic():
@@ -218,7 +220,7 @@ def process_run_request(
                 handler = LogPersistenceHandlerRunExecution(execution)
 
                 try:
-                    run_handle = asyncio.run(
+                    engine_run_id = asyncio.run(
                         _async_process(
                             execution,
                             handler,
@@ -230,8 +232,14 @@ def process_run_request(
                     with transaction.atomic():
                         execution.status = "COMPLETE"
                         execution.finished_at = timezone.now()
-                        execution.engine_run_id = run_handle.run_id
-                        execution.save(update_fields=["status", "finished_at", "engine_run_id"])
+                        execution.engine_run_id = engine_run_id
+                        execution.save(
+                            update_fields=[
+                                "status",
+                                "finished_at",
+                                "engine_run_id",
+                            ]
+                        )
 
                 except Exception as e:
                     logging.error(f"{e}", exc_info=True)

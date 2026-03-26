@@ -1,5 +1,15 @@
-from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
-from django.shortcuts import render, get_object_or_404, redirect
+from django.http import (
+    HttpRequest,
+    HttpResponse,
+    StreamingHttpResponse,
+    JsonResponse,
+)
+from django.shortcuts import (
+    render,
+    get_object_or_404,
+    redirect,
+    get_list_or_404,
+)
 from .models import (
     RunRequest,
     RunExecution,
@@ -8,16 +18,24 @@ from .models import (
     Scenario,
     Experiment,
 )
+from django.urls import reverse
 from django.views.decorators.http import require_POST
-from django.db.models import Min, Max, Count
+from django.db.models import Min, Max, Count, Avg, Sum
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.http import FileResponse, Http404
 from pathlib import Path
-from django.contrib.admin.views.decorators import staff_member_required
+from collections import defaultdict
+from typing import DefaultDict, Set, TypedDict, cast, Any
 
 import json
 
+aggregation_map = {
+    "sum": Sum("payload"),
+    "avg": Avg("payload"),
+    "max": Max("payload"),
+    "min": Min("payload"),
+}
 
 def index(_: HttpRequest) -> HttpResponse:
     return HttpResponse("Help world")
@@ -70,21 +88,73 @@ def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
     level_filter = request.GET.get("level")
 
     logs_qs = run_request.worker_logs
+    executions_qs = run_request.executions.all()
 
     if level_filter:
         logs_qs = logs_qs.filter(level=level_filter)
 
     logs_qs = logs_qs.order_by("-event_time")
 
-    paginator = Paginator(logs_qs, 25)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
+    logs_paginator = Paginator(logs_qs, 25)
+    logs_page_number = request.GET.get("logs_page")
+    logs_page_obj = logs_paginator.get_page(logs_page_number)
+
+    executions_paginator = Paginator(executions_qs, 10)
+    executions_page_number = request.GET.get("executions_page")
+    executions_page_obj = executions_paginator.get_page(executions_page_number)
+
+    logs = SubscriptionLogEntry.objects.filter(
+        run_execution__run_request=run_request
+    )
+
+    fingerprint_rows = logs.values(
+        "run_execution__id", "subscription_fingerprint"
+    ).distinct()
+
+    fingerprints_per_execution: DefaultDict[str, Set[str]] = defaultdict(set)
+
+    for fingerprint_row in fingerprint_rows:
+        fingerprints_per_execution[
+            str(fingerprint_row["run_execution__id"])
+        ].add(fingerprint_row["subscription_fingerprint"])
+
+    fingerprint_sets = list(fingerprints_per_execution.values())
+
+    if fingerprint_sets:
+        all_fingerprints: Set[str] = set.union(*fingerprint_sets)
+        common_fingerprints: Set[str] = set.intersection(*fingerprint_sets)
+
+    else:
+        all_fingerprints = set()
+        common_fingerprints = set()
+
+    # missing_by_execution = {
+    #     exec_id: all_fingerprints - fps
+    #     for exec_id, fps in fingerprints_per_execution.items()
+    # }
+
+    aggregated_subscriptions = (
+        logs.values("subscription_fingerprint")
+        .annotate(
+            execution_count=Count("run_execution", distinct=True),
+            first_step=Min("simulation_step"),
+            last_step=Max("simulation_step"),
+            # avg_value=Avg("value"),  # example numeric aggregation
+        )
+        .order_by("subscription_fingerprint")
+    )
 
     context = {
         "run_request": run_request,
         "worker_log_count": logs_qs.count(),
-        "worker_logs": page_obj,
+        "worker_logs": logs_page_obj,
+        "executions_count": executions_qs.count(),
+        "executions": executions_page_obj,
         "level_filter": level_filter,
+        "aggregated_subscriptions_count": aggregated_subscriptions.count(),
+        "aggregated_subscriptions": aggregated_subscriptions,
+        "has_missing_subs": all_fingerprints != common_fingerprints,
+        # "common_fingerprints": common_fingerprints,
     }
 
     return render(request, "core/run_request_detail.html", context)
@@ -150,48 +220,173 @@ def media_view(_: HttpRequest, filepath: Path) -> StreamingHttpResponse:
     return FileResponse(open(system_path, "rb"), content_type="text/plain")
 
 
-def subscription_view(
-    request: HttpRequest, pk: str, fingerprint: str
-) -> HttpResponse:
-    view_type = request.GET.get("view", "table")
+def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
+    aggregation_function = request.GET.get("agg_mode")
+    run_executions = request.GET.getlist("run_execution")
+    fingerprints = request.GET.getlist("fingerprints")
 
+    if run_executions:
+        executions_list = get_list_or_404(RunExecution, pk=run_executions)
+        base_qs = SubscriptionLogEntry.objects.filter(
+            run_execution__in=executions_list
+        )
+    else:
+        run_request = get_object_or_404(RunRequest, pk=pk)
+        base_qs = SubscriptionLogEntry.objects.filter(
+            run_execution__run_request=run_request
+        )
+
+    if fingerprints:
+        base_qs = base_qs.filter(subscription_fingerprint__in=fingerprints)
+
+    class AggreagatedRow(TypedDict):
+        sum: float
+        min: float
+        max: float
+        count: int
+        run_execution__id: str
+
+    # if aggregation_function in ["sum", "avg", "max", "min"]:
+    #     aggregated_base_qs = cast(
+    #         list[AggreagatedRow],
+    #         base_qs.values("simulation_time", "subscription_fingerprint", "run_execution__id", "payload")
+    #         # .annotate(value=aggregation_map[aggregation_function])
+    #         .order_by("simulation_time", "subscription_fingerprint", "run_execution__id"),
+    #     )
+
+    #     data = [
+    #         {
+    #             "run_execution": e["run_execution__id"],
+    #             "time": e["simulation_time"],
+    #             "fingerprint": e["subscription_fingerprint"],
+    #             "value": e["value"],
+    #         }
+    #         for e in aggregated_base_qs
+    #     ]
+
+    if aggregation_function in ["sum", "avg", "max", "min"]:
+        # Initialize aggregation per fingerprint
+        agg_temp: dict[tuple[float, str], AggreagatedRow]= {}
+        for e in base_qs.values("simulation_time", "subscription_fingerprint", "run_execution__id", "payload"):
+            sim_time = e["simulation_time"]
+            fp = e["subscription_fingerprint"]
+            try:
+                val = float(e["payload"])
+            except (ValueError, TypeError):
+                continue  # skip non-numeric
+
+            key = (sim_time, fp)
+            if key not in agg_temp:
+                agg_temp[key] = {"sum": 0.0, "count": 0, "min": val, "max": val, "run_execution__id": str(e["run_execution__id"])}
+
+            entry = agg_temp[key]
+            entry["sum"] += val
+            entry["count"] += 1
+            entry["min"] = min(entry["min"], val)
+            entry["max"] = max(entry["max"], val)
+
+        data = []
+        for (sim_time, fp), entry in agg_temp.items():
+            if aggregation_function == "sum":
+                agg_value = entry["sum"]
+            elif aggregation_function == "avg":
+                agg_value = entry["sum"] / entry["count"] if entry["count"] > 0 else 0.0
+            elif aggregation_function == "min":
+                agg_value = entry["min"]
+            elif aggregation_function == "max":
+                agg_value = entry["max"]
+            else:
+                agg_value = None
+
+            data.append({
+                "run_execution": entry["run_execution__id"],
+                "time": sim_time,
+                "fingerprint": fp,
+                "value": agg_value,
+            })
+    else:
+        data = [
+            {
+                "run_execution": str(e.run_execution.id),
+                "time": cast(float, e.simulation_time),
+                "fingerprint": cast(str, e.subscription_fingerprint),
+                "value": e.payload,
+            }
+            for e in base_qs
+        ]
+
+    return JsonResponse({"data": data})
+
+
+def analytics_overview_view(request: HttpRequest) -> HttpResponse:
+    latest_rr = RunRequest.objects.order_by("-created_at").only("pk").first()
+
+    if latest_rr is None:
+        return render(request, "core/analytics_empty.html")
+
+    return redirect("analytics_run_request", pk=latest_rr.pk)
+
+
+def analytics_run_execution_view(_: HttpRequest, pk: str) -> HttpResponse:
     run_execution = get_object_or_404(RunExecution, pk=pk)
 
-    subscription_data = (
-        run_execution.subscription_logs.filter(
-            subscription_fingerprint=fingerprint
-        )
-        .order_by("simulation_time")
-        .values("simulation_time", "payload")
+    url = reverse(
+        "analytics_run_request", kwargs={"pk": run_execution.run_request}
     )
 
-    if view_type == "graph":
-        template_name = "core/subscription_plot.html"
+    return redirect(f"{url}?run_execution={run_execution.pk}")
 
-        timestamps = []
-        values = []
 
-        for entry in subscription_data:
-            timestamps.append(entry["simulation_time"])
-            values.append(float(entry["payload"]))
+def analytics_run_request_view(request: HttpRequest, pk: str) -> HttpResponse:
+    run_request = get_object_or_404(RunRequest, pk=pk)
 
-        context = {
-            "timestamps": timestamps,
-            "values": values,
-            "fingerprint": fingerprint,
-            "run_execution": run_execution,
-        }
+    logs = SubscriptionLogEntry.objects.filter(
+        run_execution__run_request=run_request
+    )
+
+    fingerprint_rows = logs.values(
+        "run_execution__id", "subscription_fingerprint"
+    ).distinct()
+
+    fingerprints_per_execution: DefaultDict[str, Set[str]] = defaultdict(set)
+
+    for fingerprint_row in fingerprint_rows:
+        fingerprints_per_execution[
+            str(fingerprint_row["run_execution__id"])
+        ].add(fingerprint_row["subscription_fingerprint"])
+
+    fingerprint_sets = list(fingerprints_per_execution.values())
+
+    if fingerprint_sets:
+        all_fingerprints: Set[str] = set.union(*fingerprint_sets)
+        common_fingerprints: Set[str] = set.intersection(*fingerprint_sets)
+
     else:
-        template_name = "core/subscription_table.html"
+        all_fingerprints = set()
+        common_fingerprints = set()
 
-        paginator = Paginator(subscription_data, 100)
-        page_number = request.GET.get("page", 1)
-        page_obj = paginator.get_page(page_number)
+    missing_by_execution = {
+        exec_id: all_fingerprints - fps
+        for exec_id, fps in fingerprints_per_execution.items()
+    }
 
-        context = {
-            "subscription_data": page_obj,
-            "fingerprint": fingerprint,
-            "run_execution": run_execution,
-        }
+    aggregated_subscriptions = (
+        logs.values("subscription_fingerprint")
+        .annotate(
+            execution_count=Count("run_execution", distinct=True),
+            first_step=Min("simulation_step"),
+            last_step=Max("simulation_step"),
+            # avg_value=Avg("value"),  # example numeric aggregation
+        )
+        .order_by("subscription_fingerprint")
+    )
 
-    return render(request, template_name, context)
+    context = {
+        "run_request": run_request,
+        "aggregated_susbcriptions": aggregated_subscriptions,
+        "aggregation_functions": aggregation_map.keys(),
+        "has_missing_subs": all_fingerprints != common_fingerprints,
+        "missing_by_execution": missing_by_execution,
+    }
+
+    return render(request, "core/analytics.html", context)
