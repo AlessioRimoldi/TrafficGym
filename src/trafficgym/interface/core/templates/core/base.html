@@ -24,7 +24,7 @@
     <body>
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
             <div class="container-fluid">
-                <a href="/" class="navbar-brand "><img style="max-width: 100px; padding-top: 15px;" src="{% static 'core/unjam.png' %}" alt="Unjam Logo"></a>
+                <a href="/" class="navbar-brand ms-2"><img style="max-width: 100px; padding-top: 15px;" src="{% static 'core/unjam.png' %}" alt="Unjam Logo"></a>
                 {% comment %} <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"> <span class="navbar-toggler-icon"></span>
                 </button> {% endcomment %}
                 <div class="collapse navbar-collapse" id="navbarNav">
@@ -33,17 +33,17 @@
                             <a href="{% url "run_requests_list" %}" class="nav-link">Run Requests</a>
                         </li>
                         <li class="nav-item">
-                            <a href="{% url 'analytics_overview' %}" class="nav-link">Analytics</a>
+                            <a href="{% url 'analytics_overview' %}" class="nav-link">Analytics (Recent Run)</a>
                         </li>
-                        <li class="nav-item">
+                        {% comment %} <li class="nav-item">
                             <a href="" class="nav-link">Scenario</a>
                         </li>
                         <li class="nav-item">
                             <a href="" class="nav-link">Experiment</a>
-                        </li>
+                        </li> {% endcomment %}
                     </ul>
                     {% comment %} <button id="openCreateRunModal" class="btn btn-success ms-auto" data-bs-toggle="modal" data-bs-target="#createRunModal">Create new Run Request</button> {% endcomment %}
-                    <button id="openCreateRunModal" class="btn btn-success ms-auto">Create new Run Request</button>
+                    <button id="openCreateRunModal" class="btn btn-success ms-auto me-4">Create new Run Request</button>
                 </div>
             </div>
         </nav>

@@ -225,10 +225,12 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
     run_executions = request.GET.getlist("run_execution")
     fingerprints = request.GET.getlist("fingerprints")
 
-    if run_executions:
-        executions_list = get_list_or_404(RunExecution, pk=run_executions)
+    if run_executions and run_executions[0] != '':
+        if not RunExecution.objects.filter(id__in=run_executions).exists():
+            raise Http404()
+
         base_qs = SubscriptionLogEntry.objects.filter(
-            run_execution__in=executions_list
+            run_execution__id__in=run_executions
         )
     else:
         run_request = get_object_or_404(RunRequest, pk=pk)
@@ -263,6 +265,8 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
     #         }
     #         for e in aggregated_base_qs
     #     ]
+    aggregated_data = []
+    run_execution_data = []
 
     if aggregation_function in ["sum", "avg", "max", "min"]:
         # Initialize aggregation per fingerprint
@@ -285,7 +289,6 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
             entry["min"] = min(entry["min"], val)
             entry["max"] = max(entry["max"], val)
 
-        data = []
         for (sim_time, fp), entry in agg_temp.items():
             if aggregation_function == "sum":
                 agg_value = entry["sum"]
@@ -298,14 +301,14 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
             else:
                 agg_value = None
 
-            data.append({
+            aggregated_data.append({
                 "run_execution": entry["run_execution__id"],
                 "time": sim_time,
                 "fingerprint": fp,
                 "value": agg_value,
             })
     else:
-        data = [
+        run_execution_data = [
             {
                 "run_execution": str(e.run_execution.id),
                 "time": cast(float, e.simulation_time),
@@ -315,7 +318,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
             for e in base_qs
         ]
 
-    return JsonResponse({"data": data})
+    return JsonResponse({"run_execution_data": run_execution_data, "aggregated_data": aggregated_data})
 
 
 def analytics_overview_view(request: HttpRequest) -> HttpResponse:
@@ -390,3 +393,49 @@ def analytics_run_request_view(request: HttpRequest, pk: str) -> HttpResponse:
     }
 
     return render(request, "core/analytics.html", context)
+
+def subscription_view(
+    request: HttpRequest, pk: str, fingerprint: str
+) -> HttpResponse:
+    view_type = request.GET.get("view", "table")
+
+    run_execution = get_object_or_404(RunExecution, pk=pk)
+
+    subscription_data = (
+        run_execution.subscription_logs.filter(
+            subscription_fingerprint=fingerprint
+        )
+        .order_by("simulation_time")
+        .values("simulation_time", "payload")
+    )
+
+    if view_type == "graph":
+        template_name = "core/subscription_plot.html"
+
+        timestamps = []
+        values = []
+
+        for entry in subscription_data:
+            timestamps.append(entry["simulation_time"])
+            values.append(float(entry["payload"]))
+
+        context = {
+            "timestamps": timestamps,
+            "values": values,
+            "fingerprint": fingerprint,
+            "run_execution": run_execution,
+        }
+    else:
+        template_name = "core/subscription_table.html"
+
+        paginator = Paginator(subscription_data, 100)
+        page_number = request.GET.get("page", 1)
+        page_obj = paginator.get_page(page_number)
+
+        context = {
+            "subscription_data": page_obj,
+            "fingerprint": fingerprint,
+            "run_execution": run_execution,
+        }
+
+    return render(request, template_name, context)

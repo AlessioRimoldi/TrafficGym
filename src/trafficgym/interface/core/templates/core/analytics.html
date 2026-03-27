@@ -1,9 +1,10 @@
 {% extends "core/base.html" %}
 {% block title %}Analytics{% endblock %}
-
+{% load static %}
 
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="module" src="{% static "core/js/analytics.js" %}" defer></script>
 <div class="container mt-4">
 {% if run_request %}
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -32,7 +33,7 @@
                         <div class="mb-3">
                             <label for="agg_mode_select" class="form-label">Aggregation Mode</label>
                             <select id="agg_mode_select" name="agg_mode" class="form-select">
-                                <option value="">Select mode</option>
+                                <option value="">No Aggregation</option>
                                 {% comment %} <option value="per_execution">Per Execution</option>
                                 <option value="aggregate">Aggregate</option> {% endcomment %}
                                 {% for mode in aggregation_functions %}
@@ -40,25 +41,46 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">Load Chart</button>
+                        <div class="mb-3">
+                            <label for="run_executions_select" class="form-label">Run Executions</label>
+                            <select name="run_execution" id="run_executions_select" class="form-select" multiple>
+                                <option value="">All Run Executions</option>
+                                {% for execution in run_request.executions.all %}
+                                <option value="{{ execution.id }}">{{ execution.id }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Add Data</button>
                     </form>
                 </div>
             </div>
 
-            <!-- Optional small stats cards -->
-            <div id="subscription_stats">
-                a
-                <!-- Render stats once a subscription is selected -->
+            <div class="card mb-3">
+                <div class="card-header fw-bold">Manage Data</div>
+                <div class="card-body" id="dataset_controls">
+                    <span class="text-muted">No Data Present</span>
+                </div>
             </div>
         </div>
 
         <!-- Main Graph Area -->
-        <div class="col-md-9">
-            <div class="card h-100">
+        <div class="col-md-9 d-flex flex-column">
+            <div class="card h-40 mb-3">
+                <div class="card-header fw-bold">Chart</div>
                 <div class="card-body d-flex justify-content-center align-items-center">
                     <!-- Insert chart canvas or chart component -->
                     <canvas id="analyticsChart" style="display: none;"></canvas>
                     <div id="chartPlaceholder" class="text-center text-muted">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Awaiting subscription selection and aggregation mode
+                    </div>
+                </div>
+            </div>
+            <div class="card h-40 mb-3">
+                <div class="card-header fw-bold">Table</div>
+                <div class="card-body d-flex justify-content-center align-items-center">
+                    <div id="analyticsTable" style="display: none;"></div>
+                    <div id="tablePlaceholder" class="text-center text-muted">
                         <i class="bi bi-info-circle me-2"></i>
                         Awaiting subscription selection and aggregation mode
                     </div>
@@ -75,74 +97,4 @@
 No data to show for this run request
 {% endif %}
 </div>
-<script>
-    const form = document.getElementById("analytics_controls");
-    const chartCanvas = document.getElementById("analyticsChart")
-    const placeholder = document.getElementById("chartPlaceholder")
-
-    let chart = null;
-
-    form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        const formData = new FormData(form)
-        const params = new URLSearchParams(formData)
-
-        const url = form.action + "?" + params.toString();
-
-        const response = await fetch(url);
-        const json = await response.json();
-
-        renderChart(json.data);
-    });
-
-    function renderChart(data) {
-        if (!data || data.length === 0) {
-            placeholder.style.display = "block";
-            chartCanvas.style.display = "none";
-            return;
-        }
-
-        placeholder.style.display = "none";
-        chartCanvas.style.display = "block";
-
-        // Group by fingerprint → multiple series
-        const grouped = {};
-        data.forEach(d => {
-            if (!grouped[d.fingerprint]) {
-                grouped[d.fingerprint] = [];
-            }
-            grouped[d.fingerprint].push({x: d.time, y: d.value});
-        });
-
-        const datasets = Object.entries(grouped).map(([fp, values]) => ({
-            label: fp,
-            data: values,
-            parsing: false
-        }));
-
-        if (chart) {
-            chart.destroy();
-        }
-
-        chart = new Chart(chartCanvas, {
-            type: "line",
-            data: {
-                datasets: datasets
-            },
-            options: {
-                parsing: false,
-                scales: {
-                    x: {
-                        type: "linear",
-                        title: { display: true, text: "Simulation Time" }
-                    },
-                    y: {
-                        title: { display: true, text: "Value" }
-                    }
-                }
-            }
-        });
-    }
-</script>
 {% endblock %}

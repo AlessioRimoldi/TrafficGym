@@ -19,11 +19,11 @@ urlpatterns = [
         views.run_execution_detail_view,
         name="run_execution_detail",
     ),
-    # path(
-    #     "run_execution/<uuid:pk>/subscription_view/<str:fingerprint>",
-    #     views.subscription_view,
-    #     name="subscription_view",
-    # ),
+    path(
+        "run_execution/<uuid:pk>/subscription_view/<str:fingerprint>",
+        views.subscription_view,
+        name="subscription_view",
+    ),
     path("artefacts_list/", views.artefacts_list_view, name="artefacts_list"),
     path(
         "artefact/<str:pk>/",

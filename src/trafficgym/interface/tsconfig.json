@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "rootDir": "./core/static/core/js",
+    "lib": ["ES2017", "DOM"],
+    "esModuleInterop": true,
+    "module": "es6",
+    "strict": true
+  }
+}
