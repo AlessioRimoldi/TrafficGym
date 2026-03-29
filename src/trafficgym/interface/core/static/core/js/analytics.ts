@@ -8,23 +8,31 @@ const chartPlaceholder = document.getElementById("chartPlaceholder") as HTMLDivE
 const dataTable = document.getElementById("analyticsTable") as HTMLDivElement;
 const tablePlaceholder = document.getElementById("tablePlaceholder") as HTMLDivElement;
 
-let chart: ChartType | null = null;
+interface DataPoint {
+    x: number;
+    y: number | string;
+}
 
 interface ChartPoint {
     x: number;
     y: number;
 }
 
-interface ChartDataItem {
+type ExtendedDataset = ChartDataset<"line", Point[]> & {
+    fullLabel: string;
+    rawData: DataPoint[],
+};
+
+interface DataItem {
     run_execution: string[];
     fingerprint: string;
     time: number | string;
     value: number | string;
-}
 
-type ExtendedDataset = ChartDataset<"line", Point[]> & {
-    fullLabel?: string;
-};
+}
+let chart: ChartType | null = null;
+const datasets: ExtendedDataset[] = [];
+
 
 document.addEventListener("DOMContentLoaded", () => {
     if (!form) throw Error("form not loaded");
@@ -43,20 +51,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     function shortenFingerprint(fingerprint: string) {
-        const subParts = fingerprint.split(".").map(subPart => subPart.slice(0, 4))
-        
-        return subParts.join(".")
+        return fingerprint.split(".").map(subPart => subPart.slice(0, 4)).join(".")
     }
 
     function shortenUUIDs(uuid: string) {
-        const subParts = uuid.split("+").map(subPart => subPart.slice(0, 4))
-        
-        return subParts.join("+")
+        return uuid.split("+").map(subPart => subPart.slice(0, 4)).join("+")
     }
 
-    function addData(run_execution_data: ChartDataItem[], aggregated_data: ChartDataItem[], agg_mode: string | null) {
+    function addData(run_execution_data: DataItem[], aggregated_data: DataItem[], agg_mode: string | null) {
         let isAggregated = null;
-        let data: ChartDataItem[] | null = null
+        let data: DataItem[] | null = null
 
         if (run_execution_data && run_execution_data.length !== 0) {
             data = run_execution_data;
@@ -75,7 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chartCanvas.style.display = "block";
         dataTable.style.display = "block";
 
-        const grouped: Record<string, Record<string, ChartPoint[]>> = {};
+        const grouped: Record<string, Record<string, DataPoint[]>> = {};
         data.forEach(d => {
             const combined_executions = d.run_execution.join("+")
             if (!grouped[combined_executions]) {
@@ -84,25 +88,17 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!grouped[combined_executions][d.fingerprint]) {
                 grouped[combined_executions][d.fingerprint] = [];
             }
-            grouped[combined_executions][d.fingerprint].push({x: Number(d.time), y: Number(d.value)});
+            grouped[combined_executions][d.fingerprint].push({x: Number(d.time), y: d.value});
         });
-
-        const datasets: ExtendedDataset[] = [];
 
         const palette = [
             "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
             "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"
         ];
 
-        // const execIds = Object.keys(grouped);
-        // const colorMap = Object.fromEntries(
-        //     execIds.map((id, i) => [id, palette[i % palette.length]])
-        // );
-        const startIndex = chart?.data.datasets.length ?? 0;
-
         for (const [run_execs, fingerprints] of Object.entries(grouped)) {
             for (const [fp, points] of Object.entries(fingerprints)) {
-                const color = palette[(startIndex + datasets.length) % palette.length]
+                const color = palette[(datasets.length) % palette.length]
                 datasets.push({
                     label: isAggregated
                         ? `${agg_mode}:${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`
@@ -110,22 +106,32 @@ document.addEventListener("DOMContentLoaded", () => {
                     fullLabel: isAggregated
                         ? `${agg_mode}:${fp} (${run_execs})`
                         : `${fp} (${run_execs})`,
-                    data: points,
+                    data: points
+                            .filter(p => !isNaN(Number(p.y)))
+                            .map(p => ({x: p.x, y: Number(p.y)})),
+                    rawData: points,
                     borderColor: color,
                     parsing: false
                 });
             }
         }
 
+        updateChart();
+        updateDataTable();
+        updateDatasetControls();
+    }
+
+    function updateChart() {
+        const chartData = datasets.filter(ds => ds.data.length > 0)
         if (chart) {
-            datasets.forEach(ds => chart?.data.datasets.push(ds));
+            chart.data.datasets = chartData
             chart.resize();
             chart.update();
         } else {
             chart = new Chart(chartCanvas, {
                 type: "line",
                 data: {
-                    datasets: datasets
+                    datasets: chartData
                 },
                 options: {
                     responsive: true,
@@ -143,8 +149,13 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        updateDatasetControls();
-        updateDataTable();
+        if (chart.data.datasets.length === 0) {
+            chartPlaceholder.style.display = "block";
+            chartCanvas.style.display = "none";
+        } else {
+            chartPlaceholder.style.display = "none";
+            chartCanvas.style.display = "block";
+        }
     }
 
     function updateDatasetControls() {
@@ -153,12 +164,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const container = document.getElementById("dataset_controls") as HTMLDivElement;
         container.innerHTML = "";
     
-        if (chart.data.datasets.length === 0) {
+        if (datasets.length === 0) {
             container.innerHTML = '<span class="text-muted">No chart data present</span>';
             return;
         }
     
-        chart.data.datasets.forEach((ds) => {
+        datasets.forEach((ds) => {
             const btn = document.createElement("button");
             btn.className = "btn btn-sm btn-outline-danger me-1 mb-1 p-0"; // small button, no padding
             btn.style.width = "20px";
@@ -170,18 +181,11 @@ document.addEventListener("DOMContentLoaded", () => {
     
             btn.onclick = () => {
                 if (!chart) return;
-                const index = chart.data.datasets.indexOf(ds);
+                const index = datasets.indexOf(ds);
                 if (index !== -1) {
-                    chart.data.datasets.splice(index, 1);
-                    chart.update();
+                    datasets.splice(index, 1);
     
-                    if (chart.data.datasets.length === 0) {
-                        chartPlaceholder.style.display = "block";
-                        tablePlaceholder.style.display = "block";
-                        chartCanvas.style.display = "none";
-                        dataTable.style.display = "none";
-                    }
-
+                    updateChart();
                     updateDataTable();
                     updateDatasetControls();
                 }
@@ -195,16 +199,9 @@ document.addEventListener("DOMContentLoaded", () => {
         deleteAllDataButton.innerHTML = "Remove All Data";
 
         deleteAllDataButton.onclick = () => {
-            if (!chart) return;
+            datasets.length = 0;
 
-            chartPlaceholder.style.display = "block";
-            tablePlaceholder.style.display = "block";
-            chartCanvas.style.display = "none";
-            dataTable.style.display = "none";
-
-            chart.data.datasets = [];
-            chart.update();
-
+            updateChart();
             updateDataTable();
             updateDatasetControls();
         };
@@ -221,12 +218,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function updateDataTable() {
-        if (!chart) return;
-
         dataTable.innerHTML = "";
 
         const timeSet = new Set<number>();
-        chart.data.datasets.forEach(ds => (ds.data as Point[]).filter(p => p.x != null).forEach(p => timeSet.add(p.x ?? -1)));
+        datasets.forEach(ds => (ds.rawData as DataPoint[]).filter(p => p.x != null).forEach(p => timeSet.add(p.x ?? -1)));
         const times = Array.from(timeSet).sort((a, b) => a - b);
 
         const totalPages = Math.ceil(times.length / rowsPerPage);
@@ -261,7 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // document.head.appendChild(style);
 
         const thead = document.createElement("thead");
-        const colNames = (chart.data.datasets as ExtendedDataset[]).map(ds => `<th title="${ds.fullLabel ?? '?'}">${truncateLabel(ds.label ?? '?', 15)}</th>`);
+        const colNames = datasets.map(ds => `<th title="${ds.fullLabel ?? '?'}">${truncateLabel(ds.label ?? '?', 15)}</th>`);
 
         thead.innerHTML = `<tr><th>Time</th>${colNames.join('')}</tr>`;
         table.appendChild(thead);
@@ -273,8 +268,8 @@ document.addEventListener("DOMContentLoaded", () => {
             tdTime.textContent = t.toString();
             tr.appendChild(tdTime);
 
-            chart!.data.datasets.forEach(ds => {
-                const point = (ds.data as any[]).find(p => p.x === t);
+            datasets.forEach(ds => {
+                const point = (ds.rawData as DataPoint[]).find(p => p.x === t);
                 const td = document.createElement("td");
                 td.textContent = point ? truncateLabel(point.y.toString()) : "-";
                 tr.appendChild(td);
@@ -310,6 +305,14 @@ document.addEventListener("DOMContentLoaded", () => {
         pagination.appendChild(nextBtn);
 
         dataTable.appendChild(pagination);
+
+        if (datasets.length === 0) {
+            tablePlaceholder.style.display = "block";
+            dataTable.style.display = "none";
+        } else {
+            tablePlaceholder.style.display = "none";
+            dataTable.style.display = "block";
+        }
     }
 });
 
