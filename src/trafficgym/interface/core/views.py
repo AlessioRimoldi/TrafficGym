@@ -246,7 +246,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
         min: float
         max: float
         count: int
-        run_execution__id: str
+        run_execution_ids: Set[str]
 
     # if aggregation_function in ["sum", "avg", "max", "min"]:
     #     aggregated_base_qs = cast(
@@ -281,13 +281,15 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
 
             key = (sim_time, fp)
             if key not in agg_temp:
-                agg_temp[key] = {"sum": 0.0, "count": 0, "min": val, "max": val, "run_execution__id": str(e["run_execution__id"])}
+                agg_temp[key] = {"sum": 0.0, "count": 0, "min": val, "max": val, "run_execution_ids": set()}
 
             entry = agg_temp[key]
             entry["sum"] += val
             entry["count"] += 1
             entry["min"] = min(entry["min"], val)
             entry["max"] = max(entry["max"], val)
+
+            entry["run_execution_ids"].add(str(e["run_execution__id"]))
 
         for (sim_time, fp), entry in agg_temp.items():
             if aggregation_function == "sum":
@@ -302,7 +304,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
                 agg_value = None
 
             aggregated_data.append({
-                "run_execution": entry["run_execution__id"],
+                "run_execution": sorted(entry["run_execution_ids"]),
                 "time": sim_time,
                 "fingerprint": fp,
                 "value": agg_value,
@@ -310,7 +312,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
     else:
         run_execution_data = [
             {
-                "run_execution": str(e.run_execution.id),
+                "run_execution": [str(e.run_execution.id)],
                 "time": cast(float, e.simulation_time),
                 "fingerprint": cast(str, e.subscription_fingerprint),
                 "value": e.payload,

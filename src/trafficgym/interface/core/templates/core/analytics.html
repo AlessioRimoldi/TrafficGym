@@ -12,10 +12,7 @@
         <a href="{% url "run_request_detail" run_request %}" class="btn btn-primary">Back to Run Request</a>
     </div>
 
-    <!-- Main Row -->
     <div class="row">
-
-        <!-- Sidebar: Selection & Details -->
         <div class="col-md-3 mb-3">
             <div class="card mb-3">
                 <div class="card-header fw-bold">Controls</div>
@@ -23,7 +20,7 @@
                     <form id="analytics_controls" action="{% url "subscription_data" run_request %}" method="get">
                         <div class="mb-3">
                             <label for="subscription_select" class="form-label">Subscription</label>
-                            <select id="subscription_select" name="fingerprints" class="form-select" multiple>
+                            <select id="subscription_select" name="fingerprints" class="form-select" required>
                                 <option value="">Select a subscription</option>
                                 {% for sub in aggregated_susbcriptions %}
                                 <option value="{{ sub.subscription_fingerprint }}">{{ sub.subscription_fingerprint }}</option>
@@ -63,7 +60,6 @@
             </div>
         </div>
 
-        <!-- Main Graph Area -->
         <div class="col-md-9 d-flex flex-column">
             <div class="card h-40 mb-3">
                 <div class="card-header fw-bold">Chart</div>
@@ -78,7 +74,7 @@
             </div>
             <div class="card h-40 mb-3">
                 <div class="card-header fw-bold">Table</div>
-                <div class="card-body d-flex justify-content-center align-items-center">
+                <div class="card-body d-flex flex-column">
                     <div id="analyticsTable" style="display: none;"></div>
                     <div id="tablePlaceholder" class="text-center text-muted">
                         <i class="bi bi-info-circle me-2"></i>

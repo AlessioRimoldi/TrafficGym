@@ -23,9 +23,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const url = form.action + "?" + params.toString();
         const response = yield fetch(url);
         const json = yield response.json();
-        addData(json.run_execution_data, json.aggregated_data);
+        addData(json.run_execution_data, json.aggregated_data, params.get("agg_mode"));
     }));
-    function addData(run_execution_data, aggregated_data) {
+    function shortenFingerprint(fingerprint) {
+        const subParts = fingerprint.split(".").map(subPart => subPart.slice(0, 4));
+        return subParts.join(".");
+    }
+    function shortenUUIDs(uuid) {
+        const subParts = uuid.split("+").map(subPart => subPart.slice(0, 4));
+        return subParts.join("+");
+    }
+    function addData(run_execution_data, aggregated_data, agg_mode) {
+        var _a;
         let isAggregated = null;
         let data = null;
         if (run_execution_data && run_execution_data.length !== 0) {
@@ -47,13 +56,14 @@ document.addEventListener("DOMContentLoaded", () => {
         dataTable.style.display = "block";
         const grouped = {};
         data.forEach(d => {
-            if (!grouped[d.run_execution]) {
-                grouped[d.run_execution] = {};
+            const combined_executions = d.run_execution.join("+");
+            if (!grouped[combined_executions]) {
+                grouped[combined_executions] = {};
             }
-            if (!grouped[d.run_execution][d.fingerprint]) {
-                grouped[d.run_execution][d.fingerprint] = [];
+            if (!grouped[combined_executions][d.fingerprint]) {
+                grouped[combined_executions][d.fingerprint] = [];
             }
-            grouped[d.run_execution][d.fingerprint].push({ x: Number(d.time), y: Number(d.value) });
+            grouped[combined_executions][d.fingerprint].push({ x: Number(d.time), y: Number(d.value) });
         });
         const datasets = [];
         const palette = [
@@ -64,13 +74,19 @@ document.addEventListener("DOMContentLoaded", () => {
         // const colorMap = Object.fromEntries(
         //     execIds.map((id, i) => [id, palette[i % palette.length]])
         // );
-        for (const [run_exec, fingerprints] of Object.entries(grouped)) {
-            const color = palette[datasets.length % palette.length];
+        const startIndex = (_a = chart === null || chart === void 0 ? void 0 : chart.data.datasets.length) !== null && _a !== void 0 ? _a : 0;
+        for (const [run_execs, fingerprints] of Object.entries(grouped)) {
             for (const [fp, points] of Object.entries(fingerprints)) {
+                const color = palette[(startIndex + datasets.length) % palette.length];
                 datasets.push({
-                    label: `${fp} (${run_exec})`,
+                    label: isAggregated
+                        ? `${agg_mode}:${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`
+                        : `${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`,
+                    fullLabel: isAggregated
+                        ? `${agg_mode}:${fp} (${run_execs})`
+                        : `${fp} (${run_execs})`,
                     data: points,
-                    color: color,
+                    borderColor: color,
                     parsing: false
                 });
             }
@@ -142,11 +158,27 @@ document.addEventListener("DOMContentLoaded", () => {
             };
             container.appendChild(btn);
         });
+        const deleteAllDataButton = document.createElement("button");
+        deleteAllDataButton.className = "btn btn-outline-danger w-100 mt-2";
+        deleteAllDataButton.innerHTML = "Remove All Data";
+        deleteAllDataButton.onclick = () => {
+            if (!chart)
+                return;
+            chartPlaceholder.style.display = "block";
+            tablePlaceholder.style.display = "block";
+            chartCanvas.style.display = "none";
+            dataTable.style.display = "none";
+            chart.data.datasets = [];
+            chart.update();
+            updateDataTable();
+            updateDatasetControls();
+        };
+        container.appendChild(deleteAllDataButton);
     }
-    const rowsPerPage = 10;
+    const rowsPerPage = 25;
     let currentPage = 1;
-    function truncateLabel(label, maxLength = 10) {
-        return label.length > maxLength ? label.slice(0, maxLength) + "…" : label;
+    function truncateLabel(label, maxLength = 30) {
+        return label.length > maxLength ? label.slice(0, maxLength) + "…" : label; // return label;
     }
     function updateDataTable() {
         if (!chart)
@@ -161,10 +193,28 @@ document.addEventListener("DOMContentLoaded", () => {
         const start = (currentPage - 1) * rowsPerPage;
         const end = start + rowsPerPage;
         const pageTimes = times.slice(start, end);
+        const wrapper = document.createElement("div");
+        wrapper.style.overflowX = "auto";
+        wrapper.style.width = "100%";
         const table = document.createElement("table");
         table.className = "table table-striped table-hover table-sm";
+        table.style.tableLayout = "fixed";
+        table.style.width = "max-content";
+        // const minPx = 120;
+        // const maxPx = 500;
+        // const style = document.createElement("style");
+        // style.textContent = `
+        // #analyticsTable th, #analyticsTable td {
+        //     white-space: nowrap;
+        //     overflow: hidden;
+        //     text-overflow: ellipsis;
+        //     min-width: ${minPx}px;
+        //     max-width: ${maxPx}px;
+        // }
+        // `;
+        // document.head.appendChild(style);
         const thead = document.createElement("thead");
-        const colNames = chart.data.datasets.map(ds => { var _a, _b; return `<th title=${(_a = ds.label) !== null && _a !== void 0 ? _a : '?'}>${truncateLabel((_b = ds.label) !== null && _b !== void 0 ? _b : '?', 15)}</th>`; });
+        const colNames = chart.data.datasets.map(ds => { var _a, _b; return `<th title="${(_a = ds.fullLabel) !== null && _a !== void 0 ? _a : '?'}">${truncateLabel((_b = ds.label) !== null && _b !== void 0 ? _b : '?', 15)}</th>`; });
         thead.innerHTML = `<tr><th>Time</th>${colNames.join('')}</tr>`;
         table.appendChild(thead);
         const tbody = document.createElement("tbody");
@@ -182,7 +232,8 @@ document.addEventListener("DOMContentLoaded", () => {
             tbody.appendChild(tr);
         });
         table.appendChild(tbody);
-        dataTable.appendChild(table);
+        wrapper.appendChild(table);
+        dataTable.appendChild(wrapper);
         // Pagination controls
         const pagination = document.createElement("nav");
         pagination.className = "d-flex justify-content-between align-items-center mt-2";
