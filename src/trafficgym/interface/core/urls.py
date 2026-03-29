@@ -43,9 +43,9 @@ urlpatterns = [
         name="analytics_overview",
     ),
     path(
-        "analytics_run_request/<uuid:pk>",
+        "analytics",
         views.analytics_run_request_view,
-        name="analytics_run_request",
+        name="analytics",
     ),
     path(
         "analytics_run_execution/<uuid:pk>",
@@ -53,7 +53,7 @@ urlpatterns = [
         name="analytics_run_execution",
     ),
     path(
-        "analytics_run_request/<uuid:pk>/subscriptions_data",
+        "analytics/subscriptions_data/<uuid:pk>",
         views.subscription_data,
         name="subscription_data",
     ),

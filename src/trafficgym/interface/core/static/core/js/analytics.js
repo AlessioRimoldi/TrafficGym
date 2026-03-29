@@ -17,15 +17,26 @@ const datasets = [];
 document.addEventListener("DOMContentLoaded", () => {
     if (!form)
         throw Error("form not loaded");
-    form.addEventListener("submit", (e) => __awaiter(void 0, void 0, void 0, function* () {
-        e.preventDefault();
-        const formData = new FormData(form);
-        const params = new URLSearchParams(formData);
-        const url = form.action + "?" + params.toString();
-        const response = yield fetch(url);
-        const json = yield response.json();
-        addData(json.run_execution_data, json.aggregated_data, params.get("agg_mode"));
-    }));
+    const forms = document.querySelectorAll('form[id^="analytics_controls"]');
+    forms.forEach(form => {
+        form.addEventListener("submit", (e) => __awaiter(void 0, void 0, void 0, function* () {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const params = new URLSearchParams(formData);
+            const url = form.action + "?" + params.toString();
+            const response = yield fetch(url);
+            const json = yield response.json();
+            addData(json.run_execution_data, json.aggregated_data, params.get("agg_mode"));
+        }));
+    });
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("load")) {
+        forms.forEach(form => {
+            // trigger the submit programmatically via dispatchEvent
+            const event = new Event("submit", { bubbles: true, cancelable: true });
+            form.dispatchEvent(event);
+        });
+    }
     function shortenFingerprint(fingerprint) {
         return fingerprint.split(".").map(subPart => subPart.slice(0, 4)).join(".");
     }

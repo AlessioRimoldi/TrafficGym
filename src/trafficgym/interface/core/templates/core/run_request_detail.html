@@ -7,7 +7,7 @@
     <div class="mb-4 d-flex justify-content-between align-items-center">
         {% comment %} <h1> Run Request Detail</h1> {% endcomment %}
         <h1 class="mb-0">Run Request Detail <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ run_request.id }}</span></h1>
-        <a href="{% url "analytics_run_request" run_request %}" class="btn btn-primary">Open in Analytics</a>
+        <a href="{% url "analytics" %}?run_request={{ run_request.id }}" class="btn btn-primary">Open in Analytics</a>
     </div>
     <div class="card m-4">
         <div class="card-header fs-4 fw-bold py-3">Properties</div>
@@ -125,8 +125,7 @@
                         <th class="text-center">First Step</th>
                         <th class="text-center">Last Step</th>
                         <th class="text-center">Executions</th>
-                        <th><!--Open Graph--></th>
-                        <th><!--Open Table--></th>
+                        <th><!--Open Analytics--></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -139,13 +138,8 @@
                         <td class="text-center">{{ data.last_step }}</td>
                         <td class="text-center">{{ data.execution_count }}</td>
                         <td class="text-center">
-                            <a class="btn btn-sm btn-primary" target="_blank" href="">
-                                Open Graph&nbsp;<i class="bi bi-box-arrow-up-right"></i>
-                            </a>
-                        </td>
-                        <td class="text-center">
-                            <a class="btn btn-sm btn-primary" target="_blank" href="">
-                                Open Table&nbsp;<i class="bi bi-box-arrow-up-right"></i>
+                            <a class="btn btn-sm btn-primary" target="_blank" href="{% url "analytics" %}?run_request={{ run_request.id }}&subscription={{ data.subscription_fingerprint }}&agg_mode=avg&load">
+                                Open Average in Analytics&nbsp;<i class="bi bi-box-arrow-up-right"></i>
                             </a>
                         </td>
                     </tr>
