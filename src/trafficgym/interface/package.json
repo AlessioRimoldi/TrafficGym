@@ -1,9 +1,9 @@
 {
-  "dependencies": {
-    "chart.js": "^4.5.1"
-  },
   "devDependencies": {
+    "@types/bootstrap": "^5.2.10",
     "@types/chart.js": "^2.9.41",
+    "bootstrap": "^5.3.8",
+    "chart.js": "^4.5.1",
     "typescript": "^6.0.2"
   }
 }

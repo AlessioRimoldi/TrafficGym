@@ -19,7 +19,7 @@ from .models import (
 )
 from django.urls import reverse
 from django.views.decorators.http import require_POST
-from django.db.models import Min, Max, Count, Avg, Sum
+from django.db.models import Min, Max, Count, Avg, Sum, F
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -59,6 +59,26 @@ def create_run_modal(request: HttpRequest) -> HttpResponse:
     context = {"scenarios": scenarios, "experiments": experiments}
 
     return render(request, "core/create_run_modal.html", context)
+
+
+def select_run_modal(
+    request: HttpRequest
+) -> HttpResponse:
+    existing_run_ids=request.GET.get("existing_run_ids", "").split(",")
+    other_runs = (
+        RunRequest.objects.exclude(id__in=existing_run_ids)
+        .order_by("-created_at")
+        .values(
+            "id",
+            scenario_name=F("scenario__name"),
+            experiment_name=F("experiment__name"),
+            experiment_version=F("experiment__version"),
+        )
+    )
+
+    context = {"available_runs": list(other_runs)}
+
+    return render(request, "core/select_run_modal.html", context)
 
 
 @require_POST
@@ -249,23 +269,6 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
         count: int
         run_execution_ids: Set[str]
 
-    # if aggregation_function in ["sum", "avg", "max", "min"]:
-    #     aggregated_base_qs = cast(
-    #         list[AggreagatedRow],
-    #         base_qs.values("simulation_time", "subscription_fingerprint", "run_execution__id", "payload")
-    #         # .annotate(value=aggregation_map[aggregation_function])
-    #         .order_by("simulation_time", "subscription_fingerprint", "run_execution__id"),
-    #     )
-
-    #     data = [
-    #         {
-    #             "run_execution": e["run_execution__id"],
-    #             "time": e["simulation_time"],
-    #             "fingerprint": e["subscription_fingerprint"],
-    #             "value": e["value"],
-    #         }
-    #         for e in aggregated_base_qs
-    #     ]
     aggregated_data = []
     run_execution_data = []
 
@@ -366,16 +369,16 @@ def analytics_run_execution_view(_: HttpRequest, pk: str) -> HttpResponse:
 
 
 def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
-    run_request_id_params = request.GET.getlist("run_request")
+    run_request_id_params = list(set(request.GET.getlist("run_request")))
     subscriptions_params = request.GET.getlist("subscription")
     aggregation_mode_params = request.GET.getlist("agg_mode")
     run_executions_params = request.GET.getlist("run_execution")
 
-    if len(run_request_id_params) > 2:
-        messages.warning(
-            request,
-            "Can only compare analytics with one other run_request. Extra run_requests were ignored",
-        )
+    # if len(run_request_id_params) > 2:
+    #     messages.warning(
+    #         request,
+    #         "Can only compare analytics with one other run_request. Extra run_requests were ignored",
+    #     )
 
     if len(subscriptions_params) > len(run_request_id_params):
         messages.warning(
@@ -401,35 +404,38 @@ def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
         "subscription_fingerprint",
     ).distinct()
 
-    fingerprints_per_execution: DefaultDict[str, Set[str]] = defaultdict(set)
+    fingerprints_per_run: DefaultDict[str, DefaultDict[str, Set[str]]] = (
+        defaultdict(lambda: defaultdict(set))
+    )
 
-    for fingerprint_row in fingerprint_rows:
-        fingerprints_per_execution[
-            str(fingerprint_row["run_execution__id"])
-        ].add(fingerprint_row["subscription_fingerprint"])
+    for row in fingerprint_rows:
+        rid = str(row["run_execution__run_request__id"])
+        exec_id = str(row["run_execution__id"])
+        fp = row["subscription_fingerprint"]
 
-    fingerprint_sets = list(fingerprints_per_execution.values())
+        fingerprints_per_run[rid][exec_id].add(fp)
 
-    if fingerprint_sets:
-        all_fingerprints: Set[str] = set.union(*fingerprint_sets)
-        common_fingerprints: Set[str] = set.intersection(*fingerprint_sets)
+    for rid, executions in fingerprints_per_run.items():
+        fingerprint_sets = list(executions.values())
 
-    else:
-        all_fingerprints = set()
-        common_fingerprints = set()
+        if fingerprint_sets:
+            all_fingerprints: Set[str] = set.union(*fingerprint_sets)
+            common_fingerprints: Set[str] = set.intersection(*fingerprint_sets)
 
-    missing_by_execution = {
-        exec_id: all_fingerprints - fps
-        for exec_id, fps in fingerprints_per_execution.items()
-    }
+        else:
+            all_fingerprints = set()
+            common_fingerprints = set()
 
-    if all_fingerprints != common_fingerprints:
-        for run_exec_id, missing_fps in missing_by_execution.items():
-            if len(missing_fps):
-                messages.warning(
-                    request,
-                    f"Run Execution {run_exec_id} is missing data for the following fingerprint(s): {", ".join(sorted(missing_fps))}",
-                )
+        if all_fingerprints != common_fingerprints:
+            for exec_id, fps in executions.items():
+                missing = all_fingerprints - fps
+                if missing:
+                    messages.warning(
+                        request,
+                        f"Run Request {rid} — Run Execution {exec_id} "
+                        f"is missing data for the following fingerprint(s): "
+                        f"{", ".join(sorted(missing))}",
+                    )
 
     aggregated_subscriptions = (
         logs.values(

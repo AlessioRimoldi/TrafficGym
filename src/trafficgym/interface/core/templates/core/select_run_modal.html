@@ -1,0 +1,20 @@
+<form id="selectRunForm">
+    <div class="modal-header">
+      <h5 class="modal-title">Select Run Request to add to Analysis</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body">
+      <label for="runSelect" class="form-label">Choose Run Requests</label>
+      <select id="runSelect" name="run_requests" class="form-select" multiple size="5">
+        {% for run in available_runs %}
+          <option value="{{ run.id }}">
+            {{ run.id }} {{ run.scenario_name }} v{{ run.experiment_version }} ({{ run.experiment_name }})
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      <button type="submit" class="btn btn-primary">Add to Analysis</button>
+    </div>
+</form>

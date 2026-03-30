@@ -1,4 +1,5 @@
 import type { Chart as ChartType, ChartDataset, Point} from 'chart.js'
+import type {} from 'bootstrap'
 
 declare const Chart: typeof ChartType;
 
@@ -11,11 +12,6 @@ const tablePlaceholder = document.getElementById("tablePlaceholder") as HTMLDivE
 interface DataPoint {
     x: number;
     y: number | string;
-}
-
-interface ChartPoint {
-    x: number;
-    y: number;
 }
 
 type ExtendedDataset = ChartDataset<"line", Point[]> & {
@@ -33,26 +29,114 @@ interface DataItem {
 let chart: ChartType | null = null;
 const datasets: ExtendedDataset[] = [];
 
+function downloadCurrentData() {
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     if (!form) throw Error("form not loaded");
 
     const forms = document.querySelectorAll('form[id^="analytics_controls"]');
 
-    (forms as NodeListOf<HTMLFormElement>).forEach(form => {
+    (forms as NodeListOf<HTMLFormElement>).forEach((form, i) => {
         form.addEventListener("submit", async (e) => { e.preventDefault();
 
-            const formData = new FormData(form)
-            const params = new URLSearchParams(formData as any)
+            document.body.classList.add("loading");
+            const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement
+            if (submitBtn) submitBtn.disabled = true;
 
-            const url = form.action + "?" + params.toString();
+            try {
+                const formData = new FormData(form)
+                const params = new URLSearchParams(formData as any)
 
-            const response = await fetch(url);
-            const json = await response.json();
+                const url = form.action + "?" + params.toString();
 
-            addData(json.run_execution_data, json.aggregated_data, params.get("agg_mode"));
+                const response = await fetch(url);
+                const json = await response.json();
+
+                addData(json.run_execution_data, json.aggregated_data, params.get("agg_mode"));
+            } finally {
+                document.body.classList.remove("loading");
+                if (submitBtn) submitBtn.disabled = false;
+            }
         });
     });
+
+    document.getElementById("downloadButton")?.addEventListener("click", _ => {
+        if (datasets.length === 0) return;
+
+        // Collect all unique time points
+        const timeSet = new Set<number>();
+        datasets.forEach(ds =>
+            (ds.rawData as DataPoint[]).forEach(p => timeSet.add(p.x))
+        );
+        const times = Array.from(timeSet).sort((a, b) => a - b);
+
+        // Prepare CSV header: Time + one column per dataset
+        const header = ["Time", ...datasets.map(ds => `"${ds.fullLabel}"`)];
+        const rows = [header.join(",")];
+
+        // Build rows for each time
+        times.forEach(t => {
+            const row = [t.toString()];
+            datasets.forEach(ds => {
+                const point = (ds.rawData as DataPoint[]).find(p => p.x === t);
+                row.push(point ? point.y.toString() : "");
+            });
+            rows.push(row.join(","));
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8," + rows.join("\n");
+        const encodedUri = encodeURI(csvContent);
+
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "analytics_data.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+ 
+    const openAddCompareRunModalButton = document.getElementById("openAddCompareRunModal") as HTMLButtonElement
+    openAddCompareRunModalButton?.addEventListener("click", () => {
+        const url = openAddCompareRunModalButton.dataset.url;
+        if (!url) throw new Error("Open Modal URL not found!")
+
+        fetch(url)
+        .then(response => response.text())
+        .then(html => {
+            const modalContent = document.getElementById("addCompareRunModalContent");
+            const modalElem = document.getElementById("addCompareRunModal");
+            if (!modalContent || !modalElem) throw new Error("Cannot find modal!");
+            
+            modalContent.innerHTML = html;
+
+            document.getElementById("selectRunForm")?.addEventListener("submit", (e) => {
+                e.preventDefault();
+            
+                const select = document.getElementById("runSelect") as HTMLSelectElement;
+                if (!select) throw new Error("Could not find run selector");
+                const selected = Array.from(select.selectedOptions).map(opt => opt.value);
+            
+                if (!selected.length) return;
+            
+                const url = new URL(window.location.href);
+            
+                selected.forEach(id => url.searchParams.append("run_request", id));
+            
+                // // update the URL in the browser without refreshing
+                // window.history.replaceState(null, "", url);
+            
+                // loadDataFromUrl();
+
+                window.location.href = url.toString()
+            });
+
+            const modal = new window.bootstrap.Modal(modalElem);
+            modal.show()
+        })
+    });
+
+
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has("load")) {
