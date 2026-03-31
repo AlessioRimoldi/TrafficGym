@@ -18,13 +18,46 @@ document.addEventListener("DOMContentLoaded", () => {
     const currentURL = new URL(window.location.href);
     let currentData;
     try {
-        currentData = JSON.parse((_a = currentURL.searchParams.get("data")) !== null && _a !== void 0 ? _a : "{ runs: { } }");
+        currentData = JSON.parse((_a = currentURL.searchParams.get("data")) !== null && _a !== void 0 ? _a : '{ "runs": { } }');
     }
     catch (_c) {
         currentData = { runs: {} };
     }
     addData(currentData);
-    const forms = document.querySelectorAll('form[id^="analytics_controls"]');
+    for (const [rid, entries] of Object.entries(currentData.runs)) {
+        if (!entries || entries.length === 0)
+            continue;
+        const lastEntry = entries[entries.length - 1];
+        // Locate the form using the submit button's data-run-id
+        const submitBtn = document.querySelector(`button[data-run-id="${rid}"]`);
+        if (!submitBtn)
+            continue;
+        const form = submitBtn.closest("form");
+        if (!form)
+            continue;
+        const subscriptionInput = form.querySelector('[name="fingerprint"]');
+        if (subscriptionInput) {
+            subscriptionInput.value = lastEntry.subscription;
+        }
+        const aggModeInput = form.querySelector('[name="agg_mode"]');
+        if (aggModeInput && lastEntry.aggMode) {
+            aggModeInput.value = lastEntry.aggMode;
+        }
+        const runExecSelect = form.querySelector('[name="run_execution"]');
+        if (runExecSelect) {
+            const selectedValues = lastEntry.runExecutions;
+            Array.from(runExecSelect.options).forEach(opt => {
+                // If the last entry was "all run executions", select the blank option
+                if (selectedValues.length === 0) {
+                    opt.selected = opt.value === "";
+                }
+                else {
+                    opt.selected = selectedValues.includes(opt.value);
+                }
+            });
+        }
+    }
+    const forms = document.querySelectorAll('form.analytics_controls');
     forms.forEach((form) => {
         form.addEventListener("submit", (e) => __awaiter(void 0, void 0, void 0, function* () {
             var _a, _b;
@@ -161,10 +194,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     updateChart();
                     updateDataTable();
                     updateDatasetControls();
-                    chartPlaceholder.style.display = "none";
-                    tablePlaceholder.style.display = "none";
-                    chartCanvas.style.display = "block";
-                    dataTable.style.display = "block";
                 }
             }
             finally {

@@ -43,13 +43,13 @@
             <div class="card mb-3">
                 <div class="card-header fw-bold"><span class="text-muted" style="font-size: 0.65em; font-family: monospace;">{{ run_request.id }}</span></div>
                 <div class="card-body">
-                    <form id="analytics_controls" action="{% url "subscription_data" run_request.id %}" method="get">
+                    <form class="analytics_controls" action="{% url "subscription_data" run_request.id %}" method="get">
                         <div class="mb-3">
                             <label for="subscription_select" class="form-label">Subscription</label>
                             <select id="subscription_select" name="fingerprint" class="form-select" required>
                                 <option value="">Select a subscription</option>
                                 {% for sub in aggregated_susbcriptions_per_run|dict_get:run_request.id %}
-                                <option value="{{ sub.subscription_fingerprint }}" {% if presel_subscriptions|dict_get:run_request.id|lower == sub.subscription_fingerprint|lower %}selected{% endif %}>{{ sub.subscription_fingerprint }}</option>
+                                <option value="{{ sub.subscription_fingerprint }}">{{ sub.subscription_fingerprint }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -58,7 +58,7 @@
                             <select id="agg_mode_select" name="agg_mode" class="form-select">
                                 <option value="">No Aggregation</option>
                                 {% for mode in aggregation_functions %}
-                                <option value="{{ mode }}" {% if presel_aggregation_modes|dict_get:run_request.id|upper == mode|upper %}selected{% endif %}>{{ mode|upper }}</option>
+                                <option value="{{ mode }}">{{ mode|upper }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -67,7 +67,7 @@
                             <select name="run_execution" id="run_executions_select" class="form-select" multiple>
                                 <option value="">All Run Executions</option>
                                 {% for execution in run_request.executions.all %}
-                                <option value="{{ execution.id }}" {% if execution.id|stringformat:"s" in presel_executions %}selected{% endif %}>{{ execution.id }}</option>
+                                <option value="{{ execution.id }}" >{{ execution.id }}</option>
                                 {% endfor %}
                             </select>
                         </div>

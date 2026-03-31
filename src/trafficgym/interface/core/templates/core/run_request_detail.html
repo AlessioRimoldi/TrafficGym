@@ -140,7 +140,6 @@
                         <td class="text-center">{{ data.execution_count }}</td>
                         <td class="text-center">
                             <a class="btn btn-sm btn-primary" target="_blank" href="{% url "analytics" %}?run_request={{ run_request.id }}&data={{ analytics_links|dict_get:data.subscription_fingerprint|urlencode }}">
-                            {% comment %} <a class="btn btn-sm btn-primary" target="_blank" href="{% url "analytics" %}?run_request={{ run_request.id }}&subscription={{ data.subscription_fingerprint }}&agg_mode=avg&load"> {% endcomment %}
                                 Open Average in Analytics&nbsp;<i class="bi bi-box-arrow-up-right"></i>
                             </a>
                         </td>

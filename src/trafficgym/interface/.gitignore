@@ -1,3 +1,4 @@
 media
 core/migrations/*
 *.sqlite3
+*.js.map

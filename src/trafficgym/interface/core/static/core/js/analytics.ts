@@ -48,7 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentData: URLGraphData
     try {
         currentData = JSON.parse(
-            currentURL.searchParams.get("data") ?? "{ runs: { } }"
+            currentURL.searchParams.get("data") ?? '{ "runs": { } }'
         ) as URLGraphData;
     } catch {
         currentData = { runs: { } };
@@ -56,7 +56,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
     addData(currentData);
 
-    const forms = document.querySelectorAll('form[id^="analytics_controls"]');
+    for (const [rid, entries] of Object.entries(currentData.runs)) {
+        if (!entries || entries.length === 0) continue;
+        const lastEntry = entries[entries.length - 1];
+
+        // Locate the form using the submit button's data-run-id
+        const submitBtn = document.querySelector<HTMLButtonElement>(
+            `button[data-run-id="${rid}"]`
+        );
+        if (!submitBtn) continue;
+
+        const form = submitBtn.closest<HTMLFormElement>("form");
+        if (!form) continue;
+
+        const subscriptionInput = form.querySelector<HTMLSelectElement>(
+            '[name="fingerprint"]'
+        );
+        if (subscriptionInput) {
+            subscriptionInput.value = lastEntry.subscription;
+        }
+
+        const aggModeInput = form.querySelector<HTMLSelectElement>(
+            '[name="agg_mode"]'
+        );
+        if (aggModeInput && lastEntry.aggMode) {
+            aggModeInput.value = lastEntry.aggMode;
+        }
+
+        const runExecSelect = form.querySelector<HTMLSelectElement>(
+            '[name="run_execution"]'
+        );
+        if (runExecSelect) {
+            const selectedValues = lastEntry.runExecutions;
+            Array.from(runExecSelect.options).forEach(opt => {
+                // If the last entry was "all run executions", select the blank option
+                if (selectedValues.length === 0) {
+                    opt.selected = opt.value === "";
+                } else {
+                    opt.selected = selectedValues.includes(opt.value);
+                }
+            });
+        }
+    }
+
+    const forms = document.querySelectorAll('form.analytics_controls');
 
     (forms as NodeListOf<HTMLFormElement>).forEach((form) => {
         form.addEventListener("submit", async (e) => { 
@@ -216,11 +259,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateChart();
                 updateDataTable();
                 updateDatasetControls();
-
-                chartPlaceholder.style.display = "none";
-                tablePlaceholder.style.display = "none";
-                chartCanvas.style.display = "block";
-                dataTable.style.display = "block";
             }
         } finally {
             document.body.classList.remove("loading");

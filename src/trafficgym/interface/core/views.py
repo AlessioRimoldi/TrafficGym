@@ -164,15 +164,6 @@ def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
         .order_by("subscription_fingerprint")
     )
 
-    class URLDataEntry(TypedDict):
-        subscription: str
-        aggMode: NotRequired[str | None]
-        runExecutions: list[str]
-
-    class URLGraphData(TypedDict):
-        runs: dict[str, list[URLDataEntry]]
-        load: NotRequired[bool]
-
     analytics_links: dict[str, str] = {
         row["subscription_fingerprint"]: json.dumps({
             "runs": {
