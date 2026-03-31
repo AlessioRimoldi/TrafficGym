@@ -14,7 +14,16 @@ const tablePlaceholder = document.getElementById("tablePlaceholder");
 let chart = null;
 const datasets = [];
 document.addEventListener("DOMContentLoaded", () => {
-    var _a;
+    var _a, _b;
+    const currentURL = new URL(window.location.href);
+    let currentData;
+    try {
+        currentData = JSON.parse((_a = currentURL.searchParams.get("data")) !== null && _a !== void 0 ? _a : "{ runs: { } }");
+    }
+    catch (_c) {
+        currentData = { runs: {} };
+    }
+    addData(currentData);
     const forms = document.querySelectorAll('form[id^="analytics_controls"]');
     forms.forEach((form) => {
         form.addEventListener("submit", (e) => __awaiter(void 0, void 0, void 0, function* () {
@@ -24,7 +33,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const formData = new FormData(form);
             const submitBtn = form.querySelector('button[type="submit"]');
             const currentURL = new URL(window.location.href);
-            let currentData = null;
             try {
                 currentData = JSON.parse((_a = currentURL.searchParams.get("data")) !== null && _a !== void 0 ? _a : "");
             }
@@ -165,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
-    (_a = document.getElementById("downloadButton")) === null || _a === void 0 ? void 0 : _a.addEventListener("click", _ => {
+    (_b = document.getElementById("downloadButton")) === null || _b === void 0 ? void 0 : _b.addEventListener("click", _ => {
         if (datasets.length === 0)
             return;
         // Collect all unique time points

@@ -43,6 +43,19 @@ const datasets: ExtendedDataset[] = [];
 
 
 document.addEventListener("DOMContentLoaded", () => {
+    const currentURL = new URL(window.location.href)
+
+    let currentData: URLGraphData
+    try {
+        currentData = JSON.parse(
+            currentURL.searchParams.get("data") ?? "{ runs: { } }"
+        ) as URLGraphData;
+    } catch {
+        currentData = { runs: { } };
+    }
+
+    addData(currentData);
+
     const forms = document.querySelectorAll('form[id^="analytics_controls"]');
 
     (forms as NodeListOf<HTMLFormElement>).forEach((form) => {
@@ -54,7 +67,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const currentURL = new URL(window.location.href)
 
-            let currentData: URLGraphData | null = null;
             try {
                 currentData = JSON.parse(
                     currentURL.searchParams.get("data") ?? ""
@@ -62,7 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch {
                 currentData = { runs: { } };
             }
-
+ 
             const rid = submitBtn.dataset.runId;
             if (!rid) throw new Error("Run ID missing on button");
 
@@ -96,7 +108,6 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 (currentData.runs[rid] ||= []).push(dataToLoad);
             }
-
 
             currentURL.searchParams.set("data", JSON.stringify(currentData));
             window.history.pushState({}, "", currentURL)

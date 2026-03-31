@@ -62,10 +62,8 @@ def create_run_modal(request: HttpRequest) -> HttpResponse:
     return render(request, "core/create_run_modal.html", context)
 
 
-def select_run_modal(
-    request: HttpRequest
-) -> HttpResponse:
-    existing_run_ids=request.GET.get("existing_run_ids", "").split(",")
+def select_run_modal(request: HttpRequest) -> HttpResponse:
+    existing_run_ids = request.GET.get("existing_run_ids", "").split(",")
     other_runs = (
         RunRequest.objects.exclude(id__in=existing_run_ids)
         .order_by("-created_at")
@@ -166,6 +164,28 @@ def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
         .order_by("subscription_fingerprint")
     )
 
+    class URLDataEntry(TypedDict):
+        subscription: str
+        aggMode: NotRequired[str | None]
+        runExecutions: list[str]
+
+    class URLGraphData(TypedDict):
+        runs: dict[str, list[URLDataEntry]]
+        load: NotRequired[bool]
+
+    analytics_links: dict[str, str] = {
+        row["subscription_fingerprint"]: json.dumps({
+            "runs": {
+                str(pk): [{
+                    "subscription": row["subscription_fingerprint"],
+                    "aggMode": "avg",
+                    "runExecutions": [""],
+                }]
+            }
+        }, separators=(",", ":"))
+        for row in aggregated_subscriptions
+    }
+
     context = {
         "run_request": run_request,
         "worker_log_count": logs_qs.count(),
@@ -176,6 +196,7 @@ def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
         "aggregated_subscriptions_count": aggregated_subscriptions.count(),
         "aggregated_subscriptions": aggregated_subscriptions,
         "has_missing_subs": all_fingerprints != common_fingerprints,
+        "analytics_links": analytics_links,
         # "common_fingerprints": common_fingerprints,
     }
 
@@ -353,7 +374,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
         {
             "run_execution_data": run_execution_data,
             "aggregated_data": aggregated_data,
-            "warnings": warnings
+            "warnings": warnings,
         }
     )
 
@@ -382,35 +403,36 @@ def analytics_run_execution_view(_: HttpRequest, pk: str) -> HttpResponse:
 def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
     run_request_id_params = list(set(request.GET.getlist("run_request")))
 
-    # class URLDataEntry(TypedDict):
-    #     subscription: str
-    #     aggMode: str | None
-    #     runExecutions: list[str]
+    class URLDataEntry(TypedDict):
+        subscription: str
+        aggMode: str | None
+        runExecutions: list[str]
 
+    class URLGraphData(TypedDict):
+        runs: dict[str, list[URLDataEntry]]
+        load: NotRequired[bool]
 
-    # class URLGraphData(TypedDict):
-    #     runs: dict[str, list[URLDataEntry]]
-    #     load: NotRequired[bool]
+    data_param = request.GET.get("data")
+    url_data: URLGraphData = {"runs": {}}
 
-    # data_param = request.GET.get("data")
-    # url_data: URLGraphData = {"runs": {}}
+    if data_param:
+        try:
+            url_data = json.loads(data_param)
+        except json.JSONDecodeError:
+            pass
 
-    # if data_param:
-    #     try:
-    #         url_data = json.loads(data_param)
-    #     except json.JSONDecodeError:
-    #         pass
-    
-    # load_flag = url_data.get("load", False)
+    load_flag = url_data.get("load", False)
 
-    # entries_to_load = []  # list of (run_id, entry)
+    entries_to_load = []  # list of (run_id, entry)
 
-    # if load_flag:
-    #     for rid, entries in url_data["runs"].items():
-    #         for entry in entries:
-    #             entries_to_load.append((rid, entry))
+    if load_flag:
+        for rid, entries in url_data["runs"].items():
+            for entry in entries:
+                entries_to_load.append((rid, entry))
 
-    run_requests = RunRequest.objects.filter(id__in=run_request_id_params)
+    run_requests = RunRequest.objects.filter(
+        id__in=run_request_id_params
+    ).prefetch_related("executions")
 
     logs = SubscriptionLogEntry.objects.filter(
         run_execution__run_request__id__in=run_request_id_params
