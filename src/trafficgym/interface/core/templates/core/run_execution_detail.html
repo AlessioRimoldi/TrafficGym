@@ -1,5 +1,6 @@
 {% extends "core/base.html" %}
 {% block title %}Run Request Detail{% endblock %}
+{% load dict_filters %}
 
 {% block content %}
 <div class="container mt-4">
@@ -52,10 +53,10 @@
                 <tbody>
                     <tr>
                         <td>{{ run_execution.run_request.experiment.artefact.original_name }}</td>
-                        {% comment %} <td>{{ run_execution.experiment.artefact.sha256 }}</td> {% endcomment %}
-                        <td><a class="btn btn-sm btn-primary" href="{% url "artefact_detail" run_execution.run_request.experiment.artefact.sha256 %}">View Detail</a></td>
-                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{% url "media_view" run_execution.run_request.experiment.artefact.file.name %}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
-                    </tr>
+                        {% comment %} <a class="btn btn-sm btn-primary" target="_blank" href="{% url "analytics" %}?run_request={{ run_request.id }}&data={{ analytics_links|dict_get:data.subscription_fingerprint|urlencode }}">
+                            Open in Analytics&nbsp;<i class="bi bi-box-arrow-up-right"></i>
+                        </a> {% endcomment %}
+                </tr>
                 </tbody>
             </table>
         </div>
@@ -117,8 +118,7 @@
                         <th class="text-center">First Step</th>
                         <th class="text-center">Last Step</th>
                         <th class="text-center">Count</th>
-                        <th><!--Open Graph--></th>
-                        <th><!--Open Table--></th>
+                        <th><!--Open Analytics--></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -129,13 +129,8 @@
                         <td class="text-center">{{ data.last_step }}</td>
                         <td class="text-center">{{ data.count }}</td>
                         <td class="text-center">
-                            <a class="btn btn-sm btn-primary" target="_blank" href="{% url "subscription_view" run_execution.id data.subscription_fingerprint %}?view=graph">
-                                Open Graph&nbsp;<i class="bi bi-box-arrow-up-right"></i>
-                            </a>
-                        </td>
-                        <td class="text-center">
-                            <a class="btn btn-sm btn-primary" target="_blank" href="{% url "subscription_view" run_execution.id data.subscription_fingerprint %}?view=table">
-                                Open Table&nbsp;<i class="bi bi-box-arrow-up-right"></i>
+                            <a class="btn btn-sm btn-primary" target="_blank" href="{% url "analytics" %}?run_request={{ run_execution.run_request.id }}&data={{ analytics_links|dict_get:data.subscription_fingerprint|urlencode }}">
+                                Open in Analytics&nbsp;<i class="bi bi-box-arrow-up-right"></i>
                             </a>
                         </td>
                     </tr>

@@ -219,12 +219,27 @@ def run_execution_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    analytics_links: dict[str, str] = {
+        row["subscription_fingerprint"]: json.dumps({
+            "runs": {
+                str(cast(RunRequest, run_execution.run_request).id): [{
+                    "subscription": row["subscription_fingerprint"],
+                    "aggMode": "",
+                    "runExecutions": [str(pk)],
+                }]
+            }
+        }, separators=(",", ":"))
+        for row in subscription_data
+    }
+
+
     context = {
         "run_execution": run_execution,
         "subscription_data": subscription_data,
         "worker_log_count": logs_qs.count(),
         "worker_logs": page_obj,
         "level_filter": level_filter,
+        "analytics_links": analytics_links,
     }
 
     return render(request, "core/run_execution_detail.html", context)
@@ -374,7 +389,7 @@ def analytics_overview_view(request: HttpRequest) -> HttpResponse:
     latest_rr = RunRequest.objects.order_by("-created_at").only("pk").first()
 
     if latest_rr is None:
-        return render(request, "core/analytics_empty.html")
+        return render(request, "core/run_execution.analytics_empty.html")
 
     url = reverse("analytics")
 
