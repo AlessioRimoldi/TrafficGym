@@ -1,9 +1,8 @@
-import type { Chart as ChartType, ChartDataset, Point} from 'chart.js'
+import type { Chart as ChartType, ChartDataset, Point, DatasetChartOptions} from 'chart.js'
 import type {} from 'bootstrap'
 
 declare const Chart: typeof ChartType;
 
-const form = document.getElementById("analytics_controls") as HTMLFormElement;
 const chartCanvas = document.getElementById("analyticsChart") as HTMLCanvasElement;
 const chartPlaceholder = document.getElementById("chartPlaceholder") as HTMLDivElement;
 const dataTable = document.getElementById("analyticsTable") as HTMLDivElement;
@@ -16,7 +15,9 @@ interface DataPoint {
 
 type ExtendedDataset = ChartDataset<"line", Point[]> & {
     fullLabel: string;
-    rawData: DataPoint[],
+    rawData: DataPoint[];
+    runId: string;
+    dataIndex: number;
 };
 
 interface DataItem {
@@ -24,42 +25,198 @@ interface DataItem {
     fingerprint: string;
     time: number | string;
     value: number | string;
-
 }
+
+interface URLGraphData {
+    runs: { [runId: string]: URLDataEntry[] };
+    load?: boolean;
+}
+
+interface URLDataEntry {
+    subscription: string;
+    aggMode?: string;
+    runExecutions: string[];
+}
+
 let chart: ChartType | null = null;
 const datasets: ExtendedDataset[] = [];
 
-function downloadCurrentData() {
-}
 
 document.addEventListener("DOMContentLoaded", () => {
-    if (!form) throw Error("form not loaded");
-
     const forms = document.querySelectorAll('form[id^="analytics_controls"]');
 
-    (forms as NodeListOf<HTMLFormElement>).forEach((form, i) => {
-        form.addEventListener("submit", async (e) => { e.preventDefault();
+    (forms as NodeListOf<HTMLFormElement>).forEach((form) => {
+        form.addEventListener("submit", async (e) => { 
+            e.preventDefault();
+            const formData = new FormData(form)
+            const submitBtn = 
+                form.querySelector('button[type="submit"]') as HTMLButtonElement;
 
-            document.body.classList.add("loading");
-            const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement
-            if (submitBtn) submitBtn.disabled = true;
+            const currentURL = new URL(window.location.href)
 
+            let currentData: URLGraphData | null = null;
             try {
-                const formData = new FormData(form)
-                const params = new URLSearchParams(formData as any)
-
-                const url = form.action + "?" + params.toString();
-
-                const response = await fetch(url);
-                const json = await response.json();
-
-                addData(json.run_execution_data, json.aggregated_data, params.get("agg_mode"));
-            } finally {
-                document.body.classList.remove("loading");
-                if (submitBtn) submitBtn.disabled = false;
+                currentData = JSON.parse(
+                    currentURL.searchParams.get("data") ?? ""
+                ) as URLGraphData;
+            } catch {
+                currentData = { runs: { } };
             }
+
+            const rid = submitBtn.dataset.runId;
+            if (!rid) throw new Error("Run ID missing on button");
+
+            const selectedExecs = formData.getAll("run_execution")
+                .map(re => re.toString())
+            const allExecs: string[] = Array.from(
+                form.querySelectorAll<HTMLSelectElement>(
+                    'select[name="run_execution"] option'
+                )
+            ).map(opt => opt.value).filter(execId => execId !== "");
+            const runExecsToUse = selectedExecs.findIndex(exec => exec === "") === -1
+                ? selectedExecs
+                : allExecs;
+
+            const aggMode = formData.get("agg_mode")?.toString();
+
+            const dataToLoad = { 
+                subscription: formData.get("fingerprint")!.toString(),
+                aggMode: aggMode,
+                runExecutions: runExecsToUse,
+            };
+
+            if (!aggMode || aggMode === "") {
+                runExecsToUse.forEach(runExec => {
+                    (currentData.runs[rid] ||= []).push({
+                        subscription: dataToLoad.subscription,
+                        aggMode: dataToLoad.aggMode,
+                        runExecutions: [runExec]
+                    });
+                });
+            } else {
+                (currentData.runs[rid] ||= []).push(dataToLoad);
+            }
+
+
+            currentURL.searchParams.set("data", JSON.stringify(currentData));
+            window.history.pushState({}, "", currentURL)
+
+            addData({ runs: { [rid]: [dataToLoad] } });
         });
     });
+
+    async function addData(dataToLoad: URLGraphData) {
+        document.body.classList.add("loading");
+        const submitBtns = document
+            .querySelectorAll('button[type="submit"]') as NodeListOf<HTMLButtonElement>;
+        submitBtns.forEach(btn => btn.disabled = true);
+
+        try {
+            for (const [rid, dataEntries] of Object.entries(dataToLoad.runs)) {
+                for (const [dataIndex, dataEntry] of dataEntries.entries()) {
+
+                    const dataURL = `analytics/subscriptions_data/${rid}?fingerprint=${dataEntry.subscription}&agg_mode=${dataEntry.aggMode}&run_execution=${dataEntry.runExecutions.join("&run_execution=")}`
+                    const response = await fetch(dataURL);
+                    const json = await response.json();
+
+                    if (json.warnings) {
+                        const warningBox = document.getElementById("messageBox");
+                        (json.warnings as string[]).forEach(w => {
+                            const div = document.createElement("div") as HTMLDivElement;
+                            div.classList = "alert alert-warning alert-dismissible fade show";
+                            div.role = "alert";
+
+                            const i = document.createElement("i") as HTMLImageElement;
+                            i.classList = "bi bi-exclamation-triangle-fill me-2";
+
+                            const button = document.createElement("button") as HTMLButtonElement;
+                            button.classList = "btn-close";
+                            button.type = "button";
+                            button.setAttribute("data-bs-dismiss", "alert");
+                            button.ariaLabel = "close";
+
+                            const span = document.createElement("span") as HTMLSpanElement;
+                            span.textContent = w;
+
+                            div.appendChild(i);
+                            div.appendChild(span);
+                            div.appendChild(button);
+
+                            warningBox?.appendChild(div);
+                        })
+                    }
+
+                    // addData(json.run_execution_data, json.aggregated_data, rid, dataIndex, );
+                    let isAggregated = null;
+                    let data: DataItem[] | null = null
+
+                    if (json.run_execution_data && json.run_execution_data.length !== 0) {
+                        data = json.run_execution_data as DataItem[];
+                        isAggregated = false;
+                    } else if (json.aggregated_data && json.aggregated_data.length !== 0) {
+                        data = json.aggregated_data as DataItem[];
+                        isAggregated = true;
+                    } else {
+                        chartPlaceholder.style.display = "block";
+                        chartCanvas.style.display = "none";
+                        return;
+                    }
+
+                    const grouped: Record<string, Record<string, DataPoint[]>> = {};
+                    data.forEach(d => {
+                        const combined_executions = d.run_execution.join("+")
+                        if (!grouped[combined_executions]) {
+                            grouped[combined_executions] = {};
+                        }
+                        if (!grouped[combined_executions][d.fingerprint]) {
+                            grouped[combined_executions][d.fingerprint] = [];
+                        }
+                        grouped[combined_executions][d.fingerprint].push({x: Number(d.time), y: d.value});
+                    });
+
+                    const palette = [
+                        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
+                        "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"
+                    ];
+
+                    for (const [run_execs, fingerprints] of Object.entries(grouped)) {
+                        for (const [fp, points] of Object.entries(fingerprints)) {
+                            const color = palette[(datasets.length) % palette.length]
+                            datasets.push({
+                                label: isAggregated
+                                    ? `${dataEntry.aggMode}:${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`
+                                    : `${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`,
+                                fullLabel: isAggregated
+                                    ? `${dataEntry.aggMode}:${fp} (${run_execs})`
+                                    : `${fp} (${run_execs})`,
+                                data: points
+                                        .filter(p => !isNaN(Number(p.y)))
+                                        .map(p => ({x: p.x, y: Number(p.y)})),
+                                runId: rid,
+                                dataIndex: dataIndex,
+                                rawData: points,
+                                borderColor: color,
+                                parsing: false
+                            });
+                        }
+                    }
+                }
+
+                updateChart();
+                updateDataTable();
+                updateDatasetControls();
+
+                chartPlaceholder.style.display = "none";
+                tablePlaceholder.style.display = "none";
+                chartCanvas.style.display = "block";
+                dataTable.style.display = "block";
+            }
+        } finally {
+            document.body.classList.remove("loading");
+            submitBtns.forEach(btn => btn.disabled = false);
+        }
+    }
+
 
     document.getElementById("downloadButton")?.addEventListener("click", _ => {
         if (datasets.length === 0) return;
@@ -122,6 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const url = new URL(window.location.href);
             
                 selected.forEach(id => url.searchParams.append("run_request", id));
+                url.searchParams.set("load", "")
             
                 // // update the URL in the browser without refreshing
                 // window.history.replaceState(null, "", url);
@@ -135,8 +293,6 @@ document.addEventListener("DOMContentLoaded", () => {
             modal.show()
         })
     });
-
-
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has("load")) {
@@ -153,69 +309,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function shortenUUIDs(uuid: string) {
         return uuid.split("+").map(subPart => subPart.slice(0, 4)).join("+")
-    }
-
-    function addData(run_execution_data: DataItem[], aggregated_data: DataItem[], agg_mode: string | null) {
-        let isAggregated = null;
-        let data: DataItem[] | null = null
-
-        if (run_execution_data && run_execution_data.length !== 0) {
-            data = run_execution_data;
-            isAggregated = false;
-        } else if (aggregated_data && aggregated_data.length !== 0) {
-            data = aggregated_data;
-            isAggregated = true;
-        } else {
-            chartPlaceholder.style.display = "block";
-            chartCanvas.style.display = "none";
-            return;
-        }
-
-        chartPlaceholder.style.display = "none";
-        tablePlaceholder.style.display = "none";
-        chartCanvas.style.display = "block";
-        dataTable.style.display = "block";
-
-        const grouped: Record<string, Record<string, DataPoint[]>> = {};
-        data.forEach(d => {
-            const combined_executions = d.run_execution.join("+")
-            if (!grouped[combined_executions]) {
-                grouped[combined_executions] = {};
-            }
-            if (!grouped[combined_executions][d.fingerprint]) {
-                grouped[combined_executions][d.fingerprint] = [];
-            }
-            grouped[combined_executions][d.fingerprint].push({x: Number(d.time), y: d.value});
-        });
-
-        const palette = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
-            "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"
-        ];
-
-        for (const [run_execs, fingerprints] of Object.entries(grouped)) {
-            for (const [fp, points] of Object.entries(fingerprints)) {
-                const color = palette[(datasets.length) % palette.length]
-                datasets.push({
-                    label: isAggregated
-                        ? `${agg_mode}:${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`
-                        : `${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`,
-                    fullLabel: isAggregated
-                        ? `${agg_mode}:${fp} (${run_execs})`
-                        : `${fp} (${run_execs})`,
-                    data: points
-                            .filter(p => !isNaN(Number(p.y)))
-                            .map(p => ({x: p.x, y: Number(p.y)})),
-                    rawData: points,
-                    borderColor: color,
-                    parsing: false
-                });
-            }
-        }
-
-        updateChart();
-        updateDataTable();
-        updateDatasetControls();
     }
 
     function updateChart() {
@@ -275,17 +368,43 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.style.backgroundColor = ds.borderColor as string || "#000";
             btn.title = ds.label ?? "unknown";
             btn.style.cursor = "pointer";
+            btn.dataset.runId = ds.runId;
+            btn.dataset.dataIndex = ds.dataIndex.toString();
     
             btn.onclick = () => {
                 if (!chart) return;
+
+                const runId = btn.dataset.runId!;
+                const dataIndex = parseInt(btn.dataset.dataIndex!);
+                const currentURL = new URL(window.location.href)
+
+                let currentData: URLGraphData | null = null;
+                try {
+                    currentData = JSON.parse(
+                        currentURL.searchParams.get("data") ?? ""
+                    ) as URLGraphData;
+                } catch {
+                    currentData = { runs: { } };
+                }
+
                 const index = datasets.indexOf(ds);
                 if (index !== -1) {
                     datasets.splice(index, 1);
-    
-                    updateChart();
-                    updateDataTable();
-                    updateDatasetControls();
+                    
+                    if (runId === "") throw new Error("Run ID not found during data add");
+
+                    currentData.runs[runId].splice(dataIndex, 1);
+                    if (currentData.runs[runId].length === 0) delete currentData.runs[runId];
                 }
+                if (Object.keys(currentData.runs).length === 0)
+                    currentURL.searchParams.delete("data");
+                else currentURL.searchParams.set("data", JSON.stringify(currentData));
+
+                window.history.pushState({}, "", currentURL)
+
+                updateChart();
+                updateDataTable();
+                btn.remove();
             };
     
             container.appendChild(btn);
@@ -297,6 +416,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         deleteAllDataButton.onclick = () => {
             datasets.length = 0;
+
+            const currentURL = new URL(window.location.href)
+            currentURL.searchParams.delete("data");
+            window.history.pushState({}, "", currentURL)
 
             updateChart();
             updateDataTable();

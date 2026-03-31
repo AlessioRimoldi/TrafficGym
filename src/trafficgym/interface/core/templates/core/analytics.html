@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script type="module" src="{% static "core/js/analytics.js" %}" defer></script>
 {% if messages %}
-<div class="container mt-3">
+<div class="container mt-3" id="messageBox">
     {% for message in messages %}
     <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
         <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ message }}
@@ -24,7 +24,7 @@
     </div>
 
     <div class="modal fade" id="addCompareRunModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content" id="addCompareRunModalContent">
                 <!-- Modal content will be inserted here on click -->
             </div>
@@ -46,7 +46,7 @@
                     <form id="analytics_controls" action="{% url "subscription_data" run_request.id %}" method="get">
                         <div class="mb-3">
                             <label for="subscription_select" class="form-label">Subscription</label>
-                            <select id="subscription_select" name="fingerprints" class="form-select" required>
+                            <select id="subscription_select" name="fingerprint" class="form-select" required>
                                 <option value="">Select a subscription</option>
                                 {% for sub in aggregated_susbcriptions_per_run|dict_get:run_request.id %}
                                 <option value="{{ sub.subscription_fingerprint }}" {% if presel_subscriptions|dict_get:run_request.id|lower == sub.subscription_fingerprint|lower %}selected{% endif %}>{{ sub.subscription_fingerprint }}</option>
@@ -72,7 +72,7 @@
                             </select>
                         </div>
                         <a href="{% url "run_request_detail" run_request.id %}" class="btn btn-outline-secondary w-100 mb-2">Back to Run Request</a>
-                        <button type="submit" class="btn btn-primary w-100">Add Data</button>
+                        <button type="submit" class="btn btn-primary w-100" data-run-id="{{ run_request.id }}">Add Data</button>
                     </form>
                 </div>
             </div>

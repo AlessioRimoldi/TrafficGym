@@ -26,7 +26,8 @@ from django.http import FileResponse, Http404
 from django.contrib import messages
 from pathlib import Path
 from collections import defaultdict
-from typing import DefaultDict, Set, TypedDict, cast, Any
+from typing import DefaultDict, Set, TypedDict, cast
+from typing_extensions import NotRequired
 
 import json
 
@@ -244,7 +245,7 @@ def media_view(_: HttpRequest, filepath: Path) -> StreamingHttpResponse:
 def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
     aggregation_function = request.GET.get("agg_mode")
     run_executions = request.GET.getlist("run_execution")
-    fingerprints = request.GET.getlist("fingerprints")
+    fingerprints = request.GET.getlist("fingerprint")
 
     if run_executions and run_executions[0] != "":
         if not RunExecution.objects.filter(id__in=run_executions).exists():
@@ -271,6 +272,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
 
     aggregated_data = []
     run_execution_data = []
+    warnings = []
 
     if aggregation_function in ["sum", "avg", "max", "min"]:
         # Initialize aggregation per fingerprint
@@ -306,6 +308,13 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
 
             entry["run_execution_ids"].add(str(e["run_execution__id"]))
 
+        if not agg_temp:
+            warnings.append(
+                f"Aggregation '{aggregation_function}' returned no data. "
+                f"No numeric values found for the selected fingerprints ({', '.join(fingerprints) or 'all'}) "
+                f"and run request {pk}, run executions ({', '.join(run_executions) or 'all'})."
+            )
+
         for (sim_time, fp), entry in agg_temp.items():
             if aggregation_function == "sum":
                 agg_value = entry["sum"]
@@ -328,6 +337,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
                     "value": agg_value,
                 }
             )
+
     else:
         run_execution_data = [
             {
@@ -343,6 +353,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
         {
             "run_execution_data": run_execution_data,
             "aggregated_data": aggregated_data,
+            "warnings": warnings
         }
     )
 
@@ -370,27 +381,34 @@ def analytics_run_execution_view(_: HttpRequest, pk: str) -> HttpResponse:
 
 def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
     run_request_id_params = list(set(request.GET.getlist("run_request")))
-    subscriptions_params = request.GET.getlist("subscription")
-    aggregation_mode_params = request.GET.getlist("agg_mode")
-    run_executions_params = request.GET.getlist("run_execution")
 
-    # if len(run_request_id_params) > 2:
-    #     messages.warning(
-    #         request,
-    #         "Can only compare analytics with one other run_request. Extra run_requests were ignored",
-    #     )
+    # class URLDataEntry(TypedDict):
+    #     subscription: str
+    #     aggMode: str | None
+    #     runExecutions: list[str]
 
-    if len(subscriptions_params) > len(run_request_id_params):
-        messages.warning(
-            request,
-            f"Only {len(run_request_id_params)} run request(s) were provided, but {len(subscriptions_params)} subscription selections were provided. Extra subscriptions were ignored",
-        )
 
-    if len(aggregation_mode_params) > len(run_request_id_params):
-        messages.warning(
-            request,
-            f"Only {len(run_request_id_params)} run request(s) were provided, but {len(aggregation_mode_params)} aggregation modes were provided. Extra aggregation modes were ignored",
-        )
+    # class URLGraphData(TypedDict):
+    #     runs: dict[str, list[URLDataEntry]]
+    #     load: NotRequired[bool]
+
+    # data_param = request.GET.get("data")
+    # url_data: URLGraphData = {"runs": {}}
+
+    # if data_param:
+    #     try:
+    #         url_data = json.loads(data_param)
+    #     except json.JSONDecodeError:
+    #         pass
+    
+    # load_flag = url_data.get("load", False)
+
+    # entries_to_load = []  # list of (run_id, entry)
+
+    # if load_flag:
+    #     for rid, entries in url_data["runs"].items():
+    #         for entry in entries:
+    #             entries_to_load.append((rid, entry))
 
     run_requests = RunRequest.objects.filter(id__in=run_request_id_params)
 
@@ -456,29 +474,10 @@ def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
         run_id = sub["run_execution__run_request__id"]
         aggregated_subscriptions_per_run[run_id].append(sub)
 
-    run_request_ids = run_requests.values_list("id", flat=True)
-
-    presel_aggregation_modes = {
-        rid: (
-            aggregation_mode_params[i]
-            if i < len(aggregation_mode_params)
-            else None
-        )
-        for i, rid in enumerate(run_request_ids)
-    }
-
-    presel_subscriptions = {
-        rid: subscriptions_params[i] if i < len(subscriptions_params) else None
-        for i, rid in enumerate(run_request_ids)
-    }
-
     context = {
         "run_requests": run_requests,
         "aggregated_susbcriptions_per_run": aggregated_subscriptions_per_run,
         "aggregation_functions": aggregation_map.keys(),
-        "presel_subscriptions": presel_subscriptions,
-        "presel_aggregation_modes": presel_aggregation_modes,
-        "presel_executions": run_executions_params,
     }
 
     return render(request, "core/analytics.html", context)

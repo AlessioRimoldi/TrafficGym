@@ -4,7 +4,7 @@
     "target": "ES6",
     "checkJs": false,
     "rootDir": "./core/static/core/js",
-    "lib": ["ES2017", "DOM"],
+    "lib": ["ESNext", "DOM"],
     "esModuleInterop": true,
     "module": "es6",
     "strict": true
