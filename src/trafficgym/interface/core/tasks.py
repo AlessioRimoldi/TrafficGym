@@ -11,14 +11,15 @@ from celery import shared_task, Task
 from django.db import transaction
 from django.utils import timezone
 from django.core.files import File
+from django.conf import settings
 from pathlib import Path
 from django.core.files.storage import default_storage
 from typing import Type, Any, ParamSpec, cast
 
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.experiment_sdk.experiments.base import Experiment
-from trafficgym.engine.client.driver import EngineDriver, RunHandle
-from trafficgym.interface.core.models import RunRequest, RunExecution
+from trafficgym.engine.client.driver import EngineDriver
+from trafficgym.interface.core.models import RunRequest, RunExecution, Scenario
 from trafficgym.interface.core.logging_setup import (
     BaseLogPersistenceHandler,
     LogPersistenceHandlerRunRequest,
@@ -273,3 +274,71 @@ def process_run_request(
         if handler is not None:
             handler.flush_queue()
             handler.deregister()
+
+
+@shared_task
+def generate_scenario_plot(scenario_id: str) -> None:
+    import SumoNetVis  # type: ignore[import-untyped]
+    import matplotlib.pyplot as plt
+
+    scenario = Scenario.objects.get(id=scenario_id)
+
+    net_files = scenario.artefacts.filter(
+        original_name__iendswith=".net.xml"
+    ).order_by("original_name")
+
+    if net_files.count() > 1:
+        logging.warning(
+            'Multiple ".net.xml" files detected in scenario. Preview image will be for first one.'
+        )
+
+    net_file = net_files.first()
+
+    if net_file is None:
+        logging.error(
+            'No ".net.xml" file found in scenario. Preview image unavailable'
+        )
+        return
+
+    with tempfile.TemporaryDirectory() as run_dir:
+
+        run_dir_path = Path(run_dir)
+
+        filename = str(net_file.original_name)
+        local_path = run_dir_path / filename
+
+        with default_storage.open(net_file.file.name, "rb") as src:
+            sha256 = _compute_file_sha256(src)
+
+            if sha256 != net_file.sha256:
+                raise ValueError(
+                    f"SHA256 mismatch for Artefact {net_file.original_name} "
+                    f"({local_path}): expected {net_file.sha256}, got {sha256}"
+                )
+
+            src.seek(0)
+            with open(local_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+        net_path = str(local_path)
+
+        _, ax = plt.subplots()
+
+        net = SumoNetVis.Net(net_path)
+        net.plot(ax=ax)
+
+        output_dir = Path(settings.MEDIA_ROOT) / "scenario_plots"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"scenario_{scenario.id}.png"
+        filepath = output_dir / filename
+
+        ax.set_aspect("equal")
+        ax.axis("off")
+        plt.savefig(filepath, dpi=500, bbox_inches="tight")
+        plt.close()
+        logging.info(f"Saved scenario plot to {filepath}")
+
+        # fig, ax = plt.subplots(figsize=(8,6))
+        # net.plot(ax=ax)  # pass axes if supported
+        # fig.savefig(filepath, dpi=150, bbox_inches='tight')
+        # plt.close(fig)

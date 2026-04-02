@@ -21,3 +21,17 @@ def enqueue_run_request(instance: RunRequest, created: bool, **_: Any) -> None:
         return
 
     transaction.on_commit(lambda: process_run_request.delay(str(instance.id)))
+
+
+@receiver(post_save, sender=Scenario)
+def enqueue_scenario_plot(instance: Scenario, created: bool, **_: Any) -> None:
+    from trafficgym.interface.core.tasks import generate_scenario_plot
+
+    if not created:
+        return
+
+    logger.info(f"Scenario post_save signal triggered for {instance.id}")
+
+    transaction.on_commit(
+        lambda: generate_scenario_plot.delay(str(instance.id))
+    )

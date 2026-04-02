@@ -6,7 +6,6 @@
 {% if run_request %}
 <div class="container mt-4">
     <div class="mb-4 d-flex justify-content-between align-items-center">
-        {% comment %} <h1> Run Request Detail</h1> {% endcomment %}
         <h1 class="mb-0">Run Request Detail <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ run_request.id }}</span></h1>
         <a href="{% url "analytics" %}?run_request={{ run_request.id }}" class="btn btn-primary">Open in Analytics</a>
     </div>

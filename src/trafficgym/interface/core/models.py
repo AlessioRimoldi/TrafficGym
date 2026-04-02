@@ -1,4 +1,5 @@
 from django.db import models, IntegrityError
+from django.conf import settings
 from pathlib import Path
 from typing import Any, cast, TYPE_CHECKING
 import json
@@ -47,10 +48,16 @@ class Artefact(models.Model):
 
 class Scenario(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, unique=True)
     artefacts = models.ManyToManyField[Artefact, Any](
         Artefact, related_name="scenarios"
     )
+
+    run_requests: models.Manager[RunRequest]
+
+    @property
+    def image_url(self) -> str:
+        return f"{settings.MEDIA_URL}scenario_plots/scenario_{self.id}.png"
 
     def compute_sha256(self) -> str:
         """The scenario model does not include a hash due to issues hashing
@@ -129,7 +136,7 @@ class RunRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     worker_id = models.UUIDField(null=True, blank=True, editable=False)
     scenario: models.ForeignKey[Scenario] = models.ForeignKey(
-        Scenario, on_delete=models.deletion.PROTECT
+        Scenario, on_delete=models.deletion.PROTECT, related_name="run_requests"
     )
     experiment: models.ForeignKey[Experiment] = models.ForeignKey(
         Experiment, on_delete=models.deletion.PROTECT

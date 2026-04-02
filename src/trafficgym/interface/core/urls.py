@@ -58,4 +58,9 @@ urlpatterns = [
         views.subscription_data,
         name="subscription_data",
     ),
+    path(
+        "scenario_overview",
+        views.scenario_overview,
+        name="scenario_overview",
+    ),
 ]

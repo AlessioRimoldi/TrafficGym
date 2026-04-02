@@ -29,7 +29,7 @@ interface DataItem {
 
 interface URLGraphData {
     runs: { [runId: string]: URLDataEntry[] };
-    load?: boolean;
+    // load?: boolean;
 }
 
 interface URLDataEntry {
@@ -216,7 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         return;
                     }
 
-                    const grouped: Record<string, Record<string, DataPoint[]>> = {};
+                    const grouped: Record<string, Record<string, DataPoint[]> > = {};
                     data.forEach(d => {
                         const combined_executions = d.run_execution.join("+")
                         if (!grouped[combined_executions]) {
@@ -230,7 +230,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     const palette = [
                         "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
-                        "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"
+                        "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
+                        "#17becf", "#bcbd22", "#aec7e8", "#ffbb78",
+                        "#98df8a", "#ff9896", "#c5b0d5", "#c49c94",
                     ];
 
                     for (const [run_execs, fingerprints] of Object.entries(grouped)) {
@@ -328,12 +330,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 const url = new URL(window.location.href);
             
                 selected.forEach(id => url.searchParams.append("run_request", id));
-                url.searchParams.set("load", "")
-            
-                // // update the URL in the browser without refreshing
-                // window.history.replaceState(null, "", url);
-            
-                // loadDataFromUrl();
 
                 window.location.href = url.toString()
             });
@@ -344,13 +340,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has("load")) {
-        forms.forEach(form => {
-            // trigger the submit programmatically via dispatchEvent
-            const event = new Event("submit", { bubbles: true, cancelable: true });
-            form.dispatchEvent(event);
-        });
-    }
 
     function shortenFingerprint(fingerprint: string) {
         return fingerprint.split(".").map(subPart => subPart.slice(0, 4)).join(".")

@@ -1,11 +1,14 @@
 {% extends "core/base.html" %}
-{% block title %}Run Request Detail{% endblock %}
+{% block title %}Run Execution Detail{% endblock %}
 {% load dict_filters %}
 
 {% block content %}
 <div class="container mt-4">
-<h1> Run Execution Detail</h1>
 {% if run_execution %}
+    <div class="mb-4 d-flex justify-content-between align-items-center">
+        <h1 class="mb-0">Run Execution Detail 
+        <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ run_execution.id }}</span></h1>
+    </div>
     <div class="card m-4">
         <div class="card-header fs-4 fw-bold py-3">Properties</div>
         <div class="card-body">

@@ -17,6 +17,7 @@ from .models import (
     Scenario,
     Experiment,
 )
+from .forms import ScenarioForm
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.db.models import Min, Max, Count, Avg, Sum, F
@@ -27,7 +28,6 @@ from django.contrib import messages
 from pathlib import Path
 from collections import defaultdict
 from typing import DefaultDict, Set, TypedDict, cast
-from typing_extensions import NotRequired
 
 import json
 
@@ -165,15 +165,20 @@ def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
     )
 
     analytics_links: dict[str, str] = {
-        row["subscription_fingerprint"]: json.dumps({
-            "runs": {
-                str(pk): [{
-                    "subscription": row["subscription_fingerprint"],
-                    "aggMode": "avg",
-                    "runExecutions": [""],
-                }]
-            }
-        }, separators=(",", ":"))
+        row["subscription_fingerprint"]: json.dumps(
+            {
+                "runs": {
+                    str(pk): [
+                        {
+                            "subscription": row["subscription_fingerprint"],
+                            "aggMode": "avg",
+                            "runExecutions": [""],
+                        }
+                    ]
+                }
+            },
+            separators=(",", ":"),
+        )
         for row in aggregated_subscriptions
     }
 
@@ -220,18 +225,22 @@ def run_execution_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
     page_obj = paginator.get_page(page_number)
 
     analytics_links: dict[str, str] = {
-        row["subscription_fingerprint"]: json.dumps({
-            "runs": {
-                str(cast(RunRequest, run_execution.run_request).id): [{
-                    "subscription": row["subscription_fingerprint"],
-                    "aggMode": "",
-                    "runExecutions": [str(pk)],
-                }]
-            }
-        }, separators=(",", ":"))
+        row["subscription_fingerprint"]: json.dumps(
+            {
+                "runs": {
+                    str(cast(RunRequest, run_execution.run_request).id): [
+                        {
+                            "subscription": row["subscription_fingerprint"],
+                            "aggMode": "",
+                            "runExecutions": [str(pk)],
+                        }
+                    ]
+                }
+            },
+            separators=(",", ":"),
+        )
         for row in subscription_data
     }
-
 
     context = {
         "run_execution": run_execution,
@@ -409,33 +418,6 @@ def analytics_run_execution_view(_: HttpRequest, pk: str) -> HttpResponse:
 def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
     run_request_id_params = list(set(request.GET.getlist("run_request")))
 
-    class URLDataEntry(TypedDict):
-        subscription: str
-        aggMode: str | None
-        runExecutions: list[str]
-
-    class URLGraphData(TypedDict):
-        runs: dict[str, list[URLDataEntry]]
-        load: NotRequired[bool]
-
-    data_param = request.GET.get("data")
-    url_data: URLGraphData = {"runs": {}}
-
-    if data_param:
-        try:
-            url_data = json.loads(data_param)
-        except json.JSONDecodeError:
-            pass
-
-    load_flag = url_data.get("load", False)
-
-    entries_to_load = []  # list of (run_id, entry)
-
-    if load_flag:
-        for rid, entries in url_data["runs"].items():
-            for entry in entries:
-                entries_to_load.append((rid, entry))
-
     run_requests = RunRequest.objects.filter(
         id__in=run_request_id_params
     ).prefetch_related("executions")
@@ -556,3 +538,37 @@ def subscription_view(
         }
 
     return render(request, template_name, context)
+
+
+def scenario_overview(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST":
+        form = ScenarioForm(request.POST, request.FILES)
+        if not request.FILES:
+            messages.error(request, f"Please select at least one file to upload", extra_tags="danger")
+        if form.is_valid():
+            scenario, created, reused = form.save()
+
+            if created:
+                messages.success(
+                    request, f"Created {len(created)} new artefact(s)."
+                )
+            if reused:
+                messages.info(
+                    request,
+                    f"{len(reused)} artefact(s) already existed and were reused.",
+                )
+
+            print(scenario.name)
+
+            return redirect("scenario_overview")
+        else:
+            messages.error(request, f"Issue processing form data: {form.errors}", extra_tags="danger")
+            return redirect("scenario_overview")
+    else:
+        form = ScenarioForm()
+
+    scenarios = Scenario.objects.prefetch_related("run_requests").all()
+
+    context = {"scenarios": scenarios, "form": form}
+
+    return render(request, "core/scenario_overview.html", context)
