@@ -63,4 +63,9 @@ urlpatterns = [
         views.scenario_overview,
         name="scenario_overview",
     ),
+    path(
+        "experiement_overview",
+        views.experiments_overview,
+        name="experiment_overview",
+    ),
 ]

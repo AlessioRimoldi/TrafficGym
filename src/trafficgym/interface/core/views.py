@@ -17,7 +17,7 @@ from .models import (
     Scenario,
     Experiment,
 )
-from .forms import ScenarioForm
+from .forms import ScenarioForm, ExperimentForm
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.db.models import Min, Max, Count, Avg, Sum, F
@@ -398,7 +398,7 @@ def analytics_overview_view(request: HttpRequest) -> HttpResponse:
     latest_rr = RunRequest.objects.order_by("-created_at").only("pk").first()
 
     if latest_rr is None:
-        return render(request, "core/run_execution.analytics_empty.html")
+        return render(request, "core/analytics_empty.html")
 
     url = reverse("analytics")
 
@@ -557,13 +557,10 @@ def scenario_overview(request: HttpRequest) -> HttpResponse:
                     request,
                     f"{len(reused)} artefact(s) already existed and were reused.",
                 )
-
-            print(scenario.name)
-
-            return redirect("scenario_overview")
         else:
             messages.error(request, f"Issue processing form data: {form.errors}", extra_tags="danger")
-            return redirect("scenario_overview")
+
+        return redirect("scenario_overview")
     else:
         form = ScenarioForm()
 
@@ -572,3 +569,36 @@ def scenario_overview(request: HttpRequest) -> HttpResponse:
     context = {"scenarios": scenarios, "form": form}
 
     return render(request, "core/scenario_overview.html", context)
+
+
+def experiments_overview(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST":
+        form = ExperimentForm(request.POST, request.FILES)
+
+        if not request.FILES:
+            messages.error(request, f"Please select at least one file to upload", extra_tags="danger")
+        if form.is_valid():
+            experiment, created, reused = form.save()
+
+            if created:
+                messages.success(
+                    request, f"Created {len(created)} new artefact(s)."
+                )
+            if reused:
+                messages.info(
+                    request,
+                    f"{len(reused)} artefact(s) already existed and were reused.",
+                )
+
+        else:
+            messages.error(request, f"Issue processing form data: {form.errors}", extra_tags="danger")
+
+        return redirect("experiment_overview")
+    else:
+        form = ExperimentForm()
+
+    experiments = Experiment.objects.prefetch_related("run_requests").all()
+
+    context = { "experiments": experiments, "form": form }
+    
+    return render(request, "core/experiment_overview.html", context)

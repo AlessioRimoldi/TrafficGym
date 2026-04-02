@@ -1,6 +1,5 @@
 from django import forms
-from .models import Scenario, Artefact
-from typing import cast
+from .models import Scenario, Artefact, Experiment
 import hashlib
 
 
@@ -39,7 +38,6 @@ class ScenarioForm(forms.ModelForm):
             artefact = Artefact.objects.filter(sha256=sha256).first()
 
             if artefact is None:
-                content = f.read()
                 artefact = Artefact.objects.create(file=f) #type: ignore
                 created.append(artefact)
 
@@ -49,3 +47,42 @@ class ScenarioForm(forms.ModelForm):
             scenario.artefacts.add(artefact)
 
         return scenario, created, reused
+
+class ExperimentForm(forms.ModelForm):
+    upload_file = forms.FileField(required=True)
+
+    class Meta:
+        model = Experiment
+        fields = ["name", "version"]
+
+    def save(
+        self, commit: bool=True
+    ) -> tuple[Experiment, list[Artefact], list[Artefact]]:
+        experiment: Experiment = super().save(commit=False)
+
+        f = self.files.get("upload_file")
+        if not f:
+            raise Exception("Could not find experiment artefact upload.")
+        content = f.read()
+        f.seek(0)
+
+        created = []
+        reused = []
+
+        sha256 = hashlib.sha256(content).hexdigest()
+
+        artefact = Artefact.objects.filter(sha256=sha256).first()
+
+        if artefact is None:
+            artefact = Artefact.objects.create(file=f) #type: ignore
+            created.append(artefact)
+
+        else:
+            reused.append(artefact)
+
+        experiment.artefact = artefact
+
+        if commit:
+            experiment.save()
+
+        return experiment, created, reused

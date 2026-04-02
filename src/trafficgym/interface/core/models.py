@@ -96,6 +96,8 @@ class Experiment(models.Model):
         Artefact, on_delete=models.PROTECT
     )
 
+    run_requests: models.Manager[RunRequest]
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -139,7 +141,7 @@ class RunRequest(models.Model):
         Scenario, on_delete=models.deletion.PROTECT, related_name="run_requests"
     )
     experiment: models.ForeignKey[Experiment] = models.ForeignKey(
-        Experiment, on_delete=models.deletion.PROTECT
+        Experiment, on_delete=models.deletion.PROTECT, related_name="run_requests"
     )
     simulation_parameters = models.JSONField[Any](blank=True, default=dict)
     status = models.CharField(

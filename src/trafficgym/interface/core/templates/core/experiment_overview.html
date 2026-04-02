@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% block title %}Scenario Overview{% endblock %}
+{% block title %}Experiment Overview{% endblock %}
 
 {% block content %}
 {% if messages %}
@@ -13,16 +13,16 @@
 </div>
 {% endif %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">Scenario Overview</h1>
-    <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createScenarioModal" id="openAddScenarioModal">Add Scenario</button>
+    <h1 class="mb-0">Experiment Overview</h1>
+    <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Add Experiment</button>
 </div>
-<div class="modal fade" id="createScenarioModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="createExperimentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content" id="createScenarioModalContent">
+        <div class="modal-content" id="createExperimentModalContent">
             <form method="POST" enctype="multipart/form-data">
                 {% csrf_token %}
                 <div class="modal-header">
-                    <h5 class="modal-title">Add Scenario</h5>
+                    <h5 class="modal-title">Add Experiment</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
@@ -34,12 +34,17 @@
                         {% if form.name.errors %}
                             <div class="text-danger">{{ form.name.errors }}</div>
                         {% endif %}
+                        <label for="{{ form.version.id_for_label }}">Version</label>
+                        {{ form.version }}
+                        {% if form.version.errors %}
+                            <div class="text-danger">{{ form.version.errors }}</div>
+                        {% endif %}
                     </div>
                     <div class="mb-3">
-                        <label for="{{ form.upload_files.id_for_label }}">Upload Files</label>
-                        {{ form.upload_files }}
-                        {% if form.upload_files.errors %}
-                            <div class="text-danger">{{ form.upload_files.errors }}</div>
+                        <label for="{{ form.upload_file.id_for_label }}">Upload File</label>
+                        {{ form.upload_file }}
+                        {% if form.upload_file.errors %}
+                            <div class="text-danger">{{ form.upload_file.errors }}</div>
                         {% endif %}
                     </div>
                 </div>
@@ -53,30 +58,18 @@
     </div>
 </div>
 <div class="row gx-2 gy-3">
-    {% for scenario in scenarios %}
+    {% for experiment in experiments %}
     <div class="col-6">
         <div class="card h-100">
             <div class="card-header fs-4 fw-bold py-3 text-truncate">
-                {{ scenario.name }}
-                <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ scenario.id }}</span></h1>
-            </div>
-            <div class="img-thumbnail d-flex align-items-center justify-content-center"
-            style="width:100%; aspect-ratio:1/1; background-color:#f0f0f0; overflow:hidden;">
-                <img src="{{ scenario.image_url }}" 
-                        alt="{{ scenario.name }} network preview"
-                        style="width:90%; height:90%; object-fit:contain;"
-                        onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-            
-                <span class="text-muted small" style="display:none;">
-                    No Network Preview Available
-                </span>
+                {{ experiment.name }} v{{ experiment.version }}
+                <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">SHA256: {{ experiment.sha256|slice:":20" }}...</span></h1>
             </div>
             <div class="card-body">
                 <ul class="list-unstylesd mb-0">
-                    <li><strong>Number of Artefacts</strong>: {{ scenario.artefacts.count }}</li>
-                    <li><strong>Used in Run Requests (experiments)</strong>: <ul>
-                    {% for run_request in scenario.run_requests.all %}
-                        <li><a href="{% url "run_request_detail" run_request.id %}">{{ run_request.id }} ({{ run_request.experiment.name }} v{{ run_request.experiment.version }})</a></li>
+                    <li><strong>Used in Run Requests (scenarios)</strong>: <ul>
+                    {% for run_request in experiment.run_requests.all %}
+                        <li><a href="{% url "run_request_detail" run_request.id %}">{{ run_request.id }} ({{ run_request.scenario.name }})</a></li>
                     {% empty %}
                         Not used in any run requests
                     {% endfor %}
@@ -86,7 +79,7 @@
         </div>
     </div>
     {% empty %}
-        <h2>No Scenarios Found</h2>
+        <h2>No Experiments Found</h2>
     {% endfor %}
 </div>
 {% endblock %}
