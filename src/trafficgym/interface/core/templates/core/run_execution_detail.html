@@ -56,9 +56,8 @@
                 <tbody>
                     <tr>
                         <td>{{ run_execution.run_request.experiment.artefact.original_name }}</td>
-                        {% comment %} <a class="btn btn-sm btn-primary" target="_blank" href="{% url "analytics" %}?run_request={{ run_request.id }}&data={{ analytics_links|dict_get:data.subscription_fingerprint|urlencode }}">
-                            Open in Analytics&nbsp;<i class="bi bi-box-arrow-up-right"></i>
-                        </a> {% endcomment %}
+                        <td><a class="btn btn-sm btn-primary" href="{% url "artefact_detail" pk=run_execution.run_request.experiment.artefact.sha256 %}">View Detail</a></td>
+                        <td><a class="btn btn-sm btn-primary" target="_blank" href="{% url "media_view" filepath=run_execution.run_request.experiment.artefact.file.name %}">View Contents&nbsp;<i class="bi bi-box-arrow-up-right"></i></a></td>
                 </tr>
                 </tbody>
             </table>
