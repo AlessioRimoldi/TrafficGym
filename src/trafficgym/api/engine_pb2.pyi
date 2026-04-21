@@ -47,6 +47,23 @@ GEQ: Operation.ValueType  # 4
 LEQ: Operation.ValueType  # 5
 Global___Operation: _TypeAlias = Operation  # noqa: Y015
 
+class _InputType:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _InputTypeEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_InputType.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    INPUT_TYPE_UNSPECIFIED: _InputType.ValueType  # 0
+    FILE: _InputType.ValueType  # 1
+    JSON: _InputType.ValueType  # 2
+
+class InputType(_InputType, metaclass=_InputTypeEnumTypeWrapper): ...
+
+INPUT_TYPE_UNSPECIFIED: InputType.ValueType  # 0
+FILE: InputType.ValueType  # 1
+JSON: InputType.ValueType  # 2
+Global___InputType: _TypeAlias = InputType  # noqa: Y015
+
 @_typing.final
 class NamedNullableString(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
@@ -725,3 +742,184 @@ class FetchResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___FetchResponse: _TypeAlias = FetchResponse  # noqa: Y015
+
+@_typing.final
+class DeriveFromArtefactRequest(_message.Message):
+    """------------ DERIVE FROM ARTEFACT ---------------"""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class ParametersEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    @_typing.final
+    class TargetFilePathsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    BASE_PATH_FIELD_NUMBER: _builtins.int
+    METHOD_FIELD_NUMBER: _builtins.int
+    PARAMETERS_FIELD_NUMBER: _builtins.int
+    TARGET_FILE_PATHS_FIELD_NUMBER: _builtins.int
+    base_path: _builtins.str
+    method: _builtins.str
+    @_builtins.property
+    def parameters(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    @_builtins.property
+    def target_file_paths(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        base_path: _builtins.str = ...,
+        method: _builtins.str = ...,
+        parameters: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        target_file_paths: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["base_path", b"base_path", "method", b"method", "parameters", b"parameters", "target_file_paths", b"target_file_paths"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___DeriveFromArtefactRequest: _TypeAlias = DeriveFromArtefactRequest  # noqa: Y015
+
+@_typing.final
+class DeriveFromArtefactResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class DerivedArtefactPathsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    ERRORS_FIELD_NUMBER: _builtins.int
+    WARNINGS_FIELD_NUMBER: _builtins.int
+    DERIVED_ARTEFACT_PATHS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def errors(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def warnings(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def derived_artefact_paths(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        errors: _abc.Iterable[_builtins.str] | None = ...,
+        warnings: _abc.Iterable[_builtins.str] | None = ...,
+        derived_artefact_paths: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["derived_artefact_paths", b"derived_artefact_paths", "errors", b"errors", "warnings", b"warnings"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___DeriveFromArtefactResponse: _TypeAlias = DeriveFromArtefactResponse  # noqa: Y015
+
+@_typing.final
+class InputSpec(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    TYPE_FIELD_NUMBER: _builtins.int
+    REQUIRED_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    type: Global___InputType.ValueType
+    required: _builtins.bool
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        type: Global___InputType.ValueType = ...,
+        required: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "required", b"required", "type", b"type"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___InputSpec: _TypeAlias = InputSpec  # noqa: Y015
+
+@_typing.final
+class TransformationSpec(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: _builtins.int
+    INPUTS_FIELD_NUMBER: _builtins.int
+    OUTPUTS_FIELD_NUMBER: _builtins.int
+    DOCSTRING_FIELD_NUMBER: _builtins.int
+    key: _builtins.str
+    docstring: _builtins.str
+    @_builtins.property
+    def inputs(self) -> _containers.RepeatedCompositeFieldContainer[Global___InputSpec]: ...
+    @_builtins.property
+    def outputs(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        key: _builtins.str = ...,
+        inputs: _abc.Iterable[Global___InputSpec] | None = ...,
+        outputs: _abc.Iterable[_builtins.str] | None = ...,
+        docstring: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["docstring", b"docstring", "inputs", b"inputs", "key", b"key", "outputs", b"outputs"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___TransformationSpec: _TypeAlias = TransformationSpec  # noqa: Y015
+
+@_typing.final
+class ListTransformationsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+Global___ListTransformationsRequest: _TypeAlias = ListTransformationsRequest  # noqa: Y015
+
+@_typing.final
+class ListTransformationsResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TRANSFORMATIONS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def transformations(self) -> _containers.RepeatedCompositeFieldContainer[Global___TransformationSpec]: ...
+    def __init__(
+        self,
+        *,
+        transformations: _abc.Iterable[Global___TransformationSpec] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["transformations", b"transformations"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ListTransformationsResponse: _TypeAlias = ListTransformationsResponse  # noqa: Y015

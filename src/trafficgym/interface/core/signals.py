@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save, m2m_changed
 from django.db import transaction
 from django.dispatch import receiver
-from .models import RunRequest, Scenario, RunStatus
+from .models import RunRequest, Scenario, RunStatus, TransformationRequest
 from typing import Any
 import logging
 
@@ -35,3 +35,15 @@ def enqueue_scenario_plot(instance: Scenario, created: bool, **_: Any) -> None:
     transaction.on_commit(
         lambda: generate_scenario_plot.delay(str(instance.id))
     )
+
+
+@receiver(post_save, sender=TransformationRequest)
+def enqueue_transformation_request(
+    instance: TransformationRequest, created: bool, **_: Any
+) -> None:
+    from trafficgym.interface.core.tasks import derive_from_artefact
+
+    if not created:
+        return
+
+    transaction.on_commit(lambda: derive_from_artefact.delay(str(instance.id)))

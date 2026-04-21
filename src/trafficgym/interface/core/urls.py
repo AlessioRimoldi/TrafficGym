@@ -68,4 +68,24 @@ urlpatterns = [
         views.experiments_overview,
         name="experiment_overview",
     ),
+    path(
+        "transformation_requests_list",
+        views.transformation_requests_list_view,
+        name="transformation_requests_list",
+    ),
+    path(
+        "transformation_request/<uuid:pk>",
+        views.transformation_request_detail_view,
+        name="transformation_request_detail",
+    ),
+    path(
+        "api/list_transformations",
+        views.list_transformations_view,
+        name="list_transformations",
+    ),
+    path(
+        "create_transformation_request",
+        views.create_transform_request,
+        name="create_transformation_request",
+    ),
 ]

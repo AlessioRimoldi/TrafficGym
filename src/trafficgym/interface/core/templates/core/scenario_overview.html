@@ -58,7 +58,7 @@
         <div class="card h-100">
             <div class="card-header fs-4 fw-bold py-3 text-truncate">
                 {{ scenario.name }}
-                <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ scenario.id }}</span></h1>
+                <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ scenario.id }}</span>
             </div>
             <div class="img-thumbnail d-flex align-items-center justify-content-center"
             style="width:100%; aspect-ratio:1/1; background-color:#f0f0f0; overflow:hidden;">
@@ -72,7 +72,7 @@
                 </span>
             </div>
             <div class="card-body">
-                <ul class="list-unstylesd mb-0">
+                <ul class="list-unstyled mb-0">
                     <li><strong>Number of Artefacts</strong>: {{ scenario.artefacts.count }}</li>
                     <li><strong>Used in Run Requests (experiments)</strong>: <ul>
                     {% for run_request in scenario.run_requests.all %}

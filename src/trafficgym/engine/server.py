@@ -1,13 +1,15 @@
 from __future__ import annotations
-import asyncio
-
-import grpc.aio
 
 # from .kernel import RunConfig, RunState, Interrupt, InterruptEvent, ValueType
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.api.engine_pb2 import (
     CustomValue,
+    DeriveFromArtefactRequest,
+    DeriveFromArtefactResponse,
     NamedNullableString,
+    TransformationSpec as EngineTransformationSpec,
+    InputSpec,
+    InputType,
     EQU,
     NEQ,
     GRT,
@@ -37,10 +39,10 @@ from trafficgym.api.engine_pb2 import (
     CancelInterruptResponse,
     FetchRequest,
     FetchResponse,
+    ListTransformationsRequest,
+    ListTransformationsResponse,
 )
-
 from trafficgym.engine.helpers import extract_value
-
 from trafficgym.engine.ports.simulation import (
     SimulationPort,
     Interrupt,
@@ -48,23 +50,29 @@ from trafficgym.engine.ports.simulation import (
     RunConfig,
     InvalidGetterError,
 )
-
 from trafficgym.engine.ports.adapter_factory import AdapterFactory
-
 from trafficgym.engine.adapters.factories import LibsumoAdapterFactory
 
+from trafficgym.engine.transformations.registry import (
+    REGISTRY,
+    resolve_inputs,
+    Runtime,
+    build_response,
+    TransformationSpec as RegistryTransformationSpec,
+)
 from dataclasses import dataclass
 
 # from trafficgym.engine.adapters.fake_adapter import FakeAdapter
-
 # from libsumo import DOMAINS
 from typing import cast, Callable, AsyncIterator, Literal
-
 from functools import partial
+from pathlib import Path
 
+import asyncio
+import grpc.aio
 import logging
-
 import libsumo  # type: ignore
+import subprocess
 
 
 class Subscription:
@@ -857,6 +865,68 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
             fetched=NamedNullableString(
                 name=request.fingerprint, has_value=True, value=collected
             )
+        )
+
+    async def DeriveFromArtefact(
+        self,
+        request: DeriveFromArtefactRequest,
+        context: grpc.aio.ServicerContext[
+            DeriveFromArtefactRequest, DeriveFromArtefactResponse
+        ],
+    ) -> DeriveFromArtefactResponse:
+        try:
+            spec = REGISTRY[request.method]
+        except KeyError:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND,
+                f"{request.method} not found on system",
+            )
+
+        try:
+            runtime = Runtime(Path(request.base_path))
+            inputs = resolve_inputs(spec, request, runtime)
+
+            result = await spec.handler(inputs, runtime)
+
+        except subprocess.CalledProcessError as e:
+            await context.abort(
+                grpc.StatusCode.ABORTED,
+                f"Failure during method execution '{request.method}': {e.stderr}",
+            )
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.ABORTED,
+                f"Failed executing DeriveFromArtefact: {e}",
+            )
+
+        return build_response(spec, result)
+
+    async def ListTransformations(
+        self,
+        _: ListTransformationsRequest,
+        context: grpc.aio.ServicerContext[
+            ListTransformationsRequest, ListTransformationsResponse
+        ],
+    ) -> ListTransformationsResponse:
+        def to_proto(
+            spec: RegistryTransformationSpec,
+        ) -> EngineTransformationSpec:
+            return EngineTransformationSpec(
+                key=spec.key,
+                inputs=[
+                    InputSpec(
+                        name=i.name,
+                        type=InputType.Value(i.type.value.upper()),
+                        required=i.required,
+                    )
+                    for i in spec.inputs
+                ],
+                outputs=[o.name for o in spec.outputs],
+                docstring=spec.docstring,
+            )
+
+        return ListTransformationsResponse(
+            transformations=[to_proto(spec) for spec in REGISTRY.values()]
         )
 
     async def _run_loop(self, run_id: str, steps: int) -> None:

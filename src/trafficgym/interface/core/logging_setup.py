@@ -4,9 +4,11 @@ from .models import (
     RunExecution,
     WorkerLogEntryRunExecution,
     WorkerLogEntryRunRequest,
+    WorkerLogEntryTransformRequest,
     RPCLogEntry,
     SubscriptionLogEntry,
     TelemetryLogEntry,
+    TransformationRequest,
 )
 from datetime import datetime, timezone
 
@@ -80,6 +82,39 @@ class BaseLogPersistenceHandler(logging.Handler):
 
         for logger in self.loggers.values():
             logger.removeHandler(self._queue_handler)
+
+
+class LogPersistenceHandlerTransformRequest(BaseLogPersistenceHandler):
+    def __init__(self, transform_request: TransformationRequest):
+        super().__init__()
+        self.transform_request = transform_request
+
+    def _emit_batch(self, records: list[logging.LogRecord]) -> None:
+        worker_objs = []
+
+        for record in records:
+            try:
+                event_time = datetime.fromtimestamp(
+                    record.created, tz=timezone.utc
+                )
+
+                worker_objs.append(
+                    WorkerLogEntryTransformRequest(
+                        transform_request=self.transform_request,
+                        event_time=event_time,
+                        level=record.levelname,
+                        message=self.format(record),
+                    )
+                )
+                continue
+
+            except Exception as e:
+                self._internal_logger.error(
+                    f"Failed to create log message for {record.name}: {e}"
+                )
+
+        if worker_objs:
+            WorkerLogEntryTransformRequest.objects.bulk_create(worker_objs)
 
 
 class LogPersistenceHandlerRunRequest(BaseLogPersistenceHandler):

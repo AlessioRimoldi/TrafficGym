@@ -1,0 +1,54 @@
+{% extends "core/base.html" %}
+{% block title %}Transformation Requests{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">Transformation Requests Overview</h1>
+    <span class="ms-auto">
+        {% comment %} <button type="submit" class="btn btn-primary" id="transformButton" disabled>Transform&nbsp;&nbsp;<i class="bi bi-tools"></i></button>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createArtefactModal" id="openCreateArtefactModal">Add Artefact</button> {% endcomment %}
+    </span>
+</div>
+{% if transformation_requests %}
+<table class="table table-striped table-hover">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Method</th>
+            <th>Input Artefacts</th>
+            <th>Created</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for transformation_request in transformation_requests %}
+        <tr data-run-id="{{ transformation_request.id }}">
+            <td><a href="{% url "transformation_request_detail" transformation_request.id %}">{{ transformation_request.id }}</a></td>
+            <td>{{ transformation_request.method }}</td>
+            <td>{{ transformation_request.input_artefacts }}</td>
+            <td>{{ transformation_request.created_at|date:"m.d.y H:i:s" }}</td>
+            <td class="status">
+                {% if transformation_request.status == "COMPLETE" %}
+                    <span class="badge text-bg-success">Success</span>
+                {% elif transformation_request.status == "FAILED" %}
+                    <span class="badge text-bg-danger">Failed</span>
+                {% elif transformation_request.status == "PREPARING" %}
+                    <span class="badge text-bg-primary">Preparing</span>
+                {% elif transformation_request.status == "RUNNING" %}
+                    <span class="badge text-bg-primary">Running</span>
+                {% elif transformation_request.status == "PENDING" %}
+                    <span class="badge text-bg-secondary">Pending</span>
+                {% else %}
+                    <span class="badge text-bg-light">{{ transformation_request.status }}</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% empty %}
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>
+    No transformation requests to show
+</p>
+{% endif %}
+{% endblock %}

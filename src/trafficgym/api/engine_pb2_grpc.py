@@ -110,6 +110,16 @@ class EngineServiceStub(object):
                 request_serializer=trafficgym_dot_api_dot_engine__pb2.FetchRequest.SerializeToString,
                 response_deserializer=trafficgym_dot_api_dot_engine__pb2.FetchResponse.FromString,
                 _registered_method=True)
+        self.DeriveFromArtefact = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/DeriveFromArtefact',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.DeriveFromArtefactRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.DeriveFromArtefactResponse.FromString,
+                _registered_method=True)
+        self.ListTransformations = channel.unary_unary(
+                '/sumo.engine.v1.EngineService/ListTransformations',
+                request_serializer=trafficgym_dot_api_dot_engine__pb2.ListTransformationsRequest.SerializeToString,
+                response_deserializer=trafficgym_dot_api_dot_engine__pb2.ListTransformationsResponse.FromString,
+                _registered_method=True)
 
 
 class EngineServiceServicer(object):
@@ -296,6 +306,20 @@ class EngineServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DeriveFromArtefact(self, request, context):
+        """------------ DERIVE FROM ARTEFACT ---------------
+
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListTransformations(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_EngineServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -363,6 +387,16 @@ def add_EngineServiceServicer_to_server(servicer, server):
                     servicer.FetchSubscription,
                     request_deserializer=trafficgym_dot_api_dot_engine__pb2.FetchRequest.FromString,
                     response_serializer=trafficgym_dot_api_dot_engine__pb2.FetchResponse.SerializeToString,
+            ),
+            'DeriveFromArtefact': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeriveFromArtefact,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.DeriveFromArtefactRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.DeriveFromArtefactResponse.SerializeToString,
+            ),
+            'ListTransformations': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTransformations,
+                    request_deserializer=trafficgym_dot_api_dot_engine__pb2.ListTransformationsRequest.FromString,
+                    response_serializer=trafficgym_dot_api_dot_engine__pb2.ListTransformationsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -727,6 +761,60 @@ class EngineService(object):
             '/sumo.engine.v1.EngineService/FetchSubscription',
             trafficgym_dot_api_dot_engine__pb2.FetchRequest.SerializeToString,
             trafficgym_dot_api_dot_engine__pb2.FetchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeriveFromArtefact(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/DeriveFromArtefact',
+            trafficgym_dot_api_dot_engine__pb2.DeriveFromArtefactRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.DeriveFromArtefactResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTransformations(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sumo.engine.v1.EngineService/ListTransformations',
+            trafficgym_dot_api_dot_engine__pb2.ListTransformationsRequest.SerializeToString,
+            trafficgym_dot_api_dot_engine__pb2.ListTransformationsResponse.FromString,
             options,
             channel_credentials,
             insecure,

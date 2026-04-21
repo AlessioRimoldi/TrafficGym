@@ -741,3 +741,67 @@ class StreamRequest(SdkBase[engine_pb2.StreamRequest]):
 
     def to_dict(self) -> dict[str, object]:
         return {"run_id": self.run_id}
+
+
+@dataclass(frozen=True)
+class DeriveFromArtefactRequest(SdkBase[engine_pb2.DeriveFromArtefactRequest]):
+    base_path: str
+    method: str
+    parameters: dict[str, str]
+    target_file_paths: dict[str, str]
+
+    @classmethod
+    def from_proto(cls, proto: engine_pb2.DeriveFromArtefactRequest) -> Self:
+        return cls(
+            proto.base_path,
+            proto.method,
+            dict(proto.parameters),
+            dict(proto.target_file_paths),
+        )
+
+    def to_proto(self) -> engine_pb2.DeriveFromArtefactRequest:
+        return engine_pb2.DeriveFromArtefactRequest(
+            base_path=self.base_path,
+            method=self.method,
+            parameters=self.parameters,
+            target_file_paths=self.target_file_paths,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "base_path": self.base_path,
+            "method": self.method,
+            "parameters": self.parameters,
+            "target_file_paths": self.target_file_paths,
+        }
+
+
+@dataclass(frozen=True)
+class DeriveFromArtefactResponse(
+    SdkBase[engine_pb2.DeriveFromArtefactResponse]
+):
+    errors: list[str]
+    warnings: list[str]
+    derived_artefact_paths: dict[str, str]
+
+    @classmethod
+    def from_proto(cls, proto: engine_pb2.DeriveFromArtefactResponse) -> Self:
+        return cls(
+            list(proto.errors),
+            list(proto.warnings),
+            dict(proto.derived_artefact_paths),
+        )
+
+    def to_proto(self) -> engine_pb2.DeriveFromArtefactResponse:
+        return engine_pb2.DeriveFromArtefactResponse(
+            errors=self.errors,
+            warnings=self.warnings,
+            derived_artefact_paths=self.derived_artefact_paths,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "errors": self.errors,
+            "warnings": self.warnings,
+            "derived_artefact_paths": self.derived_artefact_paths,
+        }

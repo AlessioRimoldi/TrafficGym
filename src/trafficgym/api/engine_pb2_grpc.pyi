@@ -156,6 +156,9 @@ class EngineServiceStub:
     """CancelInterrupt"""
     FetchSubscription: _grpc.UnaryUnaryMultiCallable[_engine_pb2.FetchRequest, _engine_pb2.FetchResponse]
     """FetchSubscription"""
+    DeriveFromArtefact: _grpc.UnaryUnaryMultiCallable[_engine_pb2.DeriveFromArtefactRequest, _engine_pb2.DeriveFromArtefactResponse]
+    """------------ DERIVE FROM ARTEFACT ---------------"""
+    ListTransformations: _grpc.UnaryUnaryMultiCallable[_engine_pb2.ListTransformationsRequest, _engine_pb2.ListTransformationsResponse]
 
 @_typing.type_check_only
 class EngineServiceAsyncStub(EngineServiceStub):
@@ -281,6 +284,9 @@ class EngineServiceAsyncStub(EngineServiceStub):
     """CancelInterrupt"""
     FetchSubscription: _aio.UnaryUnaryMultiCallable[_engine_pb2.FetchRequest, _engine_pb2.FetchResponse]  # type: ignore[assignment]
     """FetchSubscription"""
+    DeriveFromArtefact: _aio.UnaryUnaryMultiCallable[_engine_pb2.DeriveFromArtefactRequest, _engine_pb2.DeriveFromArtefactResponse]  # type: ignore[assignment]
+    """------------ DERIVE FROM ARTEFACT ---------------"""
+    ListTransformations: _aio.UnaryUnaryMultiCallable[_engine_pb2.ListTransformationsRequest, _engine_pb2.ListTransformationsResponse]  # type: ignore[assignment]
 
 class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
     """EngineSerivce manages a SUMO simulation lifecycle and provides runtime control
@@ -481,5 +487,20 @@ class EngineServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_engine_pb2.FetchResponse, _abc.Awaitable[_engine_pb2.FetchResponse]]:
         """FetchSubscription"""
+
+    @_abc_1.abstractmethod
+    def DeriveFromArtefact(
+        self,
+        request: _engine_pb2.DeriveFromArtefactRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_engine_pb2.DeriveFromArtefactResponse, _abc.Awaitable[_engine_pb2.DeriveFromArtefactResponse]]:
+        """------------ DERIVE FROM ARTEFACT ---------------"""
+
+    @_abc_1.abstractmethod
+    def ListTransformations(
+        self,
+        request: _engine_pb2.ListTransformationsRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_engine_pb2.ListTransformationsResponse, _abc.Awaitable[_engine_pb2.ListTransformationsResponse]]: ...
 
 def add_EngineServiceServicer_to_server(servicer: EngineServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

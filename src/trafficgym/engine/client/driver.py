@@ -479,6 +479,33 @@ class EngineDriver:
         finally:
             await handle.close_run()
 
+    @_grpc_error_handler
+    async def derive_from_artefact(
+        self,
+        base_path: str,
+        method: str,
+        parameters: dict[str, str],
+        target_files: dict[str, str],
+    ) -> sdk.DeriveFromArtefactResponse:
+        request = sdk.DeriveFromArtefactRequest(
+            base_path, method, parameters, target_files
+        )
+
+        rpc_call_id = uuid.uuid4()
+        log_rpc(
+            rpc_call_id, "derive_from_artefact", "REQUEST", request.to_dict()
+        )
+
+        response = sdk.DeriveFromArtefactResponse.from_proto(
+            await self.stub.DeriveFromArtefact(request.to_proto())
+        )
+
+        log_rpc(
+            rpc_call_id, "derive_from_artefact", "RESPONSE", response.to_dict()
+        )
+
+        return response
+
 
 class RunHandle:
     def __init__(self, driver: EngineDriver, run_id: str) -> None:

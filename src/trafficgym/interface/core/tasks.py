@@ -19,11 +19,19 @@ from typing import Type, Any, ParamSpec, cast
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.experiment_sdk.experiments.base import Experiment
 from trafficgym.engine.client.driver import EngineDriver
-from trafficgym.interface.core.models import RunRequest, RunExecution, Scenario
+from trafficgym.interface.core.models import (
+    RunRequest,
+    RunExecution,
+    Scenario,
+    Artefact,
+    TransformationRequest,
+    TransformationOutput,
+)
 from trafficgym.interface.core.logging_setup import (
     BaseLogPersistenceHandler,
     LogPersistenceHandlerRunRequest,
     LogPersistenceHandlerRunExecution,
+    LogPersistenceHandlerTransformRequest,
 )
 
 # event_logger = logging.getLogger("event")
@@ -31,7 +39,7 @@ from trafficgym.interface.core.logging_setup import (
 # telemetry_logger = logging.getLogger("telemetry")
 
 
-async def _async_process(
+async def _async_run_sim(
     execution: RunExecution,
     log_handler: LogPersistenceHandlerRunExecution,
     sumocfg_path: Path,
@@ -50,6 +58,30 @@ async def _async_process(
             return run.run_id
 
 
+async def _async_derive(
+    transformation_request: TransformationRequest,
+    base_path: Path,
+    sha256_to_paths: dict[str, str],
+    # parameters: dict[str, str],
+) -> dict[str, str]:
+    async with grpc.aio.insecure_channel("127.0.0.1:50051") as channel:
+        stub = engine_pb2_grpc.EngineServiceStub(channel)
+
+        engine_driver = EngineDriver(stub)
+
+        result = await engine_driver.derive_from_artefact(
+            str(base_path),
+            str(transformation_request.method),
+            transformation_request.parameters,
+            {
+                sha: str(path)
+                for sha, path in sha256_to_paths.items()
+            },
+        )
+
+        return result.derived_artefact_paths
+
+
 def _compute_file_sha256(file: File) -> str:
     hasher = hashlib.sha256()
 
@@ -57,6 +89,34 @@ def _compute_file_sha256(file: File) -> str:
         hasher.update(chunk)
 
     return hasher.hexdigest()
+
+
+def materialise_artefacts(
+    artefacts: list[Artefact], target_dir: Path
+) -> dict[str, Path]:
+    sha256_to_paths: dict[str, Path] = {}
+
+    for artefact in artefacts:
+        filename = str(artefact.original_name)
+        local_path = target_dir / filename
+
+        with default_storage.open(artefact.file.name, "rb") as src:
+            sha256 = _compute_file_sha256(src)
+
+            if sha256 != artefact.sha256:
+                raise ValueError(
+                    f"SHA256 mismatch for Artefact {artefact.original_name}: "
+                    f"expected {artefact.sha256}, got {sha256}"
+                )
+
+            src.seek(0)
+
+            with open(local_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+        sha256_to_paths[cast(str, artefact.sha256)] = local_path
+
+    return sha256_to_paths
 
 
 P = ParamSpec("P")
@@ -96,21 +156,21 @@ def process_run_request(
     try:
         import asyncio
 
-        run_request = (
-            RunRequest.objects.select_for_update()
-            .select_related("scenario")
-            .prefetch_related("scenario__artefacts")
-            .select_related("experiment")
-            .prefetch_related("experiment__artefact")
-            .get(id=run_request_id)
-        )
-
-        handler = LogPersistenceHandlerRunRequest(run_request)
-
-        if run_request.status != "PENDING":
-            return
-
         with transaction.atomic():
+            run_request = (
+                RunRequest.objects.select_for_update()
+                .select_related("scenario")
+                .prefetch_related("scenario__artefacts")
+                .select_related("experiment")
+                .prefetch_related("experiment__artefact")
+                .get(id=run_request_id)
+            )
+
+            handler = LogPersistenceHandlerRunRequest(run_request)
+
+            if run_request.status != "PENDING":
+                return
+
             run_request.status = "PREPARING"
             run_request.worker_id = uuid.uuid4()
             run_request.started_at = timezone.now()
@@ -139,40 +199,18 @@ def process_run_request(
         sumocfg_file = sumocfg_list[0]
 
         with tempfile.TemporaryDirectory() as run_dir:
-
             run_dir_path = Path(run_dir)
 
-            artefact_paths = {}
+            sha256_to_paths = materialise_artefacts(all_artefacts, run_dir_path)
 
-            for artefact in all_artefacts:
-                filename = str(artefact.original_name)
-
-                local_path = run_dir_path / filename
-
-                with default_storage.open(artefact.file.name, "rb") as src:
-                    sha256 = _compute_file_sha256(src)
-
-                    if sha256 != artefact.sha256:
-                        raise ValueError(
-                            f"SHA256 mismatch for Artefact {artefact.original_name} "
-                            f"({local_path}): expected {artefact.sha256}, got {sha256}"
-                        )
-
-                    src.seek(0)
-                    with open(local_path, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
-
-                artefact_paths[artefact.sha256] = str(local_path)
-
-            sumocfg_file_name = str(sumocfg_file.original_name)
-            experiment_file_name = str(experiment_artefact.original_name)
-
-            sumocfg_path = run_dir_path / sumocfg_file_name
-            experiment_path = run_dir_path / experiment_file_name
+            sumocfg_path = sha256_to_paths[cast(str, sumocfg_file.sha256)]
+            experiment_path = sha256_to_paths[
+                cast(str, experiment_artefact.sha256)
+            ]
 
             logging.debug(sumocfg_path)
             logging.debug(experiment_path)
-            logging.debug(artefact_paths)
+            logging.debug(sha256_to_paths)
 
             spec = importlib.util.spec_from_file_location(
                 "experiment_module", experiment_path
@@ -222,7 +260,7 @@ def process_run_request(
 
                 try:
                     engine_run_id = asyncio.run(
-                        _async_process(
+                        _async_run_sim(
                             execution,
                             handler,
                             sumocfg_path,
@@ -252,7 +290,6 @@ def process_run_request(
                         f"Run execution {i + 1} of {run_request.rerun_count} failed. ({execution.id})"
                     ) from e
                 finally:
-                    execution.save()
                     handler.flush_queue()
                     handler.deregister()
                     handler = LogPersistenceHandlerRunRequest(run_request)
@@ -301,26 +338,16 @@ def generate_scenario_plot(scenario_id: str) -> None:
         return
 
     with tempfile.TemporaryDirectory() as run_dir:
-
         run_dir_path = Path(run_dir)
 
-        filename = str(net_file.original_name)
-        local_path = run_dir_path / filename
+        sha256_to_paths = materialise_artefacts([net_file], run_dir_path)
 
-        with default_storage.open(net_file.file.name, "rb") as src:
-            sha256 = _compute_file_sha256(src)
-
-            if sha256 != net_file.sha256:
-                raise ValueError(
-                    f"SHA256 mismatch for Artefact {net_file.original_name} "
-                    f"({local_path}): expected {net_file.sha256}, got {sha256}"
-                )
-
-            src.seek(0)
-            with open(local_path, "wb") as dst:
-                shutil.copyfileobj(src, dst)
-
-        net_path = str(local_path)
+        if net_file.sha256 not in sha256_to_paths:
+            raise FileNotFoundError(
+                "Could not download artefact to generate scenario plot."
+            )
+        else:
+            net_path = str(sha256_to_paths[cast(str, net_file.sha256)])
 
         _, ax = plt.subplots()
 
@@ -342,3 +369,125 @@ def generate_scenario_plot(scenario_id: str) -> None:
         # net.plot(ax=ax)  # pass axes if supported
         # fig.savefig(filepath, dpi=150, bbox_inches='tight')
         # plt.close(fig)
+
+
+@shared_task
+def derive_from_artefact(artefact_transformation_request_id: str) -> None:
+    # with tempfile.TemporaryDirectory() as run_dir:
+    #     run_dir_path = Path(run_dir)
+
+    #     sha256_to_paths = materialise_artefacts([], run_dir_path)
+
+    try:
+        import asyncio
+
+        with transaction.atomic():
+            transformation_request = (
+                TransformationRequest.objects.select_for_update()
+                .prefetch_related("input_artefacts")
+                .get(id=artefact_transformation_request_id)
+            )
+
+            handler = LogPersistenceHandlerTransformRequest(
+                transformation_request
+            )
+
+            if transformation_request.status != "PENDING":
+                return
+
+            transformation_request.status = "PREPARING"
+            transformation_request.worker_id = uuid.uuid4()
+            transformation_request.started_at = timezone.now()
+
+            transformation_request.save(
+                update_fields=["status", "worker_id", "started_at"]
+            )
+
+        # input_artefacts: list[Artefact] = [
+        #     *transformation_request.input_artefacts.all()
+        # ]
+        bindings = transformation_request.input_bindings.select_related(
+            "artefact"
+        )
+
+        input_map: dict[str, Artefact] = {
+            str(b.input_name): b.artefact for b in bindings
+        }
+
+        artefacts = list({a.sha256: a for a in input_map.values()}.values())
+
+        with tempfile.TemporaryDirectory() as run_dir:
+            run_dir_path = Path(run_dir)
+
+            sha256_to_paths = materialise_artefacts(artefacts, run_dir_path)
+
+            input_name_to_path = {
+                name: str(sha256_to_paths[str(artefact.sha256)])
+                for name, artefact in input_map.items()
+            }
+
+            with transaction.atomic():
+                transformation_request.status = "RUNNING"
+                transformation_request.save(update_fields=["status"])
+
+                derived_output_file_paths = asyncio.run(
+                    _async_derive(
+                        transformation_request,
+                        run_dir_path,
+                        input_name_to_path,
+                    )
+                )
+
+                created: list[Artefact] = []
+                reused: list[Artefact] = []
+
+                for role, path_str in derived_output_file_paths.items():
+                    path = Path(path_str)
+
+                    with open(path, "rb") as f:
+                        content = f.read()
+                        f.seek(0)
+
+                        sha256 = hashlib.sha256(content).hexdigest()
+
+                        artefact = Artefact.objects.filter(
+                            sha256=sha256
+                        ).first()
+
+                        if artefact is None:
+                            safe_name = Path(getattr(f, "name", "file")).name
+
+                            artefact = Artefact.objects.create( # type: ignore
+                                file=File(f, name=safe_name)
+                            )
+
+                            created.append(artefact)
+
+                        else:
+                            reused.append(artefact)
+
+                        TransformationOutput.objects.create(
+                            transformation_request=transformation_request,
+                            artefact=artefact,
+                            role=role,
+                        )
+
+                with transaction.atomic():
+                    transformation_request.status = "COMPLETE"
+                    transformation_request.finished_at = timezone.now()
+                    transformation_request.save(
+                        update_fields=["status", "finished_at"]
+                    )
+
+    except Exception as e:
+        logging.error(f"{e}", exc_info=True)
+        with transaction.atomic():
+            transformation_request.status = "FAILED"
+            transformation_request.finished_at = timezone.now()
+            transformation_request.save(update_fields=["status", "finished_at"])
+        raise
+
+    finally:
+        if handler is not None:
+            handler.flush_queue()
+            handler.deregister()

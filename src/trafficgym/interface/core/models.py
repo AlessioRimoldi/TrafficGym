@@ -16,6 +16,8 @@ class Artefact(models.Model):
     file = models.FileField(upload_to="artefacts/")
     original_name = models.CharField(max_length=255, blank=True, editable=False)
 
+    type = models.CharField(max_length=64, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(blank=True, default=dict)
 
@@ -49,6 +51,7 @@ class Artefact(models.Model):
 class Scenario(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
     artefacts = models.ManyToManyField[Artefact, Any](
         Artefact, related_name="scenarios"
     )
@@ -93,7 +96,7 @@ class Experiment(models.Model):
     name = models.CharField(max_length=64)
     version = models.IntegerField()
     artefact: models.ForeignKey[Artefact] = models.ForeignKey(
-        Artefact, on_delete=models.PROTECT
+        Artefact, on_delete=models.PROTECT, related_name="experiments"
     )
 
     run_requests: models.Manager[RunRequest]
@@ -141,7 +144,9 @@ class RunRequest(models.Model):
         Scenario, on_delete=models.deletion.PROTECT, related_name="run_requests"
     )
     experiment: models.ForeignKey[Experiment] = models.ForeignKey(
-        Experiment, on_delete=models.deletion.PROTECT, related_name="run_requests"
+        Experiment,
+        on_delete=models.deletion.PROTECT,
+        related_name="run_requests",
     )
     simulation_parameters = models.JSONField[Any](blank=True, default=dict)
     status = models.CharField(
@@ -298,3 +303,98 @@ class TelemetryLogEntry(models.Model):
     simulation_step = models.IntegerField()
     telemetry_name = models.CharField(max_length=256)
     payload = models.JSONField()
+
+
+class TransformationOutput(models.Model):
+    transformation_request = models.ForeignKey(
+        "TransformationRequest", on_delete=models.CASCADE
+    )
+    artefact: models.ForeignKey[Artefact] = models.ForeignKey(
+        Artefact, on_delete=models.CASCADE
+    )
+    role = models.CharField(max_length=64)
+
+
+class TransformationInput(models.Model):
+    transformation_request = models.ForeignKey(
+        "TransformationRequest",
+        on_delete=models.CASCADE,
+        related_name="input_bindings",
+    )
+    artefact: models.ForeignKey[Artefact] = models.ForeignKey(
+        Artefact, on_delete=models.CASCADE
+    )
+    input_name = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = ("transformation_request", "input_name")
+
+
+class TransformStatus(models.TextChoices):
+    PENDING = "PENDING"
+    PREPARING = "PREPARING"
+    RUNNING = "RUNNING"
+    COMPLETE = "COMPLETE"
+    FAILED = "FAILED"
+
+
+class TransformationRequest(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    worker_id = models.UUIDField(null=True, blank=True, editable=False)
+    input_artefacts = models.ManyToManyField[Artefact, Any](
+        Artefact,
+        through=TransformationInput,
+        related_name="transformation_requests",
+    )
+
+    input_bindings: models.manager.RelatedManager[TransformationInput]
+
+    method = models.CharField(
+        max_length=64,
+        # choices=[
+        #     ("netconvert", "Convert from OSM"),
+        #     ("previewgen", "Generate Network Preview"),
+        #     # ("xml_edit", "XML Edit"),
+        #     # ("duarouter", "Route Regeneration"),
+        #     # ("netconvert", "Network Conversion"),
+        # ],
+    )
+
+    parameters = models.JSONField()
+
+    worker_logs: models.Manager[WorkerLogEntryTransformRequest]
+
+    output_artefacts = models.ManyToManyField[Artefact, Any](
+        Artefact,
+        related_name="produced_by",
+        blank=True,
+        through=TransformationOutput,
+    )
+
+    status = models.CharField(
+        choices=TransformStatus.choices,
+        default=TransformStatus.PENDING,
+        blank=True,
+        editable=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+    started_at = models.DateTimeField(null=True, blank=True, editable=False)
+    finished_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+
+class WorkerLogEntryTransformRequest(models.Model):
+    transform_request: models.ForeignKey[TransformationRequest | None] = (
+        models.ForeignKey(
+            TransformationRequest,
+            on_delete=models.CASCADE,
+            related_name="worker_logs",
+            null=True,
+        )
+    )
+    event_time = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    level = models.CharField(max_length=20)
+    message = models.TextField()
+
+    class Meta:
+        indexes = [models.Index(fields=["transform_request", "created_at"])]

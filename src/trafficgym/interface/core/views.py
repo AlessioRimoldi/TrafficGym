@@ -1,6 +1,7 @@
 from django.http import (
     HttpRequest,
     HttpResponse,
+    HttpResponseBadRequest,
     StreamingHttpResponse,
     JsonResponse,
 )
@@ -16,8 +17,10 @@ from .models import (
     SubscriptionLogEntry,
     Scenario,
     Experiment,
+    TransformationRequest,
+    TransformationInput,
 )
-from .forms import ScenarioForm, ExperimentForm
+from .forms import ScenarioForm, ExperimentForm, ArtefactForm
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.db.models import Min, Max, Count, Avg, Sum, F
@@ -28,8 +31,12 @@ from django.contrib import messages
 from pathlib import Path
 from collections import defaultdict
 from typing import DefaultDict, Set, TypedDict, cast
+from .light_grpc_client import light_engine_client
+from trafficgym.api.engine_pb2 import ListTransformationsRequest, InputType
+from grpc import RpcError
 
 import json
+import mimetypes
 
 aggregation_map = {
     "sum": Sum("payload"),
@@ -255,8 +262,42 @@ def run_execution_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
 
 
 def artefacts_list_view(request: HttpRequest) -> HttpResponse:
-    artefacts_list = Artefact.objects.all()
-    context = {"artefacts_list": artefacts_list}
+    if request.method == "POST":
+        form = ArtefactForm(request.POST, request.FILES)
+        if not request.FILES:
+            messages.error(
+                request,
+                f"Please select at least one file to upload",
+                extra_tags="danger",
+            )
+
+        if form.is_valid():
+            created, reused = form.save()
+
+            if created:
+                messages.success(
+                    request, f"Created {len(created)} new artefact(s)."
+                )
+            if reused:
+                messages.info(
+                    request,
+                    f"{len(reused)} artefact(s) already existed and were reused.",
+                )
+        else:
+            messages.error(
+                request,
+                f"Issue processing form data: {form.errors}",
+                extra_tags="danger",
+            )
+
+        return redirect("artefacts_list")
+    else:
+        form = ArtefactForm()
+
+    artefacts_list = Artefact.objects.prefetch_related(
+        "scenarios", "experiments"
+    ).all()
+    context = {"artefacts": artefacts_list, "form": form}
 
     return render(request, "core/artefacts_list.html", context)
 
@@ -269,14 +310,23 @@ def artefact_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
 
 
 def media_view(_: HttpRequest, filepath: Path) -> StreamingHttpResponse:
+    import re
     # Need to sanitise path
     system_path = Path(settings.MEDIA_ROOT) / filepath
+    clean_path = system_path
 
     if not system_path.exists():
         raise Http404("File not Found")
 
-    return FileResponse(open(system_path, "rb"), content_type="text/plain")
+    if "_" in system_path.suffix:
+        clean_path = system_path.with_name(re.sub(r'(\.[^.]+)_.*$', r'\1', system_path.name))
 
+    mime, _encoding = mimetypes.guess_type(str(clean_path))
+
+    return FileResponse(
+        open(system_path, "rb"),
+        content_type=mime or "image/png"
+    )
 
 def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
     aggregation_function = request.GET.get("agg_mode")
@@ -544,7 +594,11 @@ def scenario_overview(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         form = ScenarioForm(request.POST, request.FILES)
         if not request.FILES:
-            messages.error(request, f"Please select at least one file to upload", extra_tags="danger")
+            messages.error(
+                request,
+                f"Please select at least one file to upload",
+                extra_tags="danger",
+            )
         if form.is_valid():
             scenario, created, reused = form.save()
 
@@ -558,17 +612,32 @@ def scenario_overview(request: HttpRequest) -> HttpResponse:
                     f"{len(reused)} artefact(s) already existed and were reused.",
                 )
         else:
-            messages.error(request, f"Issue processing form data: {form.errors}", extra_tags="danger")
+            messages.error(
+                request,
+                f"Issue processing form data: {form.errors}",
+                extra_tags="danger",
+            )
 
         return redirect("scenario_overview")
     else:
         form = ScenarioForm()
 
-    scenarios = Scenario.objects.prefetch_related("run_requests").all()
+    scenarios = (
+        Scenario.objects.prefetch_related("run_requests", "artefacts")
+        .all()
+        .order_by("-created_at")
+    )
 
     context = {"scenarios": scenarios, "form": form}
 
     return render(request, "core/scenario_overview.html", context)
+
+
+def scenario_detail(request: HttpRequest, pk: str) -> HttpResponse:
+    scenario = get_object_or_404(Scenario, pk)
+
+    context = {"scneario": scenario}
+    return render(request, "core/scenario_detail.html", context)
 
 
 def experiments_overview(request: HttpRequest) -> HttpResponse:
@@ -576,7 +645,11 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
         form = ExperimentForm(request.POST, request.FILES)
 
         if not request.FILES:
-            messages.error(request, f"Please select at least one file to upload", extra_tags="danger")
+            messages.error(
+                request,
+                f"Please select at least one file to upload",
+                extra_tags="danger",
+            )
         if form.is_valid():
             experiment, created, reused = form.save()
 
@@ -591,7 +664,11 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
                 )
 
         else:
-            messages.error(request, f"Issue processing form data: {form.errors}", extra_tags="danger")
+            messages.error(
+                request,
+                f"Issue processing form data: {form.errors}",
+                extra_tags="danger",
+            )
 
         return redirect("experiment_overview")
     else:
@@ -599,6 +676,105 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
 
     experiments = Experiment.objects.prefetch_related("run_requests").all()
 
-    context = { "experiments": experiments, "form": form }
-    
+    context = {"experiments": experiments, "form": form}
+
     return render(request, "core/experiment_overview.html", context)
+
+
+def transformation_requests_list_view(request: HttpRequest) -> HttpResponse:
+    transformation_requests = TransformationRequest.objects.all().order_by("-created_at")
+
+    context = {"transformation_requests": transformation_requests}
+    return render(request, "core/transformation_requests_list.html", context)
+
+
+def transformation_request_detail_view(
+    request: HttpRequest, pk: str
+) -> HttpResponse:
+    transformation_request = get_object_or_404(TransformationRequest, pk=pk)
+
+    level_filter = request.GET.get("level")
+
+    logs_qs = transformation_request.worker_logs
+
+    if level_filter:
+        logs_qs = logs_qs.filter(level=level_filter)
+
+    logs_qs = logs_qs.order_by("-event_time")
+
+    logs_paginator = Paginator(logs_qs, 25)
+    logs_page_number = request.GET.get("logs_page")
+    logs_page_obj = logs_paginator.get_page(logs_page_number)
+
+    context = {
+        "transformation_request": transformation_request,
+        "worker_log_count": logs_qs.count(),
+        "worker_logs": logs_page_obj,
+        "level_filter": level_filter,
+    }
+
+    return render(request, "core/transformation_request_detail.html", context)
+
+
+def list_transformations_view(_: HttpRequest) -> JsonResponse:
+    try:
+        resp = light_engine_client.ListTransformations(
+            ListTransformationsRequest()
+        )
+    except RpcError as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse(
+        {
+            "transformations": [
+                {
+                    "key": t.key,
+                    "inputs": [
+                        {
+                            "name": i.name,
+                            "type": InputType.Name(i.type),
+                            "required": i.required,
+                        }
+                        for i in t.inputs
+                    ],
+                    "outputs": list(t.outputs),
+                    "docstring": t.docstring,
+                }
+                for t in resp.transformations
+            ]
+        }
+    )
+
+
+@require_POST
+def create_transform_request(request: HttpRequest) -> HttpResponse:
+    method = request.POST.get("method")
+
+    if not method:
+        return HttpResponseBadRequest("Missing Transformation method")
+
+    raw_inputs = request.POST.get("inputs", "{}")
+    raw_parameters = request.POST.get("simulation_parameters", "{}")
+    try:
+        inputs: dict[str, str] = json.loads(raw_inputs)
+        parameters = json.loads(raw_parameters)
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("Invalid JSON")
+
+    tr = TransformationRequest.objects.create(
+        method=method,
+        parameters=parameters,
+    )
+
+    bindings = [
+        TransformationInput(
+            transformation_request=tr,
+            artefact_id=artefact_sha256,
+            input_name=input_name,
+        )
+        for input_name, artefact_sha256 in inputs.items()
+    ]
+
+    TransformationInput.objects.bulk_create(bindings)
+
+    return redirect("transformation_request_detail", pk=tr.pk)
