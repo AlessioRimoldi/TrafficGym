@@ -39,7 +39,6 @@ document.addEventListener("change", (e) => {
     }
 });
 
-const previewModal = new bootstrap.Modal(document.getElementById("previewModal") as HTMLDivElement);
 const transformModal = new bootstrap.Modal(document.getElementById("transformModal") as HTMLDivElement);
 
 const transformModalButton = document.getElementById("transformModalButton") as HTMLButtonElement;
@@ -212,47 +211,6 @@ document.addEventListener("DOMContentLoaded", () => {
         selectAll.indeterminate = false;
 
         updateButtonState();
-    });
-
-    (document.querySelectorAll(".preview-btn") as NodeListOf<HTMLButtonElement>).forEach(btn => {
-        btn.addEventListener("click", async () => {
-            const filepath = btn.dataset.filepath;
-
-            const res = await fetch(`/media/${filepath}`);
-
-            const titleEl = document.getElementById("previewTitle") as HTMLHeadingElement;
-            const container = document.getElementById("previewContent") as HTMLPreElement;
-
-            titleEl.textContent = "Preview";
-            container.innerHTML = "";
-
-            const contentType = res.headers.get("content-type") || "";
-            
-            if (!res.ok) {
-                let msg = "Failed to load preview";
-
-                if (res.status === 404) msg = "Could not find artefact content";
-                else if (res.status === 415) msg = "File is not previewable";
-            
-                container.textContent = msg;
-            } 
-            else if (contentType.includes("image/png") || contentType.includes("image/jpeg")) {
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-
-                const img = document.createElement("img");
-                img.src = url;
-                img.className = "img-fluid";
-
-                container.appendChild(img);
-            }
-            else {
-                const text = await res.text();
-                container.textContent = text;
-            }
-
-            previewModal.show();
-        });
     });
 
     transformModalButton.addEventListener("click", async () => {

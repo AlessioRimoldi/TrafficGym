@@ -12,6 +12,7 @@
         <div class="card-header fs-4 fw-bold py-3">Properties</div>
         <div class="card-body">
         <p><strong>Transformation Request ID:</strong> {{ transformation_request.id }}</p>
+        <p><strong>Method:</strong> <span style="font-family: monospace;">{{ transformation_request.method }}</span></p>
         <p><strong>Status:</strong>
             {% if transformation_request.status == "COMPLETE" %}
                 <span class="badge text-bg-success">Success</span>
@@ -27,6 +28,154 @@
                 <span class="badge text-bg-light">{{ transformation_request.status }}</span>
             {% endif %}
         </p>
+        </div>
+    </div>
+
+    <div class="card m-4">
+        <div 
+            class="card-header fs-4 fw-bold py-3 collapsed"
+            id="method_details_header"
+            data-bs-toggle="collapse"
+            data-bs-target="#method_details_content">
+            <i class="bi bi-chevron-right me-2 caret-icon"></i>
+            Method Details <span class="text-muted" style="font-size: 0.45em">at transformation time</span>
+        </div>
+        <div class="card-body collapse" id="method_details_content">
+
+        </div>
+    </div>
+
+    <div class="card m-4">
+        <div
+            class="card-header fs-4 fw-bold py-3 collapsed"
+            id="input_artefacts_header"
+            data-bs-toggle="collapse"
+            data-bs-target="#input_artefacts_content">
+            <i class="bi bi-chevron-right me-2 caret-icon"></i>
+            Input Artefacts
+        </div>
+        <div class="card-body collapse" id="input_artefacts_content">
+            <table class="table table-sm table-hover align-middle table-striped">
+                <thead>
+                    <tr>
+                        <th></th> <!-- Preview Icon -->
+                        <th>Name</th>
+                        <th>Binding</th>
+                        <th>Scenario</th>
+                        <th>Experiment</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody id="artefactTable">
+                    {% for input in transformation_request.input_bindings.all %}
+                    <tr>
+                        <td>
+                            <a class="btn btn-sm btn-outline-primary preview-btn" data-filepath="{{ input.artefact.file.name }}" data-filename="{{ input.artefact.original_name }}"><i class="bi bi-search"></i></a>
+                        </td>
+                        <td>
+                            {{ input.artefact.original_name }}
+                        </td>
+                        <td>{{ input.input_name|default:"—"}}</td>
+                        <td>
+                            {% for scenario in input.artefact.scenarios.all %}
+                                {{ scenario.name }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                —
+                            {% endfor %}
+                        </td>
+                        <td>
+                            {% for exp in input.artefact.experiments.all %}
+                                {{ exp.name }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                —
+                            {% endfor %}
+                        </td>
+                        <td>{{ input.artefact.created_at }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <div class="d-flex flex-column align-items-center gap-2">
+                                <i class="bi bi-inbox fs-1"></i>
+                                <div>
+                                    <strong>No Artefacts</strong><br>
+                                    <small>How did you do that?</small>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card m-4">
+        <div
+            class="card-header fs-4 fw-bold py-3 collapsed"
+            id="output_artefacts_header"
+            data-bs-toggle="collapse"
+            data-bs-target="#output_artefacts_content">
+            <i class="bi bi-chevron-right me-2 caret-icon"></i>
+            Output Artefacts
+        </div>
+        <div class="card-body collapse" id="output_artefacts_content">
+            <table class="table table-sm table-hover align-middle table-striped">
+                <thead>
+                    <tr>
+                        <th></th> <!-- Preview Icon -->
+                        <th>Name</th>
+                        <th>Binding</th>
+                        <th>Scenario</th>
+                        <th>Experiment</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody id="artefactTable">
+                    {% for output in transformation_request.output_bindings.all %}
+                    <tr>
+                        <td>
+                            <a class="btn btn-sm btn-outline-primary preview-btn" data-filepath="{{ output.artefact.file.name }}" data-filename="{{ output.artefact.original_name }}"><i class="bi bi-search"></i></a>
+                        </td>
+                        <td>
+                            {{ output.artefact.original_name }}
+                        </td>
+                        <td>{{ output.role|default:"—"}}</td>
+                        <td>
+                            {% for scenario in output.artefact.scenarios.all %}
+                                {{ scenario.name }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                —
+                            {% endfor %}
+                        </td>
+                        <td>
+                            {% for exp in output.artefact.experiments.all %}
+                                {{ exp.name }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                —
+                            {% endfor %}
+                        </td>
+                        <td>{{ output.artefact.created_at }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <div class="d-flex flex-column align-items-center gap-2">
+                                <i class="bi bi-inbox fs-1"></i>
+                                <div>
+                                    <strong>No Artefacts</strong><br>
+                                    {% if transformation_request.status == "FAILED" %}
+                                    <small>Transformation Failed</small>
+                                    {% else %}
+                                    <small>Outputs will appear here after a transformation runs.</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 

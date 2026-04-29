@@ -303,29 +303,33 @@ def artefacts_list_view(request: HttpRequest) -> HttpResponse:
 
 
 def artefact_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
-    artefact = get_object_or_404(Artefact, pk=pk)
-    context = {"artefact": artefact}
+    artefact = get_object_or_404(
+        Artefact.objects.prefetch_related(
+            # provenance: outputs → transformation → metadata
+            "provenance__transformation_request",
 
-    return render(request, "core/artefact_detail.html", context)
+            # derivatives: inputs → transformation → outputs → artefacts
+            "derivatives__transformation_request__output_bindings__artefact",
+        ),
+        pk=pk,
+    )
 
+    return render(request, "core/artefact_detail.html", {"artefact": artefact})
 
 def media_view(_: HttpRequest, filepath: Path) -> StreamingHttpResponse:
-    import re
     # Need to sanitise path
     system_path = Path(settings.MEDIA_ROOT) / filepath
-    clean_path = system_path
 
     if not system_path.exists():
         raise Http404("File not Found")
 
-    if "_" in system_path.suffix:
-        clean_path = system_path.with_name(re.sub(r'(\.[^.]+)_.*$', r'\1', system_path.name))
+    original_name = Artefact.objects.get(file=filepath).original_name
 
-    mime, _encoding = mimetypes.guess_type(str(clean_path))
+    mime, _encoding = mimetypes.guess_type(str(original_name))
 
     return FileResponse(
         open(system_path, "rb"),
-        content_type=mime or "image/png"
+        content_type=mime or "application/octet-stream"
     )
 
 def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:

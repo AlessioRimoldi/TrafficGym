@@ -19,6 +19,7 @@
             }
         </style>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+        <script type="module" src="{% static "core/js/build/base.js" %}" defer></script>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{% block title %}Default Title{% endblock %}</title>
@@ -52,6 +53,22 @@
                 </div>
             </div>
         </nav>
+
+        <div class="modal fade" id="previewModal" tabindex="-1">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                <h5 class="modal-title" id="previewTitle">Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="previewContent" class="p-3 bg-light border rounded" 
+                        style="white-space: pre-wrap; max-height: 70vh; overflow: auto;">
+                    </pre>
+                </div>
+            </div>
+            </div>
+        </div>
 
         <div class="modal fade" id="createRunModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">

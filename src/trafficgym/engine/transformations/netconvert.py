@@ -17,7 +17,8 @@ import asyncio
 async def netconvert_handler(
     inputs: dict[str, str], runtime: Runtime
 ) -> dict[str, str]:
-    osm_xml_path = Path(inputs["osm_xml"])
+    breakpoint()
+    osm_xml = inputs["osm_xml"]
 
     output_path = (
         runtime.base_path / f"osm_converted_{uuid.uuid4().hex[:8]}.net.xml"
@@ -26,7 +27,7 @@ async def netconvert_handler(
     cmd = [
         "netconvert",
         "--osm",
-        str(osm_xml_path),
+        osm_xml,
         "-o",
         str(output_path),
     ]
@@ -39,7 +40,7 @@ async def netconvert_handler(
         check=True,
     )
 
-    return {"network": cast(str, output_path)}
+    return {"network": str(output_path)}
 
 
 register(

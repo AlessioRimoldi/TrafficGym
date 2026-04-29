@@ -1,21 +1,115 @@
-<!doctype html>
-<html lang="en-GB">
-    <head>
-        <meta charset="utf-8">
-        <title>Artefact Detail</title>
-    </head>
-
-<body>
+{% extends "core/base.html" %}
+{% block title %}Artefacts Detail{% endblock %}
+{% load static %}
+{% block content %}
 {% if artefact %}
-    <h1> Artefact Detail</h1>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Artefact <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ artefact.sha256 }}</span></h1>
+        <button
+            class="btn btn-primary preview-btn"
+            data-filepath="{{ artefact.file.name }}"
+            data-filename="{{ artefact.original_name }}"
+            type="button">
+            Preview Artefact&nbsp;&nbsp;<i class="bi bi-search"></i></a>
+    </div>
+    <div class="card m-4">
+        <div class="card-header fs-4 fw-bold py-3">Properties</div>
+        <div class="card-body">
+            <p><strong>Original Name:</strong> {{ artefact.original_name }}</p>
+            <p><strong>Created at:</strong> {{ artefact.created_at }}</p>
+            {% if artefact.metadata %}
+                <p><strong>Metadata:</strong> {{ artefact.metadata }}</p>
+            {% endif %}
+            <p><strong>Artefact:</strong> <a target="_blank" href="{{ artefact.file.url }}">
+                Open Artefact Content&nbsp;<i class="bi bi-box-arrow-up-right"></i></a>
+            </p>
+        </div>
+    </div>
 
-    <h2> Artefact Properties </h2>
-    <p> Created at: {{artefact.created_at}}</p>
-    <p> Metadata: {{artefact.metadata}}</p>
-    <p> SHA256: {{artefact.sha256}}</p>
-    <p> Original Name: {{artefact.original_name}}</p>
-    <p> Path: <a target="_blank" href="{{artefact.file.url}}">{{artefact.file.url}}</a></p>
+    {% if artefact.provenance.exists %}
+    <div class="card m-4">
+        <div
+            class="card-header fs-4 fw-bold py-3 collapsed"
+            data-bs-toggle="collapse"
+            data-bs-target="#provenance_content"
+            style="cursor: pointer;">
+            <i class="bi bi-chevron-right caret-icon"></i>
+            Provenance
+        </div>
+    
+        <div class="card-body collapse" id="provenance_content">
+            <ul class="list-group list-group-flush">
+                {% for output in artefact.provenance.all %}
+                    <li class="list-group-item">
+                        <div><strong>Transformation:</strong> {{ output.transformation_request.method }}</div>
+                        <div><strong>Role:</strong> {{ output.role }}</div>
+                        <div><strong>Status:</strong> {{ output.transformation_request.status }}</div>
+                        <div><strong>Created:</strong> {{ output.transformation_request.created_at }}</div>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% else %}
+    <div class="card m-4">
+        <div class="card-header fs-4 fw-bold py-3">
+            Provenance
+        </div>
+        <div class="card-body text-muted">
+            Uploaded by User
+        </div>
+    </div>
+    {% endif %}
+    
+
+    {% if artefact.derivatives.exists %}
+    <div class="card m-4">
+        <div
+            class="card-header fs-4 fw-bold py-3 collapsed"
+            data-bs-toggle="collapse"
+            data-bs-target="#derivatives_content"
+            style="cursor: pointer;">
+            <i class="bi bi-chevron-right caret-icon"></i>
+            Derivatives
+        </div>
+
+        <div class="card-body collapse" id="derivatives_content">
+            <ul class="list-group list-group-flush">
+                {% for input in artefact.derivatives.all %}
+                    <li class="list-group-item">
+                        <div><strong>Transformation:</strong> {{ input.transformation_request.method }}</div>
+                        <div><strong>Input Name:</strong> {{ input.input_name }}</div>
+                        <div><strong>Status:</strong> {{ input.transformation_request.status }}</div>
+
+                        <div class="mt-2">
+                            <strong>Outputs:</strong>
+                            <ul class="mb-0">
+                                {% for out in input.transformation_request.output_bindings.all %}
+                                    <li><a href={% url 'artefact_detail' out.artefact.sha256 %}>{{ out.artefact.original_name }}</a></li>
+                                {% empty %}
+                                    <li class="text-muted">No outputs</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% else %}
+    <div class="card m-4">
+        <div class="card-header fs-4 fw-bold py-3">
+            Derivatives
+        </div>
+        <div class="card-body text-muted">
+            No Derived Artefacts
+        </div>
+    </div>
+    {% endif %}
+
+</div>
 {% else %}
-    <p> No artefact detail to display </p>
+    No Artefact Detail to Show
 {% endif %}
-</body>
+{% endblock %}

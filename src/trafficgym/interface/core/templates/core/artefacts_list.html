@@ -2,7 +2,7 @@
 {% block title %}Artefacts List{% endblock %}
 {% load static %}
 {% block content %}
-<script type="module" src="{% static "core/js/artefacts_list.js" %}" defer></script>
+<script type="module" src="{% static "core/js/build/artefacts_list.js" %}" defer></script>
 {% if messages %}
 <div class="container mt-3" id="messageBox">
     {% for message in messages %}
@@ -51,21 +51,6 @@
 </div>
 
 
-<div class="modal fade" id="previewModal" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="previewTitle">Preview</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-            <pre id="previewContent" class="p-3 bg-light border rounded" 
-                style="white-space: pre-wrap; max-height: 70vh; overflow: auto;">
-            </pre>
-        </div>
-      </div>
-    </div>
-</div>
 <div class="modal fade" id="transformModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
@@ -95,7 +80,7 @@
                     <th class="text-center" style="width: 40px;">
                         <input type="checkbox" id="selectAll" class="form-check-input row-checkbox">
                     </th>
-                    <th></th>
+                    <th></th> <!-- Preview Button -->
                     <th>Name</th>
                     <th class="text-center">Type</th>
                     <th>Scenario</th>
@@ -115,14 +100,11 @@
                             class="form-check-input row-checkbox">
                     </td>
                     <td>
-                        {% comment %} <button class="btn btn-sm btn-outline-secondary p-1">
-                            <i class="bi bi-box-arrow-up-right"></i>
-                        </button> {% endcomment %}
                         <a class="btn btn-sm btn-outline-primary preview-btn" data-filepath="{{ artefact.file.name }}" data-filename="{{ artefact.original_name }}"><i class="bi bi-search"></i></a>
                     </td>
-                    <td>
+                    <td><a href="{% url 'artefact_detail' artefact.sha256 %}">
                         {{ artefact.original_name }}
-                    </td>
+                    </a></td>
                     <td class="text-center">{{ artefact.type|default:"—"}}</td>
                     <td>
                         {% for scenario in artefact.scenarios.all %}
@@ -151,10 +133,6 @@
                         disabled>
                     Transform&nbsp;&nbsp;<i class="bi bi-tools"></i>
                 </button>
-            </div>
-
-            <div class="text-muted small">
-                Select artefacts to enable actions
             </div>
         </div>
     </form>

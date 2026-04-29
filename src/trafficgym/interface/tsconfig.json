@@ -3,10 +3,26 @@
     "sourceMap": true,
     "target": "ES6",
     "checkJs": false,
-    "rootDir": "./core/static/core/js",
+
+    "outDir": "./core/static/core/js/build",
+    "rootDir": "./core/static/core/ts/src",
+
     "lib": ["ESNext", "DOM"],
     "esModuleInterop": true,
-    "module": "es6",
-    "strict": true
-  }
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    "strict": true,
+    "skipLibCheck": true
+  },
+
+  "include": [
+    "core/static/core/ts/src/**/*.ts",
+    "core/static/core/ts/src/**/*.d.ts"
+  ],
+
+  "exclude": [
+    "node_modules",
+    "core/static/core/js"
+  ]
 }

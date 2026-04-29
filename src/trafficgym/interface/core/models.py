@@ -307,10 +307,11 @@ class TelemetryLogEntry(models.Model):
 
 class TransformationOutput(models.Model):
     transformation_request = models.ForeignKey(
-        "TransformationRequest", on_delete=models.CASCADE
+        "TransformationRequest", on_delete=models.CASCADE, related_name="output_bindings",
     )
     artefact: models.ForeignKey[Artefact] = models.ForeignKey(
-        Artefact, on_delete=models.CASCADE
+        Artefact, on_delete=models.CASCADE,
+        related_name="provenance",
     )
     role = models.CharField(max_length=64)
 
@@ -322,7 +323,8 @@ class TransformationInput(models.Model):
         related_name="input_bindings",
     )
     artefact: models.ForeignKey[Artefact] = models.ForeignKey(
-        Artefact, on_delete=models.CASCADE
+        Artefact, on_delete=models.CASCADE,
+        related_name="derivatives"
     )
     input_name = models.CharField(max_length=255)
 
@@ -370,6 +372,8 @@ class TransformationRequest(models.Model):
         blank=True,
         through=TransformationOutput,
     )
+
+    output_bindings: models.manager.RelatedManager[TransformationOutput]
 
     status = models.CharField(
         choices=TransformStatus.choices,
