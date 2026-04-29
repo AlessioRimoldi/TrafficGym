@@ -316,20 +316,25 @@ def artefact_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
 
     return render(request, "core/artefact_detail.html", {"artefact": artefact})
 
-def media_view(_: HttpRequest, filepath: Path) -> StreamingHttpResponse:
-    # Need to sanitise path
-    system_path = Path(settings.MEDIA_ROOT) / filepath
+def media_view(_: HttpRequest, filepath: str) -> StreamingHttpResponse:
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+
+    system_path = (media_root / filepath).resolve()
+
+    if media_root not in system_path.parents and system_path != media_root:
+        raise Http404("Invalid path")
 
     if not system_path.exists():
-        raise Http404("File not Found")
+        raise Http404("File not found")
 
-    original_name = Artefact.objects.get(file=filepath).original_name
+    artefact = Artefact.objects.get(file=str(filepath))
 
-    mime, _encoding = mimetypes.guess_type(str(original_name))
+    mime = mimetypes.guess_type(str(artefact.original_name))[0]
 
     return FileResponse(
         open(system_path, "rb"),
-        content_type=mime or "application/octet-stream"
+        # content_type=mime or "application/octet-stream",
+        content_type=mime or "text/plain",
     )
 
 def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:

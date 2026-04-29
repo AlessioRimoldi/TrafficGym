@@ -67,8 +67,17 @@
                         style="width:90%; height:90%; object-fit:contain;"
                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
             
-                <span class="text-muted small" style="display:none;">
-                    No Network Preview Available
+                <span class="text-muted small" style="display:none; text-align: center;">
+                    Network Preview Unavailable
+                    <br>
+                    {% if scenario.image_transformation_request %}
+                        <a href="{% url 'transformation_request_detail' scenario.image_transformation_request.pk %}">
+                            <i class="bi bi-image"></i>
+                            See <span style="font-family: monospace;">netpreview</span> transform request
+                        </a>
+                    {% else %}
+                        <span style="font-family: monospace;">netpreview</span> transform request not found
+                    {% endif %}
                 </span>
             </div>
             <div class="card-body">

@@ -21,6 +21,9 @@ class Artefact(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(blank=True, default=dict)
 
+    derivatives: models.Manager[TransformationInput]
+    provenance: models.Manager[TransformationOutput]
+
     def __str__(self) -> str:
         return Path(self.file.name).name
 
@@ -60,7 +63,43 @@ class Scenario(models.Model):
 
     @property
     def image_url(self) -> str:
-        return f"{settings.MEDIA_URL}scenario_plots/scenario_{self.id}.png"
+        request = self.image_transformation_request
+
+        if request is None:
+            return ""
+
+        output = (
+            request.output_bindings.select_related("artefact")
+            .order_by("id")
+            .first()
+        )
+
+        if output is None:
+            return ""
+
+        return output.artefact.file.url
+
+    @property
+    def image_transformation_request(self) -> TransformationRequest | None:
+        net_artefact = (
+            self.artefacts.filter(
+                original_name__iendswith=".net.xml"
+            )
+            .order_by("original_name")
+            .first()
+        )
+
+        if net_artefact is None:
+            return None
+
+        return (
+            TransformationRequest.objects.filter(
+                method="netpreview",
+                input_bindings__artefact=net_artefact,
+            )
+            .order_by("-created_at")
+            .first()
+        )
 
     def compute_sha256(self) -> str:
         """The scenario model does not include a hash due to issues hashing
