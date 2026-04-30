@@ -314,64 +314,6 @@ def process_run_request(
 
 
 @shared_task
-def generate_scenario_plot(scenario_id: str) -> None:
-    import SumoNetVis  # type: ignore[import-untyped]
-    import matplotlib.pyplot as plt
-
-    scenario = Scenario.objects.get(id=scenario_id)
-
-    net_files = scenario.artefacts.filter(
-        original_name__iendswith=".net.xml"
-    ).order_by("original_name")
-
-    if net_files.count() > 1:
-        logging.warning(
-            'Multiple ".net.xml" files detected in scenario. Preview image will be for first one.'
-        )
-
-    net_file = net_files.first()
-
-    if net_file is None:
-        logging.error(
-            'No ".net.xml" file found in scenario. Preview image unavailable'
-        )
-        return
-
-    with tempfile.TemporaryDirectory() as run_dir:
-        run_dir_path = Path(run_dir)
-
-        sha256_to_paths = materialise_artefacts([net_file], run_dir_path)
-
-        if net_file.sha256 not in sha256_to_paths:
-            raise FileNotFoundError(
-                "Could not download artefact to generate scenario plot."
-            )
-        else:
-            net_path = str(sha256_to_paths[cast(str, net_file.sha256)])
-
-        _, ax = plt.subplots()
-
-        net = SumoNetVis.Net(net_path)
-        net.plot(ax=ax)
-
-        output_dir = Path(settings.MEDIA_ROOT) / "scenario_plots"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"scenario_{scenario.id}.png"
-        filepath = output_dir / filename
-
-        ax.set_aspect("equal")
-        ax.axis("off")
-        plt.savefig(filepath, dpi=500, bbox_inches="tight")
-        plt.close()
-        logging.info(f"Saved scenario plot to {filepath}")
-
-        # fig, ax = plt.subplots(figsize=(8,6))
-        # net.plot(ax=ax)  # pass axes if supported
-        # fig.savefig(filepath, dpi=150, bbox_inches='tight')
-        # plt.close(fig)
-
-
-@shared_task
 def derive_from_artefact(artefact_transformation_request_id: str) -> None:
     # with tempfile.TemporaryDirectory() as run_dir:
     #     run_dir_path = Path(run_dir)

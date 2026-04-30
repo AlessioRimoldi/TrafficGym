@@ -62,37 +62,38 @@
             </div>
             <div class="img-thumbnail d-flex align-items-center justify-content-center"
             style="width:100%; aspect-ratio:1/1; background-color:#f0f0f0; overflow:hidden;">
-                <img src="{{ scenario.image_url }}" 
+       
+           {% with tr=scenario.image_transformation_request %}
+       
+               {% if tr and tr.status == "COMPLETE" %}
+                   <img src="{{ scenario.image_url }}"
                         alt="{{ scenario.name }} network preview"
-                        style="width:90%; height:90%; object-fit:contain;"
-                        onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-            
-                <span class="text-muted small" style="display:none; text-align: center;">
-                    Network Preview Unavailable
-                    <br>
-                    {% if scenario.image_transformation_request %}
-                        <a href="{% url 'transformation_request_detail' scenario.image_transformation_request.pk %}">
-                            <i class="bi bi-image"></i>
-                            See <span style="font-family: monospace;">netpreview</span> transform request
-                        </a>
-                    {% else %}
-                        <span style="font-family: monospace;">netpreview</span> transform request not found
-                    {% endif %}
-                </span>
-            </div>
-            <div class="card-body">
-                <ul class="list-unstyled mb-0">
-                    <li><strong>Number of Artefacts</strong>: {{ scenario.artefacts.count }}</li>
-                    <li><strong>Used in Run Requests (experiments)</strong>: <ul>
-                    {% for run_request in scenario.run_requests.all %}
-                        <li><a href="{% url "run_request_detail" run_request.id %}">{{ run_request.id }} ({{ run_request.experiment.name }} v{{ run_request.experiment.version }})</a></li>
-                    {% empty %}
-                        Not used in any run requests
-                    {% endfor %}
-                    </ul></li>
-                </ul>
-            </div>
-        </div>
+                        style="width:90%; height:90%; object-fit:contain;">
+       
+               {% elif tr and tr.status in "PENDING PREPARING RUNNING" %}
+                   <div class="text-center text-muted">
+                       <div class="spinner-border spinner-border-sm mb-2"></div>
+                       <div>Generating preview…</div>
+                   </div>
+       
+               {% else %}
+                   <span class="text-muted small text-center">
+                       Network Preview Unavailable
+                       <br>
+       
+                       {% if tr %}
+                           <a href="{% url 'transformation_request_detail' tr.pk %}">
+                               <i class="bi bi-image"></i>
+                               View <span style="font-family: monospace;">netpreview</span> request
+                           </a>
+                       {% else %}
+                           <span style="font-family: monospace;">netpreview</span> request not found
+                       {% endif %}
+                   </span>
+               {% endif %}
+       
+           {% endwith %}
+       </div>        </div>
     </div>
     {% empty %}
         <h2>No Scenarios Found</h2>

@@ -31,19 +31,56 @@
         </div>
     </div>
 
-    <div class="card m-4">
-        <div 
-            class="card-header fs-4 fw-bold py-3 collapsed"
-            id="method_details_header"
-            data-bs-toggle="collapse"
-            data-bs-target="#method_details_content">
+    {% if transformation_request.spec_snapshot and transformation_request.spec_snapshot.key %}
+    <div class="card m-4" id="method_details_card">
+    
+        <div class="card-header fs-4 fw-bold py-3 collapsed"
+             data-bs-toggle="collapse"
+             data-bs-target="#method_details_content">
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
-            Method Details <span class="text-muted" style="font-size: 0.45em">at transformation time</span>
+            Method Details&nbsp;
+            <span class="text-muted" style="font-size: 0.45em">
+                at transformation time
+            </span>
         </div>
+    
         <div class="card-body collapse" id="method_details_content">
-
+    
+            <div class="mb-2">
+                <div class="text-muted small">Method</div>
+                <div class="fw-bold">
+                    {{ transformation_request.spec_snapshot.key }}
+                </div>
+            </div>
+    
+            <div class="mb-2">
+                <div class="text-muted small">Description</div>
+                <div>
+                    {{ transformation_request.spec_snapshot.docstring|default:"-" }}
+                </div>
+            </div>
+    
+            <div class="mb-2">
+                <div class="text-muted small">Inputs</div>
+                {% for i in transformation_request.spec_snapshot.inputs %}
+                    <div class="small">
+                        <span class="fw-semibold">{{ i.name }}</span>
+                        <span class="text-muted">({{ i.type }})</span>
+                        {% if i.required %}<span class="text-danger">*</span>{% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+    
+            <div class="mb-2">
+                <div class="text-muted small">Outputs</div>
+                <div class="small">
+                    {{ transformation_request.spec_snapshot.outputs|join:", " }}
+                </div>
+            </div>
+    
         </div>
     </div>
+    {% endif %}
 
     <div class="card m-4">
         <div
@@ -202,7 +239,7 @@
             </form>
 
             {% if worker_logs %}
-            <table class="table table-striped table-hover">
+            <table class="table table-striped table-hover logs-table">
                 <thead>
                     <tr>
                         <td>Time</td>
@@ -215,7 +252,31 @@
                     <tr>
                         <td>{{ log.event_time }}</td>
                         <td>{{ log.level }}</td>
-                        <td>{{ log.message }}</td>
+                        <td class="small">
+                            {% if log.exception_type %}
+                                <div class="mt-2">
+                                    <span class="badge text-bg-danger">
+                                        {{ log.exception_type }}
+                                    </span>
+                                    &nbsp;
+                                    <span class="font-monospace">
+                                        {{ log.message }}
+                                    </span>
+                                </div>
+                            {% else %}
+                            <span class="font-monospace">
+                                {{ log.message }}
+                            </span>
+                            {% endif %}
+
+                            {% if log.traceback %}
+                                <details class="mt-2">
+                                    <summary>Traceback</summary>
+
+                                    <pre class="traceback-block">{{ log.traceback }}</pre>
+                                </details>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

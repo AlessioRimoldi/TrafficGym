@@ -278,6 +278,8 @@ class WorkerLogEntryRunRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     level = models.CharField(max_length=20)
     message = models.TextField()
+    exception_type = models.CharField(max_length=255, blank=True)
+    traceback = models.TextField(blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["run_request", "created_at"])]
@@ -294,6 +296,8 @@ class WorkerLogEntryRunExecution(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     level = models.CharField(max_length=20)
     message = models.TextField()
+    exception_type = models.CharField(max_length=255, blank=True)
+    traceback = models.TextField(blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["run_execution", "created_at"])]
@@ -387,20 +391,11 @@ class TransformationRequest(models.Model):
         through=TransformationInput,
         related_name="transformation_requests",
     )
-
     input_bindings: models.manager.RelatedManager[TransformationInput]
-
     method = models.CharField(
         max_length=64,
-        # choices=[
-        #     ("netconvert", "Convert from OSM"),
-        #     ("previewgen", "Generate Network Preview"),
-        #     # ("xml_edit", "XML Edit"),
-        #     # ("duarouter", "Route Regeneration"),
-        #     # ("netconvert", "Network Conversion"),
-        # ],
     )
-
+    spec_snapshot = models.JSONField()
     parameters = models.JSONField()
 
     worker_logs: models.Manager[WorkerLogEntryTransformRequest]
@@ -438,6 +433,8 @@ class WorkerLogEntryTransformRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     level = models.CharField(max_length=20)
     message = models.TextField()
+    exception_type = models.CharField(max_length=255, blank=True)
+    traceback = models.TextField(blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["transform_request", "created_at"])]

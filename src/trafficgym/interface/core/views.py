@@ -30,7 +30,7 @@ from django.http import FileResponse, Http404
 from django.contrib import messages
 from pathlib import Path
 from collections import defaultdict
-from typing import DefaultDict, Set, TypedDict, cast
+from typing import DefaultDict, Set, TypedDict, cast, Literal
 from .light_grpc_client import light_engine_client
 from trafficgym.api.engine_pb2 import ListTransformationsRequest, InputType
 from grpc import RpcError
@@ -44,6 +44,18 @@ aggregation_map = {
     "max": Max("payload"),
     "min": Min("payload"),
 }
+
+class InputSpec(TypedDict):
+    name: str
+    type: Literal["FILE", "JSON"]
+    required: bool
+
+
+class TransformationSpec(TypedDict):
+    key: str
+    inputs: list[InputSpec]
+    outputs: list[str]
+    docstring: str
 
 
 def index(_: HttpRequest) -> HttpResponse:
@@ -115,7 +127,7 @@ def run_request_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
     level_filter = request.GET.get("level")
 
     logs_qs = run_request.worker_logs
-    executions_qs = run_request.executions.all()
+    executions_qs = run_request.executions.all().order_by("-created_at")
 
     if level_filter:
         logs_qs = logs_qs.filter(level=level_filter)
@@ -717,6 +729,7 @@ def transformation_request_detail_view(
 
     context = {
         "transformation_request": transformation_request,
+        "spec": transformation_request.spec_snapshot,
         "worker_log_count": logs_qs.count(),
         "worker_logs": logs_page_obj,
         "level_filter": level_filter,
@@ -764,14 +777,17 @@ def create_transform_request(request: HttpRequest) -> HttpResponse:
 
     raw_inputs = request.POST.get("inputs", "{}")
     raw_parameters = request.POST.get("simulation_parameters", "{}")
+    raw_schema = request.POST.get("schema", "{}")
     try:
         inputs: dict[str, str] = json.loads(raw_inputs)
         parameters = json.loads(raw_parameters)
+        schema: TransformationSpec = json.loads(raw_schema)
     except json.JSONDecodeError:
         return HttpResponseBadRequest("Invalid JSON")
 
     tr = TransformationRequest.objects.create(
         method=method,
+        spec_snapshot=schema,
         parameters=parameters,
     )
 

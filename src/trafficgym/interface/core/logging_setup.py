@@ -15,7 +15,15 @@ from datetime import datetime, timezone
 import queue
 import logging
 import threading
+import traceback
+import copy
 
+class PreserveExcInfoQueueHandler(logging.handlers.QueueHandler):
+    def prepare(
+        self,
+        record: logging.LogRecord,
+    ) -> logging.LogRecord:
+        return copy.copy(record)
 
 class BaseLogPersistenceHandler(logging.Handler):
     engine_run_id: str | None
@@ -43,7 +51,8 @@ class BaseLogPersistenceHandler(logging.Handler):
         }
         self.loggers["root"] = logging.getLogger()
 
-        self._queue_handler = logging.handlers.QueueHandler(self._log_queue)
+        # self._queue_handler = logging.handlers.QueueHandler(self._log_queue)
+        self._queue_handler = PreserveExcInfoQueueHandler(self._log_queue)
 
         for logger in self.loggers.values():
             logger.addHandler(self._queue_handler)
@@ -73,6 +82,20 @@ class BaseLogPersistenceHandler(logging.Handler):
         if batch:
             self._emit_batch(batch)
 
+    def _extract_exception(
+        self,
+        record: logging.LogRecord,
+    ) -> tuple[str, str]:
+        if not record.exc_info:
+            return "", ""
+
+        exc_type = record.exc_info[0]
+
+        return (
+            exc_type.__name__ if exc_type else "",
+            "".join(traceback.format_exception(*record.exc_info)),
+        )
+
     def flush_queue(self) -> None:
         self._log_queue.join()
 
@@ -98,12 +121,16 @@ class LogPersistenceHandlerTransformRequest(BaseLogPersistenceHandler):
                     record.created, tz=timezone.utc
                 )
 
+                exception_type, tb = self._extract_exception(record)
+
                 worker_objs.append(
                     WorkerLogEntryTransformRequest(
                         transform_request=self.transform_request,
                         event_time=event_time,
                         level=record.levelname,
-                        message=self.format(record),
+                        message=record.getMessage(),
+                        exception_type=exception_type,
+                        traceback=tb,
                     )
                 )
                 continue
@@ -131,12 +158,16 @@ class LogPersistenceHandlerRunRequest(BaseLogPersistenceHandler):
                     record.created, tz=timezone.utc
                 )
 
+                exception_type, tb = self._extract_exception(record)
+
                 worker_objs.append(
                     WorkerLogEntryRunRequest(
                         run_request=self.run_request,
                         event_time=event_time,
                         level=record.levelname,
-                        message=self.format(record),
+                        message=record.getMessage(),
+                        exception_type=exception_type,
+                        traceback=tb,
                     )
                 )
                 continue
@@ -167,13 +198,17 @@ class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
                     record.created, tz=timezone.utc
                 )
 
+                exception_type, tb = self._extract_exception(record)
+
                 if record.name not in self.logger_names:
                     worker_objs.append(
                         WorkerLogEntryRunExecution(
                             run_execution=self.run_execution,
                             event_time=event_time,
                             level=record.levelname,
-                            message=self.format(record),
+                            message=record.getMessage(),
+                            exception_type=exception_type,
+                            traceback=tb,
                         )
                     )
                     continue

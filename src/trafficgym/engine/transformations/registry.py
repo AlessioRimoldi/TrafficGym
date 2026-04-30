@@ -103,3 +103,6 @@ def build_response(
     return DeriveFromArtefactResponse(
         errors=[], warnings=[], derived_artefact_paths=output
     )
+
+def get_spec_or_none(key: str) -> TransformationSpec | None:
+    return REGISTRY.get(key)

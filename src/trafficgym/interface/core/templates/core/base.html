@@ -17,6 +17,41 @@
             .loading {
                 cursor: wait;
             }
+
+            .logs-table {
+                table-layout: fixed;
+                width: 100%;
+            }
+            
+            .logs-table th:nth-child(1),
+            .logs-table td:nth-child(1) {
+                width: 180px;
+            }
+            
+            .logs-table th:nth-child(2),
+            .logs-table td:nth-child(2) {
+                width: 100px;
+            }
+            
+            .logs-table th:nth-child(3),
+            .logs-table td:nth-child(3) {
+                width: auto;
+            }
+
+            .logs-table td {
+                vertical-align: top;
+                overflow-wrap: anywhere;
+            }
+
+            .traceback-block {
+                max-height: 400px;
+                overflow: auto;
+
+                white-space: pre-wrap;
+                word-break: break-word;
+
+                margin: 0;
+            }
         </style>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
         <script type="module" src="{% static "core/js/build/base.js" %}" defer></script>

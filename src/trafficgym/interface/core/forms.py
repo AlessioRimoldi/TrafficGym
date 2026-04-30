@@ -1,7 +1,13 @@
 from django import forms
-from .models import Scenario, Artefact, Experiment, TransformationRequest
+from .models import Scenario, Artefact, Experiment, TransformationRequest, TransformationInput
 from django.core.files import File
+from django.db import transaction
+from trafficgym.engine.transformations.registry import get_spec_or_none
+from .tasks import derive_from_artefact
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ScenarioForm(forms.ModelForm):
@@ -46,6 +52,61 @@ class ScenarioForm(forms.ModelForm):
                 reused.append(artefact)
 
             scenario.artefacts.add(artefact)
+
+        net_artefact = (
+            scenario.artefacts.filter(
+                original_name__iendswith=".net.xml"
+            )
+            .order_by("original_name")
+            .first()
+        )
+
+        spec = get_spec_or_none("netpreview")
+
+        if net_artefact is None:
+            logger.warning(
+                f"No .net.xml artefact found for scenario {scenario.id}"
+            )
+
+        elif spec is None:
+            logger.error("No spec found for netpreview. Check the artefact transformation method is registered")
+
+        else:
+            transform_request = TransformationRequest.objects.create(
+                method=spec.key,
+                spec_snapshot={
+                    "key": spec.key,
+                    "inputs": [
+                        {
+                            "name": i.name,
+                            "type": i.type.value,
+                            "required": i.required,
+                        }
+                        for i in spec.inputs
+                    ],
+                    "outputs": [o.name for o in spec.outputs],
+                    "docstring": spec.docstring,
+                },
+                parameters={},
+            )
+
+            TransformationInput.objects.create(
+                transformation_request=transform_request,
+                artefact=net_artefact,
+                input_name="net_xml",
+            )
+
+            logger.info(
+                f"Created netpreview transform request "
+                f"{transform_request.id} for scenario {scenario.id}"
+            )
+
+            transaction.on_commit(
+                lambda: derive_from_artefact.delay(
+                    str(transform_request.id)
+                )
+            )
+
 
         return scenario, created, reused
 

@@ -6,8 +6,6 @@ from .registry import (
     Runtime,
     InputType,
 )
-from typing import cast
-from pathlib import Path
 
 import subprocess
 import uuid
@@ -17,7 +15,6 @@ import asyncio
 async def netconvert_handler(
     inputs: dict[str, str], runtime: Runtime
 ) -> dict[str, str]:
-    breakpoint()
     osm_xml = inputs["osm_xml"]
 
     output_path = (

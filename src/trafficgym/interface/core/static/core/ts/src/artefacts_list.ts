@@ -64,6 +64,8 @@ interface TransformationSpec {
   docstring: string;
 }
 
+let selectedTransformation: TransformationSpec | null = null;
+
 function validateTransformReady(transformation: TransformationSpec | null) {
     if (!transformation) {
         transformButton.disabled = true;
@@ -271,6 +273,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 radio.className = "form-check-input me-2 d-none";
 
                 radio.addEventListener("change", () => {
+                    selectedTransformation = transformation;
+
                     renderMappingUI(mappingContainer, selectedArtefacts, transformation);
                     validateTransformReady(transformation);
                 });
@@ -351,7 +355,15 @@ document.addEventListener("DOMContentLoaded", () => {
     
         const selectedRadio = document.querySelector('input[name="transformation"]:checked') as HTMLInputElement;
         const method = selectedRadio?.value;
-    
+
+        const schema = selectedTransformation
+            ? {
+                key: selectedTransformation.key,
+                inputs: selectedTransformation.inputs,
+                outputs: selectedTransformation.outputs
+            }
+            : null;
+
         const inputsMap: Record<string, string> = {};
         const selects = document.querySelectorAll("#transformModalBody select") as NodeListOf<HTMLSelectElement>;
         selects.forEach(select => {
@@ -377,6 +389,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
         const formData = new FormData();
         formData.append("method", method);
+        formData.append("schema", JSON.stringify(schema));
         formData.append("inputs", JSON.stringify(inputsMap));
         formData.append("simulation_parameters", parameters);
     

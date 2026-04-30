@@ -255,7 +255,7 @@
             </form>
 
             {% if worker_logs %}
-            <table class="table table-striped table-hover">
+            <table class="table table-striped table-hover logs-table">
                 <thead>
                     <tr>
                         <td>Time</td>
@@ -268,7 +268,31 @@
                     <tr>
                         <td>{{ log.event_time }}</td>
                         <td>{{ log.level }}</td>
-                        <td>{{ log.message }}</td>
+                        <td class="small">
+                            {% if log.exception_type %}
+                                <div class="mt-2">
+                                    <span class="badge text-bg-danger">
+                                        {{ log.exception_type }}
+                                    </span>
+                                    &nbsp;
+                                    <span class="font-monospace">
+                                        {{ log.message }}
+                                    </span>
+                                </div>
+                            {% else %}
+                            <span class="font-monospace">
+                                {{ log.message }}
+                            </span>
+                            {% endif %}
+
+                            {% if log.traceback %}
+                                <details class="mt-2">
+                                    <summary>Traceback</summary>
+
+                                    <pre class="traceback-block">{{ log.traceback }}</pre>
+                                </details>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
