@@ -1,7 +1,7 @@
-from django.db.models.signals import post_save, m2m_changed
+from django.db.models.signals import post_save
 from django.db import transaction
 from django.dispatch import receiver
-from .models import RunRequest, Scenario, RunStatus, TransformationRequest, TransformationInput
+from .models import RunRequest, RunStatus, TransformationRequest
 from typing import Any
 import logging
 

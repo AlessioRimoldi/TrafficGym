@@ -1,10 +1,10 @@
 from django import forms
 from .models import Scenario, Artefact, Experiment, TransformationRequest, TransformationInput
-from django.core.files import File
 from django.db import transaction
 from trafficgym.engine.transformations.registry import get_spec_or_none
 from .tasks import derive_from_artefact
-import hashlib
+from .utils import get_or_create_artefact_from_upload, ArtefactResolution
+from typing import Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,9 +24,32 @@ class ScenarioForm(forms.ModelForm):
         required=False,
     )
 
+    existing_artefacts = forms.ModelMultipleChoiceField(
+        queryset=Artefact.objects.all(),
+        required=False,
+    )
+
     class Meta:
         model = Scenario
         exclude = ["artefacts"]
+    
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean()
+
+        existing = cleaned.get("existing_artefacts")
+        uploaded = self.files.getlist("upload_files")
+
+        if not existing and not uploaded:
+            self.add_error(
+                "existing_artefacts",
+                "Select at least one artefact or upload a file."
+            )
+            self.add_error(
+                "upload_files",
+                "Select at least one artefact or upload a file."
+            )
+
+        return cleaned
 
     def save(
         self, commit: bool = True
@@ -35,23 +58,25 @@ class ScenarioForm(forms.ModelForm):
 
         created = []
         reused = []
+        existing = self.cleaned_data.get("existing_artefacts", [])
+        upload_results: list[ArtefactResolution] = []
+
+        for artefact in self.cleaned_data.get("existing_artefacts", []):
+            scenario.artefacts.add(artefact)
+            reused.append(artefact)
+
 
         for f in self.files.getlist("upload_files"):
-            content = f.read()
-            f.seek(0)
+            result = get_or_create_artefact_from_upload(f)
+            upload_results.append(result)
 
-            sha256 = hashlib.sha256(content).hexdigest()
-
-            artefact = Artefact.objects.filter(sha256=sha256).first()
-
-            if artefact is None:
-                artefact = Artefact.objects.create(file=f)  # type: ignore
-                created.append(artefact)
+            if result.created:
+                created.append(result.artefact)
 
             else:
-                reused.append(artefact)
+                reused.append(result.artefact)
 
-            scenario.artefacts.add(artefact)
+        scenario.artefacts.add(*existing, *[r.artefact for r in upload_results])
 
         net_artefact = (
             scenario.artefacts.filter(
@@ -123,27 +148,22 @@ class ExperimentForm(forms.ModelForm):
     ) -> tuple[Experiment, list[Artefact], list[Artefact]]:
         experiment: Experiment = super().save(commit=False)
 
-        f = self.files.get("upload_file")
-        if not f:
-            raise Exception("Could not find experiment artefact upload.")
-        content = f.read()
-        f.seek(0)
-
         created = []
         reused = []
 
-        sha256 = hashlib.sha256(content).hexdigest()
+        f = self.files.get("upload_file")
+        if not f:
+            raise Exception("Could not find experiment artefact upload.")
 
-        artefact = Artefact.objects.filter(sha256=sha256).first()
+        result = get_or_create_artefact_from_upload(f)
 
-        if artefact is None:
-            artefact = Artefact.objects.create(file=f)  # type: ignore
-            created.append(artefact)
+        if result.created:
+            created.append(result.artefact)
 
         else:
-            reused.append(artefact)
+            reused.append(result.artefact)
 
-        experiment.artefact = artefact
+        experiment.artefact = result.artefact
 
         if commit:
             experiment.save()
@@ -176,18 +196,12 @@ class ArtefactForm(forms.ModelForm):
         reused = []
 
         for f in self.files.getlist("upload_files"):
-            content = f.read()
-            f.seek(0)
+            result = get_or_create_artefact_from_upload(f)
 
-            sha256 = hashlib.sha256(content).hexdigest()
-
-            artefact = Artefact.objects.filter(sha256=sha256).first()
-
-            if artefact is None:
-                artefact = Artefact.objects.create(file=File(f))  # type: ignore
-                created.append(artefact)
+            if result.created:
+                created.append(result.artefact)
 
             else:
-                reused.append(artefact)
+                reused.append(result.artefact)
 
         return created, reused

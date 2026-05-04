@@ -27,19 +27,7 @@
             <td>{{ transformation_request.input_artefacts }}</td>
             <td>{{ transformation_request.created_at|date:"m.d.y H:i:s" }}</td>
             <td class="status">
-                {% if transformation_request.status == "COMPLETE" %}
-                    <span class="badge text-bg-success">Success</span>
-                {% elif transformation_request.status == "FAILED" %}
-                    <span class="badge text-bg-danger">Failed</span>
-                {% elif transformation_request.status == "PREPARING" %}
-                    <span class="badge text-bg-primary">Preparing</span>
-                {% elif transformation_request.status == "RUNNING" %}
-                    <span class="badge text-bg-primary">Running</span>
-                {% elif transformation_request.status == "PENDING" %}
-                    <span class="badge text-bg-secondary">Pending</span>
-                {% else %}
-                    <span class="badge text-bg-light">{{ transformation_request.status }}</span>
-                {% endif %}
+                {% include "core/components/status_badge.html" with status=transformation_request.status %}
             </td>
         </tr>
     {% empty %}

@@ -1,0 +1,13 @@
+{% if status == "COMPLETE" %}
+    <span class="badge text-bg-success">Success</span>
+{% elif status == "FAILED" %}
+    <span class="badge text-bg-danger">Failed</span>
+{% elif status == "PREPARING" %}
+    <span class="badge text-bg-primary">Preparing</span>
+{% elif status == "RUNNING" %}
+    <span class="badge text-bg-primary">Running</span>
+{% elif status == "PENDING" %}
+    <span class="badge text-bg-secondary">Pending</span>
+{% else %}
+    <span class="badge text-bg-light">{{ status }}</span>
+{% endif %}

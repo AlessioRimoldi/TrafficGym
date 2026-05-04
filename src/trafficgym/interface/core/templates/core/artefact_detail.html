@@ -42,9 +42,10 @@
             <ul class="list-group list-group-flush">
                 {% for output in artefact.provenance.all %}
                     <li class="list-group-item">
-                        <div><strong>Transformation:</strong> {{ output.transformation_request.method }}</div>
+                        <div><strong>Transformation Request ID:</strong> <a href="{% url 'transformation_request_detail' output.transformation_request.pk %}">{{ output.transformation_request.pk }}</a></div>
+                        <div><strong>Method:</strong> {{ output.transformation_request.method }}</div>
                         <div><strong>Role:</strong> {{ output.role }}</div>
-                        <div><strong>Status:</strong> {{ output.transformation_request.status }}</div>
+                        <div><strong>Status:</strong> {% include "core/components/status_badge.html" with status=output.transformation_request.status %}</div>
                         <div><strong>Created:</strong> {{ output.transformation_request.created_at }}</div>
                     </li>
                 {% endfor %}
@@ -78,9 +79,10 @@
             <ul class="list-group list-group-flush">
                 {% for input in artefact.derivatives.all %}
                     <li class="list-group-item">
+                        <div><strong>Transformation Request ID:</strong> <a href="{% url 'transformation_request_detail' input.transformation_request.pk %}">{{ input.transformation_request.pk }}</a></div>
                         <div><strong>Transformation:</strong> {{ input.transformation_request.method }}</div>
                         <div><strong>Input Name:</strong> {{ input.input_name }}</div>
-                        <div><strong>Status:</strong> {{ input.transformation_request.status }}</div>
+                        <div><strong>Status:</strong> {% include "core/components/status_badge.html" with status=input.transformation_request.status %}</div>
 
                         <div class="mt-2">
                             <strong>Outputs:</strong>

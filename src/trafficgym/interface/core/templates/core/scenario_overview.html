@@ -42,6 +42,13 @@
                             <div class="text-danger">{{ form.upload_files.errors }}</div>
                         {% endif %}
                     </div>
+                    <div class="mb-3">
+                        <label for="{{ form.existing_artefacts.id_for_label }}">Select Existing Artefacts</label>
+                        {{ form.existing_artefacts }}
+                        {% if form.existing_artefacts.errors %}
+                            <div class="text-danger">{{ form.existing_artefacts.errors }}</div>
+                        {% endif %}
+                    </div>
                 </div>
 
                 <div class="modal-footer">
@@ -96,7 +103,7 @@
        </div>        </div>
     </div>
     {% empty %}
-        <h2>No Scenarios Found</h2>
+        <div>No Scenarios to Display</div>
     {% endfor %}
 </div>
 {% endblock %}

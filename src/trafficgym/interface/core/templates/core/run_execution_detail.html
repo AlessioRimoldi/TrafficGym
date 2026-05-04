@@ -16,20 +16,8 @@
         <p><strong>Run Execution ID:</strong> {{ run_execution.id }}</p>
         <p><strong>Engine Run ID:</strong> {{ run_execution.engine_run_id }}</p>
         <p><strong>Seed:</strong> {{ run_execution.seed }}</p>
-        <p><strong>Status:</strong>
-            {% if run_execution.status == "COMPLETE" %}
-                <span class="badge text-bg-success">Success</span>
-            {% elif run_execution.status == "FAILED" %}
-                <span class="badge text-bg-danger">Failed</span>
-            {% elif run_execution.status == "PREPARING" %}
-                <span class="badge text-bg-primary">Preparing</span>
-            {% elif run_execution.status == "RUNNING" %}
-                <span class="badge text-bg-primary">Running</span>
-            {% elif run_execution.status == "PENDING" %}
-                <span class="badge text-bg-secondary">Pending</span>
-            {% else %}
-                <span class="badge text-bg-light">{{ run_execution.status }}</span>
-            {% endif %}
+        <p><strong>Status:</strong> 
+            {% include "core/components/status_badge.html" with status=run_execution.status %}
         </p>
         </div>
     </div>

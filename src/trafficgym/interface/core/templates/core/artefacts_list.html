@@ -66,6 +66,8 @@
       </div>
     </div>
 </div>
+
+{% if artefacts %}
 <div class="container mt-4">
     {% comment %} <form method="post" action="{% url 'transform_multiple_artefacts' %}"> {% endcomment %}
     <form method="post" action="{% url 'create_transformation_request' %}">
@@ -137,4 +139,7 @@
         </div>
     </form>
 </div>
+{% else %}
+<div>No Artefacts to Display</div>
+{% endif %}
 {% endblock %}

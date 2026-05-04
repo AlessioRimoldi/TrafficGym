@@ -23,26 +23,14 @@
                 <td>{{ run_request.experiment.name }}</td>
                 <td>{{ run_request.created_at|date:"m.d.y H:i:s" }}</td>
                 <td class="status">
-                    {% if run_request.status == "COMPLETE" %}
-                        <span class="badge text-bg-success">Success</span>
-                    {% elif run_request.status == "FAILED" %}
-                        <span class="badge text-bg-danger">Failed</span>
-                    {% elif run_request.status == "PREPARING" %}
-                        <span class="badge text-bg-primary">Preparing</span>
-                    {% elif run_request.status == "RUNNING" %}
-                        <span class="badge text-bg-primary">Running</span>
-                    {% elif run_request.status == "PENDING" %}
-                        <span class="badge text-bg-secondary">Pending</span>
-                    {% else %}
-                        <span class="badge text-bg-light">{{ run_request.status }}</span>
-                    {% endif %}
+                    {% include "core/components/status_badge.html" with status=run_request.status %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 {% else %}
-    <p> No run requests to display </p>
+    <p> No Run Requests to Display </p>
 {% endif %}
 </div>
 {% endblock %}

@@ -14,20 +14,8 @@
         <div class="card-body">
         <p><strong>Run Request ID:</strong> {{ run_request.id }}</p>
         <p><strong>Rerun Count:</strong> {{ run_request.rerun_count }}</p>
-        <p><strong>Status:</strong>
-            {% if run_request.status == "COMPLETE" %}
-                <span class="badge text-bg-success">Success</span>
-            {% elif run_request.status == "FAILED" %}
-                <span class="badge text-bg-danger">Failed</span>
-            {% elif run_request.status == "PREPARING" %}
-                <span class="badge text-bg-primary">Preparing</span>
-            {% elif run_request.status == "RUNNING" %}
-                <span class="badge text-bg-primary">Running</span>
-            {% elif run_request.status == "PENDING" %}
-                <span class="badge text-bg-secondary">Pending</span>
-            {% else %}
-                <span class="badge text-bg-light">{{ run_request.status }}</span>
-            {% endif %}
+        <p><strong>Status:</strong> 
+            {% include "core/components/status_badge.html" with status=run_request.status %}
         </p>
         </div>
     </div>
@@ -175,20 +163,8 @@
                 <tbody>
                     {% for execution in executions %}
                     <tr>
-                        <td class="text-center">
-                            {% if execution.status == "COMPLETE" %}
-                                <span class="badge text-bg-success">Success</span>
-                            {% elif execution.status == "FAILED" %}
-                                <span class="badge text-bg-danger">Failed</span>
-                            {% elif execution.status == "PREPARING" %}
-                                <span class="badge text-bg-primary">Preparing</span>
-                            {% elif execution.status == "RUNNING" %}
-                                <span class="badge text-bg-primary">Running</span>
-                            {% elif execution.status == "PENDING" %}
-                                <span class="badge text-bg-secondary">Pending</span>
-                            {% else %}
-                                <span class="badge text-bg-light">{{ execution.status }}</span>
-                            {% endif %}
+                        <td class="text-center"> 
+                            {% include "core/components/status_badge.html" with status=execution.status %}
                         </td>
                         <td><a href="{% url "run_execution_detail" execution.id %}">{{ execution.id }}</a></td>
                         <td>{{ execution.engine_run_id }}</td>

@@ -14,19 +14,7 @@
         <p><strong>Transformation Request ID:</strong> {{ transformation_request.id }}</p>
         <p><strong>Method:</strong> <span style="font-family: monospace;">{{ transformation_request.method }}</span></p>
         <p><strong>Status:</strong>
-            {% if transformation_request.status == "COMPLETE" %}
-                <span class="badge text-bg-success">Success</span>
-            {% elif transformation_request.status == "FAILED" %}
-                <span class="badge text-bg-danger">Failed</span>
-            {% elif transformation_request.status == "PREPARING" %}
-                <span class="badge text-bg-primary">Preparing</span>
-            {% elif transformation_request.status == "RUNNING" %}
-                <span class="badge text-bg-primary">Running</span>
-            {% elif transformation_request.status == "PENDING" %}
-                <span class="badge text-bg-secondary">Pending</span>
-            {% else %}
-                <span class="badge text-bg-light">{{ transformation_request.status }}</span>
-            {% endif %}
+            {% include "core/components/status_badge.html" with status=transformation_request.status %}
         </p>
         </div>
     </div>
@@ -35,8 +23,9 @@
     <div class="card m-4" id="method_details_card">
     
         <div class="card-header fs-4 fw-bold py-3 collapsed"
-             data-bs-toggle="collapse"
-             data-bs-target="#method_details_content">
+            data-bs-toggle="collapse"
+            data-bs-target="#method_details_content"
+            style="cursor: pointer;">
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Method Details&nbsp;
             <span class="text-muted" style="font-size: 0.45em">
@@ -88,6 +77,7 @@
             id="input_artefacts_header"
             data-bs-toggle="collapse"
             data-bs-target="#input_artefacts_content">
+
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Input Artefacts
         </div>
@@ -110,7 +100,7 @@
                             <a class="btn btn-sm btn-outline-primary preview-btn" data-filepath="{{ input.artefact.file.name }}" data-filename="{{ input.artefact.original_name }}"><i class="bi bi-search"></i></a>
                         </td>
                         <td>
-                            {{ input.artefact.original_name }}
+                            <a href="{% url 'artefact_detail' input.artefact.sha256 %}">{{ input.artefact.original_name }}</a>
                         </td>
                         <td>{{ input.input_name|default:"—"}}</td>
                         <td>
@@ -152,7 +142,8 @@
             class="card-header fs-4 fw-bold py-3 collapsed"
             id="output_artefacts_header"
             data-bs-toggle="collapse"
-            data-bs-target="#output_artefacts_content">
+            data-bs-target="#output_artefacts_content"
+            style="cursor: pointer;">
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Output Artefacts
         </div>
@@ -175,7 +166,7 @@
                             <a class="btn btn-sm btn-outline-primary preview-btn" data-filepath="{{ output.artefact.file.name }}" data-filename="{{ output.artefact.original_name }}"><i class="bi bi-search"></i></a>
                         </td>
                         <td>
-                            {{ output.artefact.original_name }}
+                            <a href="{% url 'artefact_detail' output.artefact.sha256 %}">{{ output.artefact.original_name }}</a>
                         </td>
                         <td>{{ output.role|default:"—"}}</td>
                         <td>

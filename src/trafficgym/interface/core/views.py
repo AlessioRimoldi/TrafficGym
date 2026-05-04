@@ -614,12 +614,7 @@ def subscription_view(
 def scenario_overview(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         form = ScenarioForm(request.POST, request.FILES)
-        if not request.FILES:
-            messages.error(
-                request,
-                f"Please select at least one file to upload",
-                extra_tags="danger",
-            )
+
         if form.is_valid():
             scenario, created, reused = form.save()
 
