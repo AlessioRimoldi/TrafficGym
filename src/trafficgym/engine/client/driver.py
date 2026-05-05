@@ -20,27 +20,45 @@ import asyncio
 import logging
 import grpc.aio
 import uuid
+import json
 
 InterruptStream = AsyncIterable[sdk.InterruptEvent | None]
 
 
 def _handle_rpc_error(err: grpc.aio.AioRpcError) -> Exception:
     code = err.code()
-    details = err.details()
+    details = err.details() or ""
 
     if code == grpc.StatusCode.INVALID_ARGUMENT:
         return sdk.InvalidArgumentError(details)
-    elif code == grpc.StatusCode.NOT_FOUND:
-        return sdk.NotFoundError(details)
-    elif code == grpc.StatusCode.ABORTED:
-        return sdk.AbortedError(details)
-    elif code == grpc.StatusCode.UNAVAILABLE:
-        return sdk.ServiceUnavailableError(details)
-    elif code == grpc.StatusCode.DEADLINE_EXCEEDED:
-        return TimeoutError(details)
-    else:
-        return sdk.GrpcError(details)
 
+    if code == grpc.StatusCode.NOT_FOUND:
+        return sdk.NotFoundError(details)
+
+    if code == grpc.StatusCode.UNAVAILABLE:
+        return sdk.ServiceUnavailableError(details)
+
+    if code == grpc.StatusCode.DEADLINE_EXCEEDED:
+        return TimeoutError(details)
+
+    if code == grpc.StatusCode.ABORTED:
+        try:
+            payload = json.loads(details)
+
+            return sdk.AbortedError(
+                message=payload.get("message", "Aborted"),
+                server_traceback=payload.get("traceback"),
+                error_type=payload.get("type"),
+            )
+        except Exception:
+            # fallback if server did NOT send structured payload
+            return sdk.AbortedError(
+                message=details,
+                server_traceback=None,
+                error_type="ABORTED",
+            )
+
+    return sdk.GrpcError(details)
 
 # log = get_task_logger(__name__)
 rpc_logger = logging.getLogger("rpc")
@@ -82,7 +100,7 @@ def _grpc_error_handler(
         try:
             return await fn(*args, **kwargs)
         except grpc.aio.AioRpcError as e:
-            raise _handle_rpc_error(e) from e
+            raise _handle_rpc_error(e) from None
 
     return wrapper
 

@@ -72,7 +72,7 @@ import asyncio
 import grpc.aio
 import logging
 import libsumo  # type: ignore
-import subprocess
+import signal
 
 
 class Subscription:
@@ -888,15 +888,29 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
             result = await spec.handler(inputs, runtime)
 
-        except subprocess.CalledProcessError as e:
-            await context.abort(
-                grpc.StatusCode.ABORTED,
-                f"Failure during method execution '{request.method}': {e.stderr}",
-            )
+        # except subprocess.CalledProcessError as e:
+        #     await context.abort(
+        #         grpc.StatusCode.ABORTED,
+        #         f"Failure during method execution '{request.method}': {e.stderr}",
+        #     )
+        # except Exception as e:
+        #     await context.abort(
+        #         grpc.StatusCode.ABORTED,
+        #         f"Failed executing DeriveFromArtefact: {e}",
+        #     )
         except Exception as e:
+            import traceback, json
+
+            tb = traceback.format_exc()
+
             await context.abort(
                 grpc.StatusCode.ABORTED,
-                f"Failed executing DeriveFromArtefact: {e}",
+                json.dumps({
+                    "method": request.method,
+                    "message": str(e),
+                    "traceback": tb,
+                    "type": type(e).__name__,
+                }),
             )
 
         return build_response(spec, result)
@@ -1112,13 +1126,26 @@ class EngineService(engine_pb2_grpc.EngineServiceServicer):
 
 async def serve(host: str = "127.0.0.1", port: int = 50051) -> None:
     server = grpc.aio.server()
+
     engine_pb2_grpc.add_EngineServiceServicer_to_server(
-        EngineService(LibsumoAdapterFactory()), server
+        EngineService(LibsumoAdapterFactory()),
+        server,
     )
+
     server.add_insecure_port(f"{host}:{port}")
     await server.start()
-    await server.wait_for_termination()
 
+    stop_event = asyncio.Event()
+
+    loop = asyncio.get_running_loop()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop_event.set)
+
+    try:
+        await stop_event.wait()
+    finally:
+        await server.stop(grace=5)
 
 def main() -> None:
     logging.basicConfig(level=logging.DEBUG)

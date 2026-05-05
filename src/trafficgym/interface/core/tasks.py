@@ -18,6 +18,7 @@ from typing import Type, Any, ParamSpec, cast
 
 from trafficgym.api import engine_pb2_grpc
 from trafficgym.experiment_sdk.experiments.base import Experiment
+from trafficgym.experiment_sdk import sdk
 from trafficgym.engine.client.driver import EngineDriver
 from trafficgym.interface.core.models import (
     RunRequest,
@@ -422,7 +423,17 @@ def derive_from_artefact(artefact_transformation_request_id: str) -> None:
                     )
 
     except Exception as e:
-        logging.error(f"{e}", exc_info=True)
+        if isinstance(e, sdk.AbortedError):
+            logging.error(
+                e.message,
+                extra={
+                    "server_traceback": e.server_traceback,
+                    "error_type": e.error_type,
+                },
+            )
+        else:
+            logging.error(str(e), exc_info=True)
+
         with transaction.atomic():
             transformation_request.status = "FAILED"
             transformation_request.finished_at = timezone.now()

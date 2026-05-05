@@ -86,15 +86,22 @@ class BaseLogPersistenceHandler(logging.Handler):
         self,
         record: logging.LogRecord,
     ) -> tuple[str, str]:
-        if not record.exc_info:
-            return "", ""
+        # 1. RPC-style enriched exception (preferred)
+        server_tb = getattr(record, "server_traceback", None)
+        server_type = getattr(record, "error_type", None)
 
-        exc_type = record.exc_info[0]
+        if server_tb:
+            return server_type or "RemoteException", server_tb
 
-        return (
-            exc_type.__name__ if exc_type else "",
-            "".join(traceback.format_exception(*record.exc_info)),
-        )
+        # 2. Standard Python exception
+        if record.exc_info:
+            exc_type = record.exc_info[0]
+            return (
+                exc_type.__name__ if exc_type else "",
+                "".join(traceback.format_exception(*record.exc_info)),
+            )
+
+        return "", ""
 
     def flush_queue(self) -> None:
         self._log_queue.join()
