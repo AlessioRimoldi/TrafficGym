@@ -14,7 +14,7 @@
         <tr>
             <th>ID</th>
             <th>Method</th>
-            <th>Input Artefacts</th>
+            {% comment %} <th>Input Artefacts</th> {% endcomment %}
             <th>Created</th>
             <th>Status</th>
         </tr>
@@ -24,7 +24,7 @@
         <tr data-run-id="{{ transformation_request.id }}">
             <td><a href="{% url "transformation_request_detail" transformation_request.id %}">{{ transformation_request.id }}</a></td>
             <td>{{ transformation_request.method }}</td>
-            <td>{{ transformation_request.input_artefacts }}</td>
+            {% comment %} <td>{{ transformation_request.input_artefacts }}</td> {% endcomment %}
             <td>{{ transformation_request.created_at|date:"m.d.y H:i:s" }}</td>
             <td class="status">
                 {% include "core/components/status_badge.html" with status=transformation_request.status %}

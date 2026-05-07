@@ -14,7 +14,20 @@
 {% endif %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">Experiment Overview</h1>
-    <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Add Experiment</button>
+    {% comment %} <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Add Experiment</button> {% endcomment %}
+    <div class="dropdown">
+        <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Add Experiment
+          </button>
+          <ul class="dropdown-menu">
+            <li>
+                <a href="#" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Import from File</a>
+            </li>
+            <li><a href="#" class="dropdown-item">
+                Create from Scenario
+            </a></li>
+        </ul>
+    </div>
 </div>
 <div class="modal fade" id="createExperimentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
