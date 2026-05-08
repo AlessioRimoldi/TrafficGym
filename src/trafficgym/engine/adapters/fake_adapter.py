@@ -1,12 +1,13 @@
 from trafficgym.engine.ports.simulation import (
     SimulationPort,
-    ValDict,
+    MappingValue,
+    Observation,
+    Params,
     InvalidGetterError,
 )
-from trafficgym.api.engine_pb2 import CustomValue
 from dataclasses import dataclass
-from trafficgym.engine.helpers import extract_value
 from libsumo import TraCIException  # type: ignore[import-untyped]
+from trafficgym.experiment_sdk import sdk
 import logging
 
 
@@ -17,7 +18,7 @@ class FakeStateDictKey:
     attribute: str
 
 
-FakeStateDict = dict[FakeStateDictKey, CustomValue]
+FakeStateDict = dict[FakeStateDictKey, MappingValue]
 
 
 class FakeAdapter(SimulationPort):
@@ -39,7 +40,7 @@ class FakeAdapter(SimulationPort):
             raise RuntimeError("fake run already closed")
         self.closed = True
 
-    def tick(self) -> tuple[int, float, ValDict]:
+    def tick(self) -> tuple[int, float, Observation]:
         if self.closed:
             raise RuntimeError("fake run already closed")
         self.step += 1
@@ -51,7 +52,7 @@ class FakeAdapter(SimulationPort):
         domain: str,
         setter_name: str,
         object_id: str | None,
-        args: ValDict,
+        args: Params,
     ) -> None:
         """Will set the fake state for the Value of the attribute whose
         name is the setter_name, with the 'set' prefix removed, lowercased.
@@ -72,8 +73,8 @@ class FakeAdapter(SimulationPort):
             raise KeyError("'value' must be set in args for FakeState")
 
         if guess_name == "NoNegativeInt":
-            if value.WhichOneof("kind") == "int_value":
-                if value.int_value < 0:
+            if isinstance(value, int):
+                if value < 0:
                     raise TraCIException(
                         "invalid setter argument for noNegativeNumber"
                     )
@@ -81,7 +82,7 @@ class FakeAdapter(SimulationPort):
                 raise Exception("Could not set noNegativeNumber")
 
         elif guess_name == "NoFloat":
-            if value.WhichOneof("kind") != "int_value":
+            if not isinstance(value, int):
                 raise TypeError("Expected an int")
 
         self.state[
@@ -99,7 +100,7 @@ class FakeAdapter(SimulationPort):
         domain: str,
         getter_name: str,
         object_id: str | None,
-        args: ValDict,  # not sure what to do with args here...
+        args: Params,  # not sure what to do with args here...
     ) -> str:
         """Will query the fake state for the Value of the attribute whose
         name is the getter_name, with the 'get' prefix removed, lowercased.
@@ -122,4 +123,4 @@ class FakeAdapter(SimulationPort):
             f"Invoked fake getter: {domain}.{object_id}.{getter_name}_{args}"
         )
         # return attribute_value
-        return str(extract_value(attribute_value))
+        return str(attribute_value)

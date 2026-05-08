@@ -3,9 +3,6 @@ name = "sumo-workbench-engine"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-  "grpcio>=1.60",
-  "grpcio-tools>=1.60",
-  "protobuf>=4.25",
 ]
 
 [build-system]
@@ -28,7 +25,5 @@ django_settings_module = "trafficgym.interface.config.settings"
 
 [tool.coverage.run]
 omit = [
-  "src/trafficgym/api/*",
-  "src/trafficgym/engine/client.py",
   "tests/*"
 ]

@@ -1,24 +1,17 @@
 from trafficgym.experiment_sdk.experiments.base import Experiment
-
+from trafficgym.engine.ports.simulation import SimulationPort
 
 class service_station_no_meter(Experiment):
-    async def run_experiment(self) -> None:
+    def run(self, adapter: SimulationPort) -> None:
         tls_id = "TL0"
 
-        await self.run.subscribe("simulation", "getTime", None)
-        await self.run.subscribe(
-            "inductionloop", "getLastIntervalOccupancy", "e1_1"
-        )
+        self.subscribe("time", "simulation", "getTime", None)
+        self.subscribe("last occupancy interval", "inductionloop", "getLastIntervalOccupancy", "e1_1")
 
-        await self.run.tls.set_program(tls_id, "off")
+        adapter.apply("trafficlight", "setProgram", tls_id, { "programID": "off" })
 
-        await self.run.run_time(300)
+        adapter.run_time(300)
 
-        # controller = await self.run.tls.meter_controller(tls_id, "e1_1")
-        await self.run.subscribe(
-            "inductionloop", "getLastStepOccupancy", "e1_1"
-        )
+        self.subscribe("last step occupancy", "inductionloop", "getLastStepOccupancy", "e1_1")
 
-        await self.run.run_time(2400)
-
-        # controller.cancel()
+        adapter.run_time(2400)

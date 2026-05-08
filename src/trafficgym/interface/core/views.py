@@ -31,9 +31,7 @@ from django.contrib import messages
 from pathlib import Path
 from collections import defaultdict
 from typing import DefaultDict, Set, TypedDict, cast, Literal
-from .light_grpc_client import light_engine_client
-from trafficgym.api.engine_pb2 import ListTransformationsRequest, InputType
-from grpc import RpcError
+from trafficgym.engine.transformations.registry import REGISTRY
 
 import json
 import mimetypes
@@ -735,10 +733,8 @@ def transformation_request_detail_view(
 
 def list_transformations_view(_: HttpRequest) -> JsonResponse:
     try:
-        resp = light_engine_client.ListTransformations(
-            ListTransformationsRequest()
-        )
-    except RpcError as e:
+        resp = REGISTRY.values()
+    except RuntimeError as e:
         return JsonResponse({"error": str(e)}, status=500)
 
     return JsonResponse(
@@ -749,7 +745,7 @@ def list_transformations_view(_: HttpRequest) -> JsonResponse:
                     "inputs": [
                         {
                             "name": i.name,
-                            "type": InputType.Name(i.type),
+                            "type": i.type,
                             "required": i.required,
                         }
                         for i in t.inputs
@@ -757,7 +753,7 @@ def list_transformations_view(_: HttpRequest) -> JsonResponse:
                     "outputs": list(t.outputs),
                     "docstring": t.docstring,
                 }
-                for t in resp.transformations
+                for t in resp
             ]
         }
     )

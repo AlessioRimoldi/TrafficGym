@@ -2,7 +2,6 @@ import tempfile
 import uuid
 import shutil
 import importlib.util
-import grpc.aio
 import hashlib
 import logging
 import random
@@ -11,19 +10,17 @@ from celery import shared_task, Task
 from django.db import transaction
 from django.utils import timezone
 from django.core.files import File
-from django.conf import settings
 from pathlib import Path
 from django.core.files.storage import default_storage
-from typing import Type, Any, ParamSpec, cast
+from typing import Any, ParamSpec, cast
 
-from trafficgym.api import engine_pb2_grpc
+from trafficgym.engine.adapters.libsumo_adapter import LibsumoAdapter
+from trafficgym.engine.ports.simulation import RunConfig
+from trafficgym.engine.transformations.registry import REGISTRY, resolve_inputs, Runtime
 from trafficgym.experiment_sdk.experiments.base import Experiment
-from trafficgym.experiment_sdk import sdk
-from trafficgym.engine.client.driver import EngineDriver
 from trafficgym.interface.core.models import (
     RunRequest,
     RunExecution,
-    Scenario,
     Artefact,
     TransformationRequest,
     TransformationOutput,
@@ -38,50 +35,6 @@ from trafficgym.interface.core.logging_setup import (
 # event_logger = logging.getLogger("event")
 # subscription_logger = logging.getLogger("subscription")
 # telemetry_logger = logging.getLogger("telemetry")
-
-
-async def _async_run_sim(
-    execution: RunExecution,
-    log_handler: LogPersistenceHandlerRunExecution,
-    sumocfg_path: Path,
-    ExperimentClass: Type[Experiment],
-) -> str:
-    async with grpc.aio.insecure_channel("127.0.0.1:50051") as channel:
-        stub = engine_pb2_grpc.EngineServiceStub(channel)
-
-        engine_driver = EngineDriver(stub)
-
-        async with engine_driver.create_run(
-            str(sumocfg_path), "sumo", 1000, cast(int, execution.seed)
-        ) as run:
-            log_handler.set_engine_run_id(run.run_id)
-            await ExperimentClass(run).run_experiment()
-            return run.run_id
-
-
-async def _async_derive(
-    transformation_request: TransformationRequest,
-    base_path: Path,
-    sha256_to_paths: dict[str, str],
-    # parameters: dict[str, str],
-) -> dict[str, str]:
-    async with grpc.aio.insecure_channel("127.0.0.1:50051") as channel:
-        stub = engine_pb2_grpc.EngineServiceStub(channel)
-
-        engine_driver = EngineDriver(stub)
-
-        result = await engine_driver.derive_from_artefact(
-            str(base_path),
-            str(transformation_request.method),
-            transformation_request.parameters,
-            {
-                sha: str(path)
-                for sha, path in sha256_to_paths.items()
-            },
-        )
-
-        return result.derived_artefact_paths
-
 
 def _compute_file_sha256(file: File) -> str:
     hasher = hashlib.sha256()
@@ -122,7 +75,6 @@ def materialise_artefacts(
 
 P = ParamSpec("P")
 
-
 class RunTask(Task[P, None]):
     abstract = True
 
@@ -155,8 +107,6 @@ def process_run_request(
 ) -> None:
     handler: BaseLogPersistenceHandler | None = None
     try:
-        import asyncio
-
         with transaction.atomic():
             run_request = (
                 RunRequest.objects.select_for_update()
@@ -251,33 +201,48 @@ def process_run_request(
                 )
 
             for execution in run_request.executions.all():
-                with transaction.atomic():
-                    execution.status = "RUNNING"
-                    execution.save(update_fields=["status"])
-
-                handler.flush_queue()
-                handler.deregister()
-                handler = LogPersistenceHandlerRunExecution(execution)
-
                 try:
-                    engine_run_id = asyncio.run(
-                        _async_run_sim(
-                            execution,
-                            handler,
-                            sumocfg_path,
-                            ExperimentClass,
-                        )
-                    )
+                    engine_run_id = uuid.uuid4()
+                    with transaction.atomic():
+                        execution.status = "RUNNING"
+                        execution.engine_run_id = engine_run_id
+                        execution.save(update_fields=["status", "engine_run_id"])
+
+                    handler.flush_queue()
+                    handler.deregister()
+
+                    handler = LogPersistenceHandlerRunExecution(execution, engine_run_id)
+
+                    cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo", seed=cast(int, execution.seed))
+                    adapter = LibsumoAdapter(cfg, step_length_ms=1000)
+                    experiment = ExperimentClass()
+                    sub_logger = logging.getLogger("subscription")
+
+
+                    def log_step(step: int, sim_time: float, _: Any) -> None:
+                        for name, value in experiment.poll(adapter).items():
+                            sub_logger.info(
+                                name,
+                                extra={
+                                    "simulation_step": step,
+                                    "simulation_time": sim_time,
+                                    "subscription_fingerprint": name,
+                                    "payload": value,
+                                }
+                            )
+
+                    adapter.after_tick = log_step
+                    adapter.start()
+
+                    experiment.run(adapter=adapter)
 
                     with transaction.atomic():
                         execution.status = "COMPLETE"
                         execution.finished_at = timezone.now()
-                        execution.engine_run_id = engine_run_id
                         execution.save(
                             update_fields=[
                                 "status",
                                 "finished_at",
-                                "engine_run_id",
                             ]
                         )
 
@@ -291,6 +256,8 @@ def process_run_request(
                         f"Run execution {i + 1} of {run_request.rerun_count} failed. ({execution.id})"
                     ) from e
                 finally:
+                    adapter.close()
+
                     handler.flush_queue()
                     handler.deregister()
                     handler = LogPersistenceHandlerRunRequest(run_request)
@@ -316,11 +283,7 @@ def process_run_request(
 
 @shared_task
 def derive_from_artefact(artefact_transformation_request_id: str) -> None:
-    # with tempfile.TemporaryDirectory() as run_dir:
-    #     run_dir_path = Path(run_dir)
-
-    #     sha256_to_paths = materialise_artefacts([], run_dir_path)
-
+    handler: LogPersistenceHandlerTransformRequest | None = None
     try:
         import asyncio
 
@@ -373,18 +336,18 @@ def derive_from_artefact(artefact_transformation_request_id: str) -> None:
                 transformation_request.status = "RUNNING"
                 transformation_request.save(update_fields=["status"])
 
-                derived_output_file_paths = asyncio.run(
-                    _async_derive(
-                        transformation_request,
-                        run_dir_path,
-                        input_name_to_path,
-                    )
+                spec = REGISTRY[str(transformation_request.method)]
+                runtime = Runtime(base_path=run_dir_path)
+                resolved = resolve_inputs(spec, transformation_request.parameters, input_name_to_path, runtime)
+
+                derived: dict[str, str] = asyncio.run(
+                    spec.handler(resolved, runtime)
                 )
 
                 created: list[Artefact] = []
                 reused: list[Artefact] = []
 
-                for role, path_str in derived_output_file_paths.items():
+                for role, path_str in derived.items():
                     path = Path(path_str)
 
                     with open(path, "rb") as f:
@@ -423,16 +386,7 @@ def derive_from_artefact(artefact_transformation_request_id: str) -> None:
                     )
 
     except Exception as e:
-        if isinstance(e, sdk.AbortedError):
-            logging.error(
-                e.message,
-                extra={
-                    "server_traceback": e.server_traceback,
-                    "error_type": e.error_type,
-                },
-            )
-        else:
-            logging.error(str(e), exc_info=True)
+        logging.error(str(e), exc_info=True)
 
         with transaction.atomic():
             transformation_request.status = "FAILED"

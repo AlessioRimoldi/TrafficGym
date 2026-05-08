@@ -1,10 +1,9 @@
 from trafficgym.engine.ports.simulation import (
     SimulationPort,
-    ValDict,
-    RunConfig,
+    Observation,
+    Params,
+    RunConfig
 )
-from trafficgym.api.engine_pb2 import CustomValue
-from trafficgym.engine.helpers import extract_value
 import os
 import sys
 import logging
@@ -50,7 +49,7 @@ class LibsumoAdapter(SimulationPort):
                 self.started = False
                 self.closed = True
 
-    def tick(self) -> tuple[int, float, ValDict]:
+    def tick(self) -> tuple[int, float, Observation]:
         libsumo.simulationStep()
         self.step += 1
         sim_time_s = float(libsumo.simulation.getTime())
@@ -58,7 +57,7 @@ class LibsumoAdapter(SimulationPort):
         remaining = int(libsumo.simulation.getMinExpectedNumber())
 
         metrics = {
-            "sim.remaining_veh": CustomValue(int_value=remaining),
+            "sim.remaining_veh": remaining
         }
         self.last_metrics = metrics
 
@@ -69,12 +68,12 @@ class LibsumoAdapter(SimulationPort):
         domain: str,
         setter_name: str,
         object_id: str | None,
-        args: ValDict,
+        args: Params,
     ) -> None:
         domain_handle = getattr(libsumo, domain)
         setter_handle = getattr(domain_handle, setter_name)
 
-        kwargs = {name: extract_value(value) for name, value in args.items()}
+        kwargs = {name: value for name, value in args.items()}
 
         if object_id is not None:
             setter_handle(object_id, **kwargs)
@@ -90,7 +89,7 @@ class LibsumoAdapter(SimulationPort):
         domain: str,
         getter_name: str,
         object_id: str | None,
-        args: ValDict,
+        args: Params,
     ) -> str:
         domain_handle = getattr(libsumo, domain)
         getter_handle = getattr(domain_handle, getter_name)

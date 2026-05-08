@@ -1,5 +1,6 @@
 from trafficgym.experiment_sdk.experiments.base import Experiment
-from trafficgym.experiment_sdk import sdk
+from trafficgym.engine.ports.simulation import SimulationPort
+from trafficgym.engine.control.controllers import StaticTLSController
 
 import ast
 import random
@@ -7,37 +8,35 @@ import logging
 
 
 class stop_random_async_tls(Experiment):
-    async def run_experiment(self) -> None:
+    def run(self, adapter: SimulationPort) -> None:
         tls_id = "TL0"
 
-        await self.run.subscribe(
-            "trafficlight", "getRedYellowGreenState", tls_id
-        )
-        eastbound_veh_ids = await self.run.subscribe(
-            "edge", "getLastStepVehicleIDs", "W2J"
-        )
-        await self.run.subscribe("trafficlight", "getSpentDuration", tls_id)
+        self.subscribe("TL0 State", "traficlight", "getRedYellowGreenState", tls_id)
+        self.subscribe("eastbound_veh_ids", "edge", "getLastStepVehicleIDs", "W2J")
+        self.subscribe("TL0 Spent", "trafficlight", "getSpentDuration", tls_id)
 
-        tls_program = await self.run.tls.static_tls_controller(
+        static_tls_controller = StaticTLSController(
             tls_id,
             ["rGrG", "ryry", "GrGr", "yryr"],
             [30, 3, 30, 3],
-            0,
         )
 
-        await self.run.run_time(100)
+        adapter.register(static_tls_controller)
+
+        adapter.run_time(100)
+
+        adapter.apply("trafficlight", "setRedYellowGreenState", tls_id, {"state": "rGrG"})
 
         # Get list of vehicles heading east on the western edge.
-        eastbound_veh_ids_fetch = await self.run.fetch_subscription(
-            eastbound_veh_ids.fingerprint, immediate_collect=False
-        )
+        eastbound_veh_ids_fetch = adapter.query("edge", "getLastStepVehicleIDs", "W2J", {})
+
         if (
-            eastbound_veh_ids_fetch.data is None
+            eastbound_veh_ids_fetch is None
         ):  # checks for None and empty queue
             raise RuntimeError("Expected data!")
 
         try:
-            veh_ids = ast.literal_eval(str(eastbound_veh_ids_fetch.data))
+            veh_ids = ast.literal_eval(str(eastbound_veh_ids_fetch))
         except Exception as e:
             raise ValueError("Expected convertible to tuple") from e
 
@@ -45,52 +44,20 @@ class stop_random_async_tls(Experiment):
 
         logging.info(chosen_veh_id)
 
-        await self.run.apply_actions(
-            sdk.ActionBundle(
-                [
-                    sdk.Action(
-                        "vehicle",
-                        "setSpeed",
-                        chosen_veh_id,
-                        [sdk.Parameter("speed", sdk.Value(0.0))],
-                    ),
-                    sdk.Action(
-                        "vehicle",
-                        "setSignals",
-                        chosen_veh_id,
-                        [
-                            sdk.Parameter(
-                                "signals", sdk.Value((1 << 2) + (1 << 10))
-                            )
-                        ],
-                    ),
-                ]
-            )
-        )
+        adapter.apply("vehicle", "setSpeed", chosen_veh_id, {"speed": 0})
+        adapter.apply("vehicle", "setSignals", chosen_veh_id, {"signals": (1 << 2) + (1 << 10)})
 
         logging.info(f"Selected and stopped {chosen_veh_id}.")
 
-        await self.run.run_time(30)
+        adapter.run_time(30)
 
-        await self.run.apply_actions(
-            sdk.ActionBundle(
-                [
-                    sdk.Action(
-                        "vehicle",
-                        "setSpeed",
-                        chosen_veh_id,
-                        [sdk.Parameter("speed", sdk.Value(-1.0))],
-                    ),
-                    sdk.Action(
-                        "vehicle",
-                        "setSignals",
-                        chosen_veh_id,
-                        [sdk.Parameter("signals", sdk.Value(-1))],
-                    ),
-                ]
-            )
-        )
+        adapter.apply("vehicle", "setSpeed", chosen_veh_id, {"speed": -1})
+        adapter.apply("vehicle", "setSignals", chosen_veh_id, {"signals": -1})
 
-        await self.run.run_time(100)
+        for _ in range(5):
+            adapter.apply("trafficlight", "setRedYellowGreenState", tls_id, {"state": "rGrG"})
+            adapter.run_time(50)
+            adapter.apply("trafficlight", "setRedYellowGreenState", tls_id, {"state": "GrGr"})
+            adapter.run_time(30)
 
-        tls_program.cancel()
+        adapter.deregister(static_tls_controller)

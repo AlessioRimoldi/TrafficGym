@@ -1,10 +1,6 @@
 from dataclasses import dataclass
-from typing import Awaitable, Callable, List, cast
+from typing import Coroutine, Any, Callable, List, TypedDict
 from pathlib import Path
-from trafficgym.api.engine_pb2 import (
-    DeriveFromArtefactRequest,
-    DeriveFromArtefactResponse,
-)
 from enum import Enum
 
 
@@ -32,7 +28,7 @@ class TransformationSpec:
     key: str
     inputs: List[InputSpec]
     outputs: List[OutputSpec]
-    handler: Callable[[dict[str, str], Runtime], Awaitable[dict[str, str]]]
+    handler: Callable[[dict[str, str], Runtime], Coroutine[Any, Any, dict[str, str]]]
     docstring: str
 
 
@@ -52,7 +48,8 @@ def register(spec: TransformationSpec) -> None:
 
 def resolve_inputs(
     spec: TransformationSpec,
-    request: DeriveFromArtefactRequest,
+    parameters: dict[str, str],
+    input_name_to_path: dict[str, str],
     runtime: Runtime,
 ) -> dict[str, str]:
     resolved: dict[str, str] = {}
@@ -60,7 +57,7 @@ def resolve_inputs(
 
     allowed_keys = {i.name for i in spec.inputs}
 
-    for key in request.target_file_paths:
+    for key in input_name_to_path:
         if key not in allowed_keys:
             raise ValueError(f"Unexpected input: {key}")
 
@@ -68,16 +65,16 @@ def resolve_inputs(
         key = input_spec.name
 
         if input_spec.type == InputType.FILE:
-            if key not in request.target_file_paths:
+            if key not in input_name_to_path:
                 if input_spec.required:
                     raise ValueError(f"Missing required input: {key}")
                 continue
 
-            resolved[key] = str(base_path / request.target_file_paths[key])
+            resolved[key] = str(base_path / input_name_to_path[key])
 
         elif input_spec.type == InputType.JSON:
-            if key in request.parameters:
-                resolved[key] = request.parameters[key]
+            if key in parameters:
+                resolved[key] = parameters[key]
             elif input_spec.required:
                 raise ValueError(f"Missing required parameter: {key}")
 
@@ -86,11 +83,15 @@ def resolve_inputs(
 
     return resolved
 
+class ResponseType(TypedDict):
+    errors: list[str]
+    warnings: list[str]
+    derived_artefact_paths: dict[str, str]
 
 def build_response(
     spec: TransformationSpec, result: dict[str, str]
-) -> DeriveFromArtefactResponse:
-    output = {}
+) -> ResponseType:
+    output: dict[str, str] = {}
 
     for output_spec in spec.outputs:
         key = output_spec.name
@@ -100,9 +101,9 @@ def build_response(
 
         output[key] = result[key]
 
-    return DeriveFromArtefactResponse(
-        errors=[], warnings=[], derived_artefact_paths=output
-    )
+    return {
+        "errors": [], "warnings": [], "derived_artefact_paths": output
+    }
 
 def get_spec_or_none(key: str) -> TransformationSpec | None:
     return REGISTRY.get(key)

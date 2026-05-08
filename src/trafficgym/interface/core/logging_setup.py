@@ -11,6 +11,8 @@ from .models import (
     TransformationRequest,
 )
 from datetime import datetime, timezone
+from django.db import transaction
+from uuid import UUID
 
 import queue
 import logging
@@ -26,13 +28,13 @@ class PreserveExcInfoQueueHandler(logging.handlers.QueueHandler):
         return copy.copy(record)
 
 class BaseLogPersistenceHandler(logging.Handler):
-    engine_run_id: str | None
-    BATCH_SIZE = 50
+    BATCH_SIZE = 2000
 
     def __init__(self) -> None:
         super().__init__()
         self._log_queue: queue.Queue[logging.LogRecord] = queue.Queue()
         self._stop_event = threading.Event()
+
         self._consumer_thread = threading.Thread(
             target=self._consume_queue, daemon=True
         )
@@ -54,12 +56,17 @@ class BaseLogPersistenceHandler(logging.Handler):
         # self._queue_handler = logging.handlers.QueueHandler(self._log_queue)
         self._queue_handler = PreserveExcInfoQueueHandler(self._log_queue)
 
-        for logger in self.loggers.values():
+        for name, logger in self.loggers.items():
             logger.addHandler(self._queue_handler)
+            if name != "root":
+                logger.propagate = False
+
 
         self.loggers["root"].addFilter(
             lambda r: r.name != "log_persistence_internal"
         )
+
+        self.engine_run_id: UUID | None = None
 
     def _emit_batch(self, records: list[logging.LogRecord]) -> None:
         raise NotImplementedError("Not implemented")
@@ -86,14 +93,6 @@ class BaseLogPersistenceHandler(logging.Handler):
         self,
         record: logging.LogRecord,
     ) -> tuple[str, str]:
-        # 1. RPC-style enriched exception (preferred)
-        server_tb = getattr(record, "server_traceback", None)
-        server_type = getattr(record, "error_type", None)
-
-        if server_tb:
-            return server_type or "RemoteException", server_tb
-
-        # 2. Standard Python exception
         if record.exc_info:
             exc_type = record.exc_info[0]
             return (
@@ -110,8 +109,10 @@ class BaseLogPersistenceHandler(logging.Handler):
         self._stop_event.set()
         self._consumer_thread.join()
 
-        for logger in self.loggers.values():
+        for name, logger in self.loggers.items():
             logger.removeHandler(self._queue_handler)
+            if name != "root":
+                logger.propagate = True
 
 
 class LogPersistenceHandlerTransformRequest(BaseLogPersistenceHandler):
@@ -147,8 +148,9 @@ class LogPersistenceHandlerTransformRequest(BaseLogPersistenceHandler):
                     f"Failed to create log message for {record.name}: {e}"
                 )
 
-        if worker_objs:
-            WorkerLogEntryTransformRequest.objects.bulk_create(worker_objs)
+        with transaction.atomic():
+            if worker_objs:
+                WorkerLogEntryTransformRequest.objects.bulk_create(worker_objs)
 
 
 class LogPersistenceHandlerRunRequest(BaseLogPersistenceHandler):
@@ -184,17 +186,19 @@ class LogPersistenceHandlerRunRequest(BaseLogPersistenceHandler):
                     f"Failed to create log message for {record.name}: {e}"
                 )
 
-        if worker_objs:
-            WorkerLogEntryRunRequest.objects.bulk_create(worker_objs)
+        with transaction.atomic():
+            if worker_objs:
+                WorkerLogEntryRunRequest.objects.bulk_create(worker_objs)
 
 
 class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
-    def __init__(self, run_execution: RunExecution):
+    def __init__(self, run_execution: RunExecution, engine_run_id: UUID):
         super().__init__()
         self.run_execution = run_execution
-
-    def set_engine_run_id(self, engine_run_id: str) -> None:
         self.engine_run_id = engine_run_id
+
+    # def set_engine_run_id(self, engine_run_id: UUID) -> None:
+    #     self.engine_run_id = engine_run_id
 
     def _emit_batch(self, records: list[logging.LogRecord]) -> None:
         rpc_objs, sub_objs, tele_objs, worker_objs = [], [], [], []
@@ -282,14 +286,15 @@ class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
                     f"Failed to create log message for {record.name}: {e}"
                 )
 
-        if rpc_objs:
-            RPCLogEntry.objects.bulk_create(rpc_objs)
+        with transaction.atomic():
+            if rpc_objs:
+                RPCLogEntry.objects.bulk_create(rpc_objs)
 
-        if sub_objs:
-            SubscriptionLogEntry.objects.bulk_create(sub_objs)
+            if sub_objs:
+                SubscriptionLogEntry.objects.bulk_create(sub_objs)
 
-        if tele_objs:
-            TelemetryLogEntry.objects.bulk_create(tele_objs)
+            if tele_objs:
+                TelemetryLogEntry.objects.bulk_create(tele_objs)
 
-        if worker_objs:
-            WorkerLogEntryRunExecution.objects.bulk_create(worker_objs)
+            if worker_objs:
+                WorkerLogEntryRunExecution.objects.bulk_create(worker_objs)
