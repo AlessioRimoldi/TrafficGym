@@ -1,20 +1,26 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Mapping, Protocol, Union, Callable
+from typing import Any, Callable, Generator, Mapping, Protocol, Union
 import uuid
 
-class Controller(Protocol):
-    def on_tick(self, adapter: SimulationPort, sim_time: float) -> None: ...
+
+class _ControllerNode(Protocol):
+    def step(self, inputs: Any) -> Any: ...
+
 
 MappingValue = Union[str, int, float]
 Observation = Mapping[str, MappingValue]
 Params = Mapping[str, MappingValue]
+
 
 @dataclass
 class RunConfig:
     sumocfg_path: str
     sumo_binary: str
     seed: int
+
 
 class InvalidGetterError(Exception):
     def __init__(self, message: str):
@@ -23,7 +29,6 @@ class InvalidGetterError(Exception):
 
 class SimulationPort(ABC):
     def __init__(self, step_length_ms: int) -> None:
-        """All subclasses must call super().__init__()"""
         self.run_id = str(uuid.uuid4())
         self.started: bool = False
         self.closed: bool = False
@@ -31,23 +36,32 @@ class SimulationPort(ABC):
         self.last_metrics: Observation = {}
         self.max_steps: int | None = None
         self._step_length_ms: int = step_length_ms
-        self._controllers: list[Controller] = []
+        self._controllers: list[_WiredController] = []
         self.after_tick: Callable[[int, float, Observation], None] | None = None
 
     @property
     def steps_per_second(self) -> float:
-        return 1000 / (self._step_length_ms)
+        return 1000 / self._step_length_ms
 
     @property
     def seconds_per_step(self) -> float:
         return self._step_length_ms / 1000
 
-    def register(self, controller: Controller) -> None:
-        self._controllers.append(controller)
+    @contextmanager
+    def controlled(
+        self,
+        controller: _ControllerNode,
+        *,
+        observe: Callable[[SimulationPort, float], dict[str, Any]],
+        actuate: Callable[[SimulationPort, dict[str, Any]], None],
+    ) -> Generator[None, None, None]:
+        bound = _WiredController(controller, observe, actuate)
+        self._controllers.append(bound)
+        try:
+            yield
+        finally:
+            self._controllers.remove(bound)
 
-    def deregister(self, controller: Controller) -> None:
-        self._controllers.remove(controller)
-    
     def run_time(self, seconds: float) -> None:
         steps = round(seconds * self.steps_per_second)
         for _ in range(steps):
@@ -74,19 +88,11 @@ class SimulationPort(ABC):
     @abstractmethod
     def start(self) -> None: ...
 
-    """Start the simulation"""
-
     @abstractmethod
     def close(self) -> None: ...
 
-    """Close the simulation"""
-
     @abstractmethod
     def tick(self) -> tuple[int, float, Observation]: ...
-
-    """Step the simulation forward.
-    Returns the step count, time and
-    telemetry after the step"""
 
     @abstractmethod
     def query(
@@ -97,8 +103,6 @@ class SimulationPort(ABC):
         args: Params,
     ) -> str: ...
 
-    """query simulation state"""
-
     @abstractmethod
     def apply(
         self,
@@ -108,12 +112,20 @@ class SimulationPort(ABC):
         args: Params,
     ) -> None: ...
 
-    """set simulation state"""
 
-    # @abstractmethod
-    # def list_domains(self) -> list[str]: ...
-    # """retrieve a list of supported domain names of this adapter"""
+class _WiredController:
+    def __init__(
+        self,
+        node: _ControllerNode,
+        observe: Callable[[SimulationPort, float], dict[str, Any]],
+        actuate: Callable[[SimulationPort, dict[str, Any]], None],
+    ) -> None:
+        self._node = node
+        self._observe = observe
+        self._actuate = actuate
 
-    # @abstractmethod
-    # def list_methods(self, domain: str) -> list[str]: ...
-    # """retrieve a list of support method within a domain of this adapter"""
+    def on_tick(self, adapter: SimulationPort, sim_time: float) -> None:
+        inputs = self._observe(adapter, sim_time)
+        result = self._node.step(inputs)
+        if result:
+            self._actuate(adapter, result)

@@ -133,7 +133,7 @@ class Experiment(models.Model):
         primary_key=True, max_length=64, unique=True, blank=True, editable=False
     )
     name = models.CharField(max_length=64)
-    version = models.IntegerField()
+    version = models.IntegerField(default=0)
     artefact: models.ForeignKey[Artefact] = models.ForeignKey(
         Artefact, on_delete=models.PROTECT, related_name="experiments"
     )
@@ -157,11 +157,13 @@ class Experiment(models.Model):
     def save(self, *args: Any, **kwargs: Any) -> None:
         if not self._state.adding:
             raise ValueError("Experiments are immutable")
-
-        else:
-            if not self.sha256:
-                self.sha256 = self.compute_sha256()
-
+        if not self.sha256:
+            self.sha256 = self.compute_sha256()
+        if self.version == 0:
+            last = Experiment.objects.filter(name=self.name).aggregate(
+                models.Max("version")
+            )["version__max"]
+            self.version = (last or 0) + 1
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -418,6 +420,32 @@ class TransformationRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
     started_at = models.DateTimeField(null=True, blank=True, editable=False)
     finished_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+
+class ExperimentGraph(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    version = models.IntegerField(default=0)
+    scenario: models.ForeignKey[Scenario] = models.ForeignKey(
+        Scenario, on_delete=models.PROTECT, related_name="experiment_graphs"
+    )
+    experiment: models.ForeignKey[Experiment | None] = models.ForeignKey(
+        Experiment,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="experiment_graphs",
+    )
+    graph = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self._state.adding and self.version == 0:
+            last = ExperimentGraph.objects.filter(name=self.name).aggregate(
+                models.Max("version")
+            )["version__max"]
+            self.version = (last or 0) + 1
+        super().save(*args, **kwargs)
 
 
 class WorkerLogEntryTransformRequest(models.Model):

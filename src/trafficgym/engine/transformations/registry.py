@@ -5,8 +5,8 @@ from enum import Enum
 
 
 class InputType(str, Enum):
-    FILE = "file"
-    JSON = "json"
+    FILE = "FILE"
+    JSON = "JSON"
 
 
 @dataclass

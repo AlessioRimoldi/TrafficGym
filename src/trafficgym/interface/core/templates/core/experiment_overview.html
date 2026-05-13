@@ -1,7 +1,9 @@
 {% extends "core/base.html" %}
 {% block title %}Experiment Overview{% endblock %}
+{% load static %}
 
 {% block content %}
+<script type="module" src="{% static "core/js/build/experimentGraphBuilder.js" %}" defer></script>
 {% if messages %}
 <div class="container mt-3" id="messageBox">
     {% for message in messages %}
@@ -23,7 +25,7 @@
             <li>
                 <a href="#" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Import from File</a>
             </li>
-            <li><a href="#" class="dropdown-item">
+            <li><a href="#" class="dropdown-item open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}">
                 Create from Scenario
             </a></li>
         </ul>
@@ -47,11 +49,6 @@
                         {% if form.name.errors %}
                             <div class="text-danger">{{ form.name.errors }}</div>
                         {% endif %}
-                        <label for="{{ form.version.id_for_label }}">Version</label>
-                        {{ form.version }}
-                        {% if form.version.errors %}
-                            <div class="text-danger">{{ form.version.errors }}</div>
-                        {% endif %}
                     </div>
                     <div class="mb-3">
                         <label for="{{ form.upload_file.id_for_label }}">Upload File</label>
@@ -70,29 +67,124 @@
         </div>
     </div>
 </div>
-<div class="row gx-2 gy-3">
-    {% for experiment in experiments %}
+{% if experiment_graph_groups %}
+<h5 class="text-muted mb-2 mt-1">Graph-based</h5>
+<div class="row gx-2 gy-3 mb-4">
+    {% for latest_eg, older_egs in experiment_graph_groups %}
     <div class="col-6">
         <div class="card h-100">
-            <div class="card-header fs-4 fw-bold py-3 text-truncate">
-                {{ experiment.name }} v{{ experiment.version }}
-                <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">SHA256: {{ experiment.sha256|slice:":20" }}...</span></h1>
+            <div class="card-header fw-bold py-2 d-flex align-items-center gap-2">
+                <span class="text-truncate">{{ latest_eg.name }}</span>
+                <span class="badge bg-secondary fw-normal ms-1 flex-shrink-0">v{{ latest_eg.version }}</span>
+                <span class="badge bg-secondary fw-normal flex-shrink-0">graph</span>
+                <a href="#" class="btn btn-outline-secondary btn-sm ms-auto flex-shrink-0 open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ latest_eg.id }}">New from this</a>
+                {% if older_egs %}
+                <button class="btn btn-sm btn-link text-muted p-0 flex-shrink-0"
+                        data-bs-toggle="collapse" data-bs-target="#eg-older-{{ forloop.counter }}">
+                    +{{ older_egs|length }} older
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body py-2">
+                <div class="small text-muted mb-1">Scenario: <span class="text-body">{{ latest_eg.scenario.name }}</span></div>
+                <div class="small text-muted mb-1">
+                    {{ latest_eg.graph.pipelines|length }} pipeline{{ latest_eg.graph.pipelines|length|pluralize }} &middot;
+                    {{ latest_eg.graph.phases|length }} phase{{ latest_eg.graph.phases|length|pluralize }}
+                </div>
+                {% if latest_eg.experiment %}
+                <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' latest_eg.experiment.artefact_id %}" class="font-monospace">{{ latest_eg.experiment.name }} v{{ latest_eg.experiment.version }}</a></div>
+                {% endif %}
+                <div class="small text-muted">Created {{ latest_eg.created_at|date:"Y-m-d H:i" }}</div>
+            </div>
+            {% if older_egs %}
+            <div class="collapse border-top" id="eg-older-{{ forloop.counter }}">
+                {% for old_eg in older_egs %}
+                <div class="card-body py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="fw-bold">v{{ old_eg.version }}</span>
+                        <a href="#" class="btn btn-outline-secondary btn-sm ms-auto open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ old_eg.id }}">New from this</a>
+                    </div>
+                    <div class="small text-muted mb-1">
+                        {{ old_eg.graph.pipelines|length }} pipeline{{ old_eg.graph.pipelines|length|pluralize }} &middot;
+                        {{ old_eg.graph.phases|length }} phase{{ old_eg.graph.phases|length|pluralize }}
+                    </div>
+                    {% if old_eg.experiment %}
+                    <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' old_eg.experiment.artefact_id %}" class="font-monospace">{{ old_eg.experiment.name }} v{{ old_eg.experiment.version }}</a></div>
+                    {% endif %}
+                    <div class="small text-muted">Created {{ old_eg.created_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if experiment_groups %}
+<h5 class="text-muted mb-2">File-based</h5>
+{% endif %}
+<div class="row gx-2 gy-3">
+    {% for latest, older in experiment_groups %}
+    <div class="col-6">
+        <div class="card h-100">
+            <div class="card-header fw-bold py-2 d-flex align-items-center gap-2">
+                <a href="{% url 'artefact_detail' latest.artefact_id %}" class="text-decoration-none text-reset text-truncate">{{ latest.name }}</a>
+                <span class="badge bg-secondary fw-normal flex-shrink-0">v{{ latest.version }}</span>
+                {% if older %}
+                <button class="btn btn-sm btn-link text-muted p-0 ms-auto flex-shrink-0"
+                        data-bs-toggle="collapse" data-bs-target="#exp-older-{{ forloop.counter }}">
+                    +{{ older|length }} older
+                </button>
+                {% endif %}
             </div>
             <div class="card-body">
-                <ul class="list-unstylesd mb-0">
-                    <li><strong>Used in Run Requests (scenarios)</strong>: <ul>
-                    {% for run_request in experiment.run_requests.all %}
-                        <li><a href="{% url "run_request_detail" run_request.id %}">{{ run_request.id }} ({{ run_request.scenario.name }})</a></li>
-                    {% empty %}
-                        Not used in any run requests
-                    {% endfor %}
-                    </ul></li>
+                <ul class="list-unstyled mb-0">
+                    <li><strong>Used in Run Requests (scenarios)</strong>:
+                        <ul>
+                        {% for run_request in latest.run_requests.all %}
+                            <li><a href="{% url 'run_request_detail' run_request.id %}">{{ run_request.id }} ({{ run_request.scenario.name }})</a></li>
+                        {% empty %}
+                            <li>Not used in any run requests</li>
+                        {% endfor %}
+                        </ul>
+                    </li>
                 </ul>
             </div>
+            {% if older %}
+            <div class="collapse border-top" id="exp-older-{{ forloop.counter }}">
+                {% for old in older %}
+                <div class="card-body {% if not forloop.last %}border-bottom{% endif %}">
+                    <div class="mb-2">
+                        <a href="{% url 'artefact_detail' old.artefact_id %}" class="fw-bold text-decoration-none">v{{ old.version }}</a>
+                        <span class="text-muted ms-1" style="font-size:0.7em;font-family:monospace;">{{ old.sha256|slice:":20" }}…</span>
+                    </div>
+                    <ul class="list-unstyled mb-0">
+                        <li><strong>Used in Run Requests (scenarios)</strong>:
+                            <ul>
+                            {% for run_request in old.run_requests.all %}
+                                <li><a href="{% url 'run_request_detail' run_request.id %}">{{ run_request.id }} ({{ run_request.scenario.name }})</a></li>
+                            {% empty %}
+                                <li>Not used in any run requests</li>
+                            {% endfor %}
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
     </div>
     {% empty %}
-        <div>No Experiments to Display</div>
+        {% if not experiment_graphs %}<div>No Experiments to Display</div>{% endif %}
     {% endfor %}
+</div>
+
+<div class="modal fade" id="graphBuilderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content" id="graphBuilderModalContent"></div>
+    </div>
 </div>
 {% endblock %}

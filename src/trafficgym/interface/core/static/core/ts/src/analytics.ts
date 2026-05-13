@@ -1,4 +1,4 @@
-import type { Chart as ChartType, ChartDataset, Point, DatasetChartOptions} from 'chart.js'
+import type { Chart as ChartType, ChartDataset, Point } from 'chart.js'
 import type {} from 'bootstrap'
 
 declare const Chart: typeof ChartType;
@@ -141,13 +141,21 @@ document.addEventListener("DOMContentLoaded", () => {
             };
 
             if (!aggMode || aggMode === "") {
-                runExecsToUse.forEach(runExec => {
+                if (runExecsToUse.length > 0) {
+                    runExecsToUse.forEach(runExec => {
+                        (currentData.runs[rid] ||= []).push({
+                            subscription: dataToLoad.subscription,
+                            aggMode: dataToLoad.aggMode,
+                            runExecutions: [runExec]
+                        });
+                    });
+                } else {
                     (currentData.runs[rid] ||= []).push({
                         subscription: dataToLoad.subscription,
                         aggMode: dataToLoad.aggMode,
-                        runExecutions: [runExec]
+                        runExecutions: [],
                     });
-                });
+                }
             } else {
                 (currentData.runs[rid] ||= []).push(dataToLoad);
             }
@@ -338,8 +346,6 @@ document.addEventListener("DOMContentLoaded", () => {
             modal.show()
         })
     });
-
-    const urlParams = new URLSearchParams(window.location.search);
 
     function shortenFingerprint(fingerprint: string) {
         return fingerprint.split(".").map(subPart => subPart.slice(0, 4)).join(".")

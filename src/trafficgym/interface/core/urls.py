@@ -84,6 +84,21 @@ urlpatterns = [
         name="list_transformations",
     ),
     path(
+        "api/scenarios/<uuid:scenario_id>/inspection",
+        views.scenario_inspection_view,
+        name="scenario_inspection",
+    ),
+    path(
+        "api/experiment_graphs/",
+        views.save_experiment_graph,
+        name="save_experiment_graph",
+    ),
+    path(
+        "experiment_graph_builder_modal",
+        views.experiment_graph_builder_modal,
+        name="experiment_graph_builder_modal",
+    ),
+    path(
         "create_transformation_request",
         views.create_transform_request,
         name="create_transformation_request",

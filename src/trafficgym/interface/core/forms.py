@@ -62,7 +62,6 @@ class ScenarioForm(forms.ModelForm):
         upload_results: list[ArtefactResolution] = []
 
         for artefact in self.cleaned_data.get("existing_artefacts", []):
-            scenario.artefacts.add(artefact)
             reused.append(artefact)
 
 
@@ -86,52 +85,97 @@ class ScenarioForm(forms.ModelForm):
             .first()
         )
 
-        spec = get_spec_or_none("netpreview")
+        preview_spec = get_spec_or_none("netpreview")
+        inspect_spec = get_spec_or_none("inspect")
 
         if net_artefact is None:
             logger.warning(
                 f"No .net.xml artefact found for scenario {scenario.id}"
             )
 
-        elif spec is None:
+        elif preview_spec is None:
             logger.error("No spec found for netpreview. Check the artefact transformation method is registered")
 
+        elif inspect_spec is None:
+            logger.error("No spec found for inspect. Check the scenario inspect transformation method is registered")
+
         else:
-            transform_request = TransformationRequest.objects.create(
-                method=spec.key,
+            preview_request = TransformationRequest.objects.create(
+                method=preview_spec.key,
                 spec_snapshot={
-                    "key": spec.key,
+                    "key": preview_spec.key,
                     "inputs": [
                         {
                             "name": i.name,
                             "type": i.type.value,
                             "required": i.required,
                         }
-                        for i in spec.inputs
+                        for i in preview_spec.inputs
                     ],
-                    "outputs": [o.name for o in spec.outputs],
-                    "docstring": spec.docstring,
+                    "outputs": [o.name for o in preview_spec.outputs],
+                    "docstring": preview_spec.docstring,
                 },
                 parameters={},
             )
 
             TransformationInput.objects.create(
-                transformation_request=transform_request,
+                transformation_request=preview_request,
                 artefact=net_artefact,
                 input_name="net_xml",
             )
 
             logger.info(
                 f"Created netpreview transform request "
-                f"{transform_request.id} for scenario {scenario.id}"
+                f"{preview_request.id} for scenario {scenario.id}"
             )
 
             transaction.on_commit(
                 lambda: derive_from_artefact.delay(
-                    str(transform_request.id)
+                    str(preview_request.id)
                 )
             )
 
+            inspect_request = TransformationRequest.objects.create(
+                method=inspect_spec.key,
+                spec_snapshot={
+                    "key": inspect_spec.key,
+                    "inputs": [
+                        {
+                            "name": i.name,
+                            "type": i.type.value,
+                            "required": i.required,
+                        }
+                        for i in inspect_spec.inputs
+                    ],
+                    "outputs": [o.name for o in inspect_spec.outputs],
+                    "docstring": inspect_spec.docstring,
+                },
+                parameters={},
+            )
+
+            TransformationInput.objects.create(
+                transformation_request=inspect_request,
+                artefact=net_artefact,
+                input_name="net_xml"
+            )
+
+            # TransformationInput.objects.create(
+            #     transformation_reques=inspect_request,
+            #     artefact=add_artefact,
+            #     input_name="add_xml"
+            # )
+
+
+            logger.info(
+                f"Created inspect transform request "
+                f"{inspect_request.id} for scenario {scenario.id}"
+            )
+
+            transaction.on_commit(
+                lambda: derive_from_artefact.delay(
+                    str(inspect_request.id)
+                )
+            )
 
         return scenario, created, reused
 
@@ -141,7 +185,7 @@ class ExperimentForm(forms.ModelForm):
 
     class Meta:
         model = Experiment
-        fields = ["name", "version"]
+        fields = ["name"]
 
     def save(
         self, commit: bool = True

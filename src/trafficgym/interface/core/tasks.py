@@ -213,7 +213,7 @@ def process_run_request(
 
                     handler = LogPersistenceHandlerRunExecution(execution, engine_run_id)
 
-                    cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo", seed=cast(int, execution.seed))
+                    cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo-gui", seed=cast(int, execution.seed))
                     adapter = LibsumoAdapter(cfg, step_length_ms=1000)
                     experiment = ExperimentClass()
                     sub_logger = logging.getLogger("subscription")

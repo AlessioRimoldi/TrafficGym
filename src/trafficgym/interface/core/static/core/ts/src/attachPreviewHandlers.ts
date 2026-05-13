@@ -1,6 +1,16 @@
 export function attachPreviewHandlers(root: Document | HTMLElement = document) {
+    const previewModalEl = document.getElementById("previewModal") as HTMLDivElement;
+    const previewModal = new window.bootstrap.Modal(previewModalEl);
+    let currentBlobUrl: string | null = null;
+
+    previewModalEl.addEventListener("hidden.bs.modal", () => {
+        if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+            currentBlobUrl = null;
+        }
+    });
+
     root.addEventListener("click", async (e) => {
-        const previewModal = new window.bootstrap.Modal(document.getElementById("previewModal") as HTMLDivElement);
 
         const target = e.target as HTMLElement;
 
@@ -35,28 +45,31 @@ export function attachPreviewHandlers(root: Document | HTMLElement = document) {
 
         if (contentType.startsWith("image/")) {
             const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
+            currentBlobUrl = URL.createObjectURL(blob);
 
             const img = document.createElement("img");
-            img.src = url;
+            img.src = currentBlobUrl;
             img.className = "img-fluid";
-            img.onload = () => URL.revokeObjectURL(url);
 
             container.appendChild(img);
-        } 
-        else if (
+        } else if (
             contentType.includes("application/json") ||
             contentType.startsWith("text/")
         ) {
-            const text = await res.text();
+            let text = await res.text();
+
+            if (contentType.includes("application/json")) {
+                try {
+                    text = JSON.stringify(JSON.parse(text), null, 2);
+                } catch { /* leave as-is if parsing fails */ }
+            }
 
             const pre = document.createElement("pre");
             pre.className = "mb-0";
             pre.textContent = text.slice(0, 20000);
 
             container.appendChild(pre);
-        } 
-        else {
+        } else {
             container.textContent = "Preview not supported for this file type";
         }
 

@@ -17,8 +17,10 @@ from .models import (
     SubscriptionLogEntry,
     Scenario,
     Experiment,
+    ExperimentGraph,
     TransformationRequest,
     TransformationInput,
+    TransformationOutput,
 )
 from .forms import ScenarioForm, ExperimentForm, ArtefactForm
 from django.urls import reverse
@@ -32,6 +34,7 @@ from pathlib import Path
 from collections import defaultdict
 from typing import DefaultDict, Set, TypedDict, cast, Literal
 from trafficgym.engine.transformations.registry import REGISTRY
+from trafficgym.engine.control.codegen import _GraphSpec
 
 import json
 import mimetypes
@@ -54,6 +57,12 @@ class TransformationSpec(TypedDict):
     inputs: list[InputSpec]
     outputs: list[str]
     docstring: str
+
+
+class InspectionNotFoundPayload(TypedDict, total=False):
+    error: str
+    net_artefact_sha256: str
+    inspect_schema: TransformationSpec
 
 
 def index(_: HttpRequest) -> HttpResponse:
@@ -306,7 +315,7 @@ def artefacts_list_view(request: HttpRequest) -> HttpResponse:
 
     artefacts_list = Artefact.objects.prefetch_related(
         "scenarios", "experiments"
-    ).all()
+    ).order_by("-created_at")
     context = {"artefacts": artefacts_list, "form": form}
 
     return render(request, "core/artefacts_list.html", context)
@@ -688,11 +697,198 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
     else:
         form = ExperimentForm()
 
-    experiments = Experiment.objects.prefetch_related("run_requests").all()
+    from itertools import groupby
+    experiments_qs = list(
+        Experiment.objects.prefetch_related("run_requests__scenario")
+        .filter(experiment_graphs__isnull=True)
+        .order_by("name", "-version")
+    )
+    experiment_groups = [
+        (versions[0], versions[1:])
+        for _, g in groupby(experiments_qs, key=lambda e: e.name)
+        for versions in [list(g)]
+    ]
+    experiment_graphs_qs = list(
+        ExperimentGraph.objects.select_related("scenario", "experiment")
+        .order_by("name", "-version")
+    )
+    experiment_graph_groups = [
+        (versions[0], versions[1:])
+        for _, g in groupby(experiment_graphs_qs, key=lambda eg: eg.name)
+        for versions in [list(g)]
+    ]
+    scenarios = Scenario.objects.order_by("name").all()
 
-    context = {"experiments": experiments, "form": form}
+    context = {"experiment_groups": experiment_groups, "experiment_graph_groups": experiment_graph_groups, "form": form, "scenarios": scenarios}
 
     return render(request, "core/experiment_overview.html", context)
+
+
+def save_experiment_graph(request: HttpRequest) -> JsonResponse:
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON body"}, status=400)
+
+    name = str(data.get("name", "")).strip()
+    scenario_id = data.get("scenario_id")
+    pipelines = data.get("pipelines")
+    phases = data.get("phases")
+
+    if not name:
+        return JsonResponse({"error": "name is required"}, status=400)
+    if not scenario_id:
+        return JsonResponse({"error": "scenario_id is required"}, status=400)
+    if pipelines is None or phases is None:
+        return JsonResponse({"error": "pipelines and phases are required"}, status=400)
+
+    try:
+        scenario = Scenario.objects.get(pk=scenario_id)
+    except Scenario.DoesNotExist:
+        return JsonResponse({"error": "Scenario not found"}, status=404)
+
+    from trafficgym.engine.control.codegen import generate
+    from django.core.files.base import ContentFile
+    from django.utils import timezone
+    import hashlib
+
+    graph: _GraphSpec = {"pipelines": pipelines, "phases": phases}
+
+    # Input artefact: the graph JSON itself
+    graph_bytes = json.dumps(graph, separators=(",", ":"), sort_keys=True).encode()
+    graph_sha256 = hashlib.sha256(graph_bytes).hexdigest()
+    graph_artefact = Artefact.objects.filter(sha256=graph_sha256).first()
+    if not graph_artefact:
+        graph_artefact = Artefact.objects.create(
+            file=ContentFile(graph_bytes, name=f"{name}_graph.json"), #type: ignore
+            type="experiment_graph",
+        )
+
+    # Output artefact: the generated Python experiment file
+    source = generate(graph, name)
+    py_bytes = source.encode()
+    py_sha256 = hashlib.sha256(py_bytes).hexdigest()
+    py_artefact = Artefact.objects.filter(sha256=py_sha256).first()
+    if not py_artefact:
+        py_artefact = Artefact.objects.create(
+            file=ContentFile(py_bytes, name=f"{name}.py"), #type: ignore
+            type="experiment",
+        )
+
+    # TransformationRequest records the codegen provenance
+    now = timezone.now()
+    spec_snapshot = {
+        "key": "codegen",
+        "inputs": [{"name": "graph", "type": "JSON", "required": True}],
+        "outputs": [{"name": "experiment"}],
+        "docstring": "Generate a Python experiment file from an ExperimentGraph JSON spec.",
+    }
+    tr = TransformationRequest.objects.create(
+        method="codegen",
+        spec_snapshot=spec_snapshot,
+        parameters={"name": name},
+        status="COMPLETE",
+    )
+    tr.started_at = now
+    tr.finished_at = now
+    tr.save(update_fields=["started_at", "finished_at"])
+
+    TransformationInput.objects.create(
+        transformation_request=tr,
+        artefact=graph_artefact,
+        input_name="graph",
+    )
+    TransformationOutput.objects.create(
+        transformation_request=tr,
+        artefact=py_artefact,
+        role="experiment",
+    )
+
+    experiment = Experiment.objects.filter(artefact=py_artefact).first()
+    if not experiment:
+        experiment = Experiment.objects.create(name=name[:64], artefact=py_artefact)
+
+    eg = ExperimentGraph.objects.create(
+        name=name,
+        scenario=scenario,
+        experiment=experiment,
+        graph=graph,
+    )
+    return JsonResponse({"id": str(eg.id)}, status=201)
+
+
+def experiment_graph_builder_modal(request: HttpRequest) -> HttpResponse:
+    scenarios = Scenario.objects.order_by("name").all()
+    initial_graph = None
+    eg_id = request.GET.get("from")
+    if eg_id:
+        try:
+            eg = ExperimentGraph.objects.select_related("scenario").get(pk=eg_id)
+            initial_graph = {
+                "name": eg.name,
+                "scenario_id": str(eg.scenario.id),
+                "pipelines": eg.graph.get("pipelines", []),
+                "phases": eg.graph.get("phases", []),
+            }
+        except ExperimentGraph.DoesNotExist:
+            pass
+    return render(request, "core/experiment_graph_builder_modal.html", {
+        "scenarios": scenarios,
+        "initial_graph": initial_graph,
+    })
+
+
+def scenario_inspection_view(request: HttpRequest, scenario_id: str) -> JsonResponse:
+    import json
+
+    try:
+        scenario = Scenario.objects.prefetch_related("artefacts").get(id=scenario_id)
+    except Scenario.DoesNotExist:
+        return JsonResponse({"error": "Scenario not found"}, status=404)
+
+    net_artefact = (
+        scenario.artefacts.filter(original_name__iendswith=".net.xml")
+        .order_by("original_name")
+        .first()
+    )
+
+    if not net_artefact:
+        return JsonResponse({"error": "No .net.xml artefact found"}, status=404)
+
+    output = (
+        TransformationOutput.objects.filter(
+            transformation_request__method="inspect",
+            transformation_request__status="COMPLETE",
+            transformation_request__input_bindings__artefact=net_artefact,
+            role="inspection",
+        )
+        .select_related("artefact", "transformation_request")
+        .order_by("-transformation_request__finished_at")
+        .first()
+    )
+
+    if not output:
+        from trafficgym.engine.transformations.registry import REGISTRY
+        spec = REGISTRY.get("inspect")
+        payload: InspectionNotFoundPayload = {
+            "error": "Inspection not ready or not found",
+            "net_artefact_sha256": str(net_artefact.sha256),
+        }
+        if spec:
+            payload["inspect_schema"] = TransformationSpec(
+                key=spec.key,
+                inputs=[InputSpec(name=i.name, type=i.type.value, required=i.required) for i in spec.inputs],
+                outputs=[o.name for o in spec.outputs],
+                docstring=spec.docstring,
+            )
+        return JsonResponse(payload, status=404)
+
+    with output.artefact.file.open("r") as f:
+        data = json.load(f)
+
+    return JsonResponse(data)
 
 
 def transformation_requests_list_view(request: HttpRequest) -> HttpResponse:
@@ -745,12 +941,12 @@ def list_transformations_view(_: HttpRequest) -> JsonResponse:
                     "inputs": [
                         {
                             "name": i.name,
-                            "type": i.type,
+                            "type": i.type.value,
                             "required": i.required,
                         }
                         for i in t.inputs
                     ],
-                    "outputs": list(t.outputs),
+                    "outputs": [o.name for o in t.outputs],
                     "docstring": t.docstring,
                 }
                 for t in resp

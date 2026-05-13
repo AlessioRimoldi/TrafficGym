@@ -25,7 +25,7 @@ function updateHeaderCheckbox() {
 
 function updateButtonState() {
     const anyChecked = (document.querySelectorAll(".row-checkbox:checked") as NodeListOf<HTMLInputElement>).length > 0;
-    (document.getElementById("transformModalButton") as HTMLButtonElement).disabled = !anyChecked;
+    document.querySelectorAll<HTMLButtonElement>(".transform-modal-btn").forEach(btn => btn.disabled = !anyChecked);
 }
 
 document.addEventListener("change", (e) => {
@@ -41,7 +41,7 @@ document.addEventListener("change", (e) => {
 
 const transformModal = new bootstrap.Modal(document.getElementById("transformModal") as HTMLDivElement);
 
-const transformModalButton = document.getElementById("transformModalButton") as HTMLButtonElement;
+const transformModalButtons = document.querySelectorAll<HTMLButtonElement>(".transform-modal-btn");
 const transformModalBody = document.querySelector("#transformModalBody") as HTMLDivElement;
 
 const transformButton = document.getElementById("transformButton") as HTMLButtonElement;
@@ -136,6 +136,15 @@ function renderMappingUI(mappingContainer: HTMLDivElement, selectedArtefacts: { 
                 select.appendChild(opt);
             });
 
+            // auto-select artefact whose name ends with the expected extension
+            const expectedExt = "." + input.name.replace(/_/g, ".");
+            const autoMatch = selectedArtefacts.find(a =>
+                a.name.toLowerCase().endsWith(expectedExt.toLowerCase())
+            );
+            if (autoMatch) {
+                select.value = autoMatch.id;
+            }
+
             row.appendChild(label);
             row.appendChild(select);
 
@@ -143,6 +152,7 @@ function renderMappingUI(mappingContainer: HTMLDivElement, selectedArtefacts: { 
         });
 
         mappingContainer.appendChild(fileSection);
+        validateTransformReady(transformation);
     }
 
     // --- JSON inputs (code box) ---
@@ -215,7 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updateButtonState();
     });
 
-    transformModalButton.addEventListener("click", async () => {
+    transformModalButtons.forEach(btn => btn.addEventListener("click", async () => {
         transformButton.disabled = true;
 
         const selected = getVisibleCheckboxes().filter(cb => cb.checked);
@@ -346,7 +356,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
             new bootstrap.Tooltip(el);
         });
-    })
+    }));
 
     transformButton.addEventListener("click", async () => {
         transformButton.disabled = true;
@@ -360,7 +370,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ? {
                 key: selectedTransformation.key,
                 inputs: selectedTransformation.inputs,
-                outputs: selectedTransformation.outputs
+                outputs: selectedTransformation.outputs,
+                docstring: selectedTransformation.docstring,
             }
             : null;
 

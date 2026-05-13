@@ -3,11 +3,9 @@ from trafficgym.engine.ports.simulation import (
     MappingValue,
     Observation,
     Params,
-    InvalidGetterError,
 )
 from dataclasses import dataclass
 from libsumo import TraCIException  # type: ignore[import-untyped]
-from trafficgym.experiment_sdk import sdk
 import logging
 
 
