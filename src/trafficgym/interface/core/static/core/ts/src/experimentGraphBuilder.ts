@@ -32,13 +32,12 @@ const ACTUATOR_DOMAIN: Record<string, string> = {
 const OBSERVER_TYPE_FROM_DOMAIN = Object.fromEntries(Object.entries(OBSERVER_DOMAIN).map(([t, d]) => [d, t]));
 const ACTUATOR_TYPE_FROM_DOMAIN = Object.fromEntries(Object.entries(ACTUATOR_DOMAIN).map(([t, d]) => [d, t]));
 
-interface ParamDef {
-    name: string;
-    label: string;
-    default: number;
-}
+type ParamDef =
+    | { type?: "number"; name: string; label: string; default: number }
+    | { type: "string";  name: string; label: string; default: string }
+    | { type: "phase_list"; name: string; label: string };
 
-const CONTROLLERS: { key: string; label: string; params?: ParamDef[]; hasPhaseList?: boolean }[] = [
+const BLOCKS: { key: string; label: string; params?: ParamDef[] }[] = [
     {
         key: "RampMeterController",
         label: "Ramp Meter",
@@ -51,7 +50,21 @@ const CONTROLLERS: { key: string; label: string; params?: ParamDef[]; hasPhaseLi
             { name: "choke_down",    label: "CHK → 10TH",  default: 25 },
         ],
     },
-    { key: "StaticTLSController", label: "Static TLS", hasPhaseList: true },
+    {
+        key: "StaticTLSController",
+        label: "Static TLS",
+        params: [{ type: "phase_list", name: "phase_rows", label: "Phases" }],
+    },
+    {
+        key: "RollingAverage",
+        label: "Rolling Avg",
+        params: [{ name: "window", label: "Window", default: 10 }],
+    },
+    {
+        key: "ExponentialMovingAverage",
+        label: "Exp Avg",
+        params: [{ name: "alpha", label: "Alpha (0–1)", default: 0.3 }],
+    },
 ];
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
@@ -96,13 +109,12 @@ interface StaticTLSPhaseRow {
     duration: number;
 }
 
-interface CtrlReg {
+interface BlockReg {
     id: string;
     key: string;
-    params: Record<string, number>;
-    staticPhaseRows?: StaticTLSPhaseRow[];
-    inPort?: HTMLElement;
-    outPort?: HTMLElement;
+    params: Record<string, unknown>;
+    inPort: HTMLElement;
+    outPort: HTMLElement;
 }
 
 interface ObserverNodeRec {
@@ -121,21 +133,29 @@ interface ActuatorNodeRec {
     inPort: HTMLElement;
 }
 
+interface SinkReg {
+    id: string;
+    labelEl: HTMLInputElement;
+    inPort: HTMLElement;
+}
+
 // ─── Serialized graph spec ─────────────────────────────────────────────────────
+
+interface BlockSpec {
+    id: string;
+    key: string;
+    params: Record<string, unknown>;
+    input_from: string | null;
+    actuate_to: string | null;
+}
 
 interface PipelineSpec {
     id: string;
     name: string;
     observers: { id: string; domain: string; getter: string; object_id: string }[];
-    controllers: {
-        id: string;
-        key: string;
-        params: Record<string, number>;
-        static_phase_rows: StaticTLSPhaseRow[] | null;
-        observe_from: string | null;
-        actuate_to: string | null;
-    }[];
+    blocks: BlockSpec[];
     actuators: { id: string; domain: string; setter: string; object_id: string }[];
+    sinks: { id: string; label: string; input_from: string | null }[];
 }
 
 interface GraphSpec {
@@ -384,12 +404,14 @@ function createPipelineRow(
     let pendingPort: HTMLElement | null = null;
     let svgEl!: SVGSVGElement;
     const conns: Conn[] = [];
-    const ctrlRegs: CtrlReg[] = [];
+    const blockRegs: BlockReg[] = [];
     const obsNodes: ObserverNodeRec[] = [];
     const actNodes: ActuatorNodeRec[] = [];
-    let ctrlCounter = 0;
+    const sinkRegs: SinkReg[] = [];
+    let blkCounter = 0;
     let obsCounter = 0;
     let actCounter = 0;
+    let sinkCounter = 0;
 
     const markerId = `arrow_${reg.id}`;
 
@@ -487,6 +509,7 @@ function createPipelineRow(
     function makeCard(
         ports: HTMLElement[],
         onRemoveCard: () => void,
+        showRemoveBtn = true,
     ): { card: HTMLDivElement; body: HTMLDivElement } {
         const card = document.createElement("div");
         card.className = "card mb-3";
@@ -495,12 +518,14 @@ function createPipelineRow(
         const body = document.createElement("div");
         body.className = "card-body py-2 px-3 d-flex align-items-center";
 
-        const rm = document.createElement("button");
-        rm.className = "btn btn-sm btn-link text-danger p-0 ms-auto";
-        rm.innerHTML = "&times;";
-        rm.addEventListener("click", () => { dropConnsFor(ports); onRemoveCard(); card.remove(); });
+        if (showRemoveBtn) {
+            const rm = document.createElement("button");
+            rm.className = "btn btn-sm btn-link text-danger p-0 ms-auto";
+            rm.innerHTML = "&times;";
+            rm.addEventListener("click", () => { dropConnsFor(ports); onRemoveCard(); card.remove(); });
+            body.appendChild(rm);
+        }
 
-        body.appendChild(rm);
         card.append(body, ...ports);
         return { card, body };
     }
@@ -521,31 +546,76 @@ function createPipelineRow(
         return card;
     }
 
-    function makeControllerNode(
+    function makeBlockNode(
         key: string,
         params: ParamDef[],
-        paramValues: Record<string, number>,
-        staticPhaseRows: StaticTLSPhaseRow[] | null,
+        paramValues: Record<string, unknown>,
         onRemoveCard: () => void,
+        showRemoveBtn = true,
     ): { card: HTMLDivElement; inPort: HTMLElement; outPort: HTMLElement } {
         const inp = makePort("input");
         const out = makePort("output");
-        const { card, body } = makeCard([inp, out], onRemoveCard);
+        const { card, body } = makeCard([inp, out], onRemoveCard, showRemoveBtn);
 
-        if (params.length > 0 || staticPhaseRows !== null) {
+        if (params.length > 0) {
             body.classList.remove("d-flex", "align-items-center");
             body.classList.add("d-block");
 
             const topRow = document.createElement("div");
             topRow.className = "d-flex align-items-center mb-2";
             topRow.append(idLabel(key));
-            topRow.appendChild(body.lastElementChild!);
+            if (body.lastElementChild) topRow.appendChild(body.lastElementChild);
             body.prepend(topRow);
 
-            if (params.length > 0) {
-                const grid = document.createElement("div");
-                grid.className = "row g-1";
-                for (const p of params) {
+            const grid = document.createElement("div");
+            grid.className = "row g-1";
+
+            for (const p of params) {
+                if (p.type === "phase_list") {
+                    const rows = (paramValues[p.name] ?? []) as StaticTLSPhaseRow[];
+                    paramValues[p.name] = rows;
+
+                    const phaseWrap = document.createElement("div");
+                    phaseWrap.className = "col-12 mt-1";
+                    const lbl = document.createElement("div");
+                    lbl.className = "d-flex gap-1 mb-1";
+                    const stateHdr = document.createElement("span");
+                    stateHdr.className = "small text-muted flex-grow-1";
+                    stateHdr.textContent = "State";
+                    const durHdr = document.createElement("span");
+                    durHdr.className = "small text-muted";
+                    durHdr.style.width = "58px";
+                    durHdr.textContent = "Dur";
+                    lbl.append(stateHdr, durHdr);
+                    const rowsContainer = document.createElement("div");
+                    for (const r of rows) {
+                        rowsContainer.appendChild(makeStaticPhaseRow(r, rows));
+                    }
+                    const addRowBtn = document.createElement("button");
+                    addRowBtn.type = "button";
+                    addRowBtn.className = "btn btn-sm btn-outline-secondary mt-1";
+                    addRowBtn.textContent = "+ Add phase";
+                    addRowBtn.addEventListener("click", () => {
+                        const newRow: StaticTLSPhaseRow = { state: "", duration: 30 };
+                        rows.push(newRow);
+                        rowsContainer.appendChild(makeStaticPhaseRow(newRow, rows));
+                    });
+                    phaseWrap.append(lbl, rowsContainer, addRowBtn);
+                    grid.appendChild(phaseWrap);
+                } else if (p.type === "string") {
+                    const col = document.createElement("div");
+                    col.className = "col-6";
+                    const lbl = document.createElement("label");
+                    lbl.className = "form-label mb-0 small text-muted";
+                    lbl.textContent = p.label;
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.className = "form-control form-control-sm";
+                    input.value = String(paramValues[p.name] ?? p.default);
+                    input.addEventListener("input", () => { paramValues[p.name] = input.value; });
+                    col.append(lbl, input);
+                    grid.appendChild(col);
+                } else {
                     const col = document.createElement("div");
                     col.className = "col-6";
                     const lbl = document.createElement("label");
@@ -561,39 +631,9 @@ function createPipelineRow(
                     col.append(lbl, input);
                     grid.appendChild(col);
                 }
-                body.appendChild(grid);
             }
 
-            if (staticPhaseRows !== null) {
-                const colHeaders = document.createElement("div");
-                colHeaders.className = "d-flex gap-1 mb-1";
-                const stateHdr = document.createElement("span");
-                stateHdr.className = "small text-muted flex-grow-1";
-                stateHdr.textContent = "State";
-                const durHdr = document.createElement("span");
-                durHdr.className = "small text-muted";
-                durHdr.style.width = "58px";
-                durHdr.textContent = "Dur";
-                colHeaders.append(stateHdr, durHdr);
-                body.appendChild(colHeaders);
-
-                const rowsContainer = document.createElement("div");
-                for (const r of staticPhaseRows) {
-                    rowsContainer.appendChild(makeStaticPhaseRow(r, staticPhaseRows));
-                }
-                body.appendChild(rowsContainer);
-
-                const addRowBtn = document.createElement("button");
-                addRowBtn.type = "button";
-                addRowBtn.className = "btn btn-sm btn-outline-secondary mt-1";
-                addRowBtn.textContent = "+ Add phase";
-                addRowBtn.addEventListener("click", () => {
-                    const newRow: StaticTLSPhaseRow = { state: "", duration: 30 };
-                    staticPhaseRows.push(newRow);
-                    rowsContainer.appendChild(makeStaticPhaseRow(newRow, staticPhaseRows));
-                });
-                body.appendChild(addRowBtn);
-            }
+            body.appendChild(grid);
         } else {
             body.prepend(idLabel(key));
         }
@@ -617,8 +657,23 @@ function createPipelineRow(
 
     // ── Serialization ─────────────────────────────────────────────────────────
 
+    function byDomOrder<T extends { inPort: HTMLElement }>(regs: T[]): T[] {
+        return [...regs].sort((a, b) => {
+            const aEl = a.inPort.closest("[data-stage-id]");
+            const bEl = b.inPort.closest("[data-stage-id]");
+            if (!aEl || !bEl) return 0;
+            return aEl.compareDocumentPosition(bEl) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+        });
+    }
+
     function serialize(): PipelineSpec {
-        const outPortToObsId = new Map<HTMLElement, string>(obsNodes.map(o => [o.outPort, o.id]));
+        const orderedBlocks = byDomOrder(blockRegs);
+        const orderedSinks  = byDomOrder(sinkRegs);
+
+        const outPortToNodeId = new Map<HTMLElement, string>([
+            ...obsNodes.map(o => [o.outPort, o.id] as [HTMLElement, string]),
+            ...orderedBlocks.map(b => [b.outPort, b.id] as [HTMLElement, string]),
+        ]);
         const inPortToActId = new Map<HTMLElement, string>(actNodes.map(a => [a.inPort, a.id]));
 
         return {
@@ -630,16 +685,15 @@ function createPipelineRow(
                 getter: o.getterEl.value,
                 object_id: o.objectId,
             })),
-            controllers: ctrlRegs.map(c => {
-                const inConn  = conns.find(cn => cn.to   === c.inPort);
-                const outConn = conns.find(cn => cn.from === c.outPort);
+            blocks: orderedBlocks.map(b => {
+                const inConn  = conns.find(cn => cn.to   === b.inPort);
+                const outConn = conns.find(cn => cn.from === b.outPort);
                 return {
-                    id: c.id,
-                    key: c.key,
-                    params: { ...c.params },
-                    static_phase_rows: c.staticPhaseRows ? [...c.staticPhaseRows] : null,
-                    observe_from: inConn  ? (outPortToObsId.get(inConn.from)  ?? null) : null,
-                    actuate_to:   outConn ? (inPortToActId.get(outConn.to)    ?? null) : null,
+                    id: b.id,
+                    key: b.key,
+                    params: { ...b.params },
+                    input_from: inConn  ? (outPortToNodeId.get(inConn.from) ?? null) : null,
+                    actuate_to: outConn ? (inPortToActId.get(outConn.to)    ?? null) : null,
                 };
             }),
             actuators: actNodes.map(a => ({
@@ -648,6 +702,14 @@ function createPipelineRow(
                 setter: a.setterEl.value,
                 object_id: a.objectId,
             })),
+            sinks: orderedSinks.map(s => {
+                const inConn = conns.find(cn => cn.to === s.inPort);
+                return {
+                    id: s.id,
+                    label: s.labelEl.value,
+                    input_from: inConn ? (outPortToNodeId.get(inConn.from) ?? null) : null,
+                };
+            }),
         };
     }
 
@@ -657,7 +719,7 @@ function createPipelineRow(
     wrap.style.cssText = "position:relative;";
 
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:10;";
+    svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:10;";
     svg.innerHTML = `<defs>
         <marker id="${markerId}" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0,8 3,0 6" fill="#6c757d"/>
@@ -802,73 +864,135 @@ function createPipelineRow(
         );
     }
 
-    // ── Controller stage factory ──────────────────────────────────────────────
+    // ── Per-node stage factories ──────────────────────────────────────────────
 
-    function addControllerStage(): { addController: (key: string, paramValues: Record<string, number>, staticPhaseRows: StaticTLSPhaseRow[] | null) => CtrlReg } {
-        const stageCtrls: CtrlReg[] = [];
+    function makeBlockStage(key: string, paramValues: Record<string, unknown>): BlockReg {
+        const id = `blk_${blkCounter++}`;
+        const br: BlockReg = { id, key, params: paramValues, inPort: null!, outPort: null! };
+        blockRegs.push(br);
 
-        const stage = buildStage("Controllers", true, () => {
-            for (const cr of stageCtrls) {
-                ctrlRegs.splice(ctrlRegs.indexOf(cr), 1);
-            }
+        const bDef = BLOCKS.find(b => b.key === key);
+        const label = bDef?.label ?? key;
+        const stage = buildStage(label, true, () => {
+            blockRegs.splice(blockRegs.indexOf(br), 1);
         });
         stage.stageEl.dataset.stageId = `stage_${Date.now()}`;
 
-        function addControllerToStage(key: string, paramValues: Record<string, number>, staticPhaseRows: StaticTLSPhaseRow[] | null): CtrlReg {
-            const id = `ctrl_${ctrlCounter++}`;
-            const cr: CtrlReg = { id, key, params: paramValues, staticPhaseRows: staticPhaseRows ?? undefined };
-            ctrlRegs.push(cr);
-            stageCtrls.push(cr);
-            const cDef = CONTROLLERS.find(c => c.key === key);
-            const { card, inPort, outPort } = makeControllerNode(
-                key, cDef?.params ?? [], paramValues, staticPhaseRows,
-                () => {
-                    ctrlRegs.splice(ctrlRegs.indexOf(cr), 1);
-                    stageCtrls.splice(stageCtrls.indexOf(cr), 1);
-                },
-            );
-            cr.inPort = inPort;
-            cr.outPort = outPort;
-            stage.body.appendChild(card);
-            conns.forEach(syncLine);
-            return cr;
-        }
-
-        for (const c of CONTROLLERS) {
-            const btn = document.createElement("button");
-            btn.className = "btn btn-sm btn-outline-dark";
-            btn.textContent = `+ ${c.label}`;
-            btn.addEventListener("click", () => {
-                const paramValues: Record<string, number> = {};
-                for (const p of c.params ?? []) paramValues[p.name] = p.default;
-                addControllerToStage(c.key, paramValues, c.hasPhaseList ? [] : null);
-            });
-            stage.buttonsRow.appendChild(btn);
-        }
+        const { card, inPort, outPort } = makeBlockNode(
+            key, bDef?.params ?? [], paramValues, () => {}, false,
+        );
+        br.inPort = inPort;
+        br.outPort = outPort;
+        stage.body.appendChild(card);
 
         row.insertBefore(stage.stageEl, addStageBtnEl);
         conns.forEach(syncLine);
-        return { addController: addControllerToStage };
+        return br;
+    }
+
+    function makeSinkStage(initialLabel = ""): SinkReg {
+        const id = `sink_${sinkCounter++}`;
+        const sr: SinkReg = { id, labelEl: null!, inPort: null! };
+        sinkRegs.push(sr);
+
+        const stage = buildStage("Sink", true, () => {
+            sinkRegs.splice(sinkRegs.indexOf(sr), 1);
+        });
+        stage.stageEl.dataset.stageId = `stage_${Date.now()}`;
+
+        const inp = makePort("input");
+        const card = document.createElement("div");
+        card.className = "card mb-3";
+        Object.assign(card.style, { position: "relative", overflow: "visible" });
+        const body = document.createElement("div");
+        body.className = "card-body py-2 px-3";
+        const labelInput = document.createElement("input");
+        labelInput.type = "text";
+        labelInput.className = "form-control form-control-sm";
+        labelInput.placeholder = "label…";
+        labelInput.value = initialLabel;
+        body.appendChild(labelInput);
+        card.append(body, inp);
+
+        sr.labelEl = labelInput;
+        sr.inPort = inp;
+
+        stage.body.appendChild(card);
+        row.insertBefore(stage.stageEl, addStageBtnEl);
+        conns.forEach(syncLine);
+        return sr;
     }
 
     // ── Add-stage button + actuator at end ────────────────────────────────────
 
     const addStageBtnEl = document.createElement("div");
     addStageBtnEl.style.cssText = "flex:0 0 auto;display:flex;align-items:flex-start;padding-top:2px;";
-    const addStageBtnInner = document.createElement("button");
-    addStageBtnInner.className = "btn btn-outline-secondary btn-sm";
-    addStageBtnInner.innerHTML = `<i class="bi bi-plus-lg me-1"></i>Stage`;
-    addStageBtnInner.addEventListener("click", addControllerStage);
-    addStageBtnEl.appendChild(addStageBtnInner);
+
+    const stageDropdown = document.createElement("div");
+    stageDropdown.className = "dropdown";
+
+    const stageToggle = document.createElement("button");
+    stageToggle.type = "button";
+    stageToggle.className = "btn btn-outline-secondary btn-sm dropdown-toggle";
+    stageToggle.setAttribute("data-bs-toggle", "dropdown");
+    stageToggle.innerHTML = `<i class="bi bi-plus-lg me-1"></i>Stage`;
+
+    const stageMenu = document.createElement("ul");
+    stageMenu.className = "dropdown-menu";
+
+    const stageBlocksHdr = document.createElement("li");
+    stageBlocksHdr.innerHTML = '<h6 class="dropdown-header">Blocks</h6>';
+    stageMenu.appendChild(stageBlocksHdr);
+
+    for (const b of BLOCKS) {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.className = "dropdown-item";
+        a.href = "#";
+        a.textContent = b.label;
+        a.addEventListener("click", (e) => {
+            e.preventDefault();
+            const pv: Record<string, unknown> = {};
+            for (const p of b.params ?? []) {
+                if (p.type === "phase_list") pv[p.name] = [];
+                else pv[p.name] = p.default;
+            }
+            makeBlockStage(b.key, pv);
+        });
+        li.appendChild(a);
+        stageMenu.appendChild(li);
+    }
+
+    const stageSinkDivLi = document.createElement("li");
+    stageSinkDivLi.innerHTML = '<hr class="dropdown-divider">';
+    stageMenu.appendChild(stageSinkDivLi);
+
+    const stageSinkHdr = document.createElement("li");
+    stageSinkHdr.innerHTML = '<h6 class="dropdown-header">Sinks</h6>';
+    stageMenu.appendChild(stageSinkHdr);
+
+    const stageSinkLi = document.createElement("li");
+    const stageSinkA = document.createElement("a");
+    stageSinkA.className = "dropdown-item";
+    stageSinkA.href = "#";
+    stageSinkA.textContent = "Sink";
+    stageSinkA.addEventListener("click", (e) => { e.preventDefault(); makeSinkStage(); });
+    stageSinkLi.appendChild(stageSinkA);
+    stageMenu.appendChild(stageSinkLi);
+
+    stageDropdown.append(stageToggle, stageMenu);
+    addStageBtnEl.appendChild(stageDropdown);
 
     row.append(addStageBtnEl, actStage.stageEl);
 
     // ── Hydration or empty seed ───────────────────────────────────────────────
 
-    const { addController } = addControllerStage();
     if (initialPipeline) {
-        for (const cs of initialPipeline.controllers) {
-            addController(cs.key, { ...cs.params }, cs.static_phase_rows ? [...cs.static_phase_rows] : null);
+        for (const bs of initialPipeline.blocks ?? []) {
+            makeBlockStage(bs.key, { ...bs.params });
+        }
+        for (const sk of initialPipeline.sinks ?? []) {
+            makeSinkStage(sk.label);
         }
         for (const obs of initialPipeline.observers) {
             const type = OBSERVER_TYPE_FROM_DOMAIN[obs.domain] ?? obs.domain;
@@ -886,26 +1010,40 @@ function createPipelineRow(
 
     function drawConnections(): void {
         if (!initialPipeline) return;
-        const obsPortById = new Map<string, HTMLElement>(
-            initialPipeline.observers
+
+        const outPortById = new Map<string, HTMLElement>([
+            ...initialPipeline.observers
                 .map((spec, i) => [spec.id, obsNodes[i]?.outPort] as [string, HTMLElement | undefined])
-                .filter((e): e is [string, HTMLElement] => !!e[1])
-        );
+                .filter((e): e is [string, HTMLElement] => !!e[1]),
+            ...(initialPipeline.blocks ?? [])
+                .map((spec, i) => [spec.id, blockRegs[i]?.outPort] as [string, HTMLElement | undefined])
+                .filter((e): e is [string, HTMLElement] => !!e[1]),
+        ]);
         const actPortById = new Map<string, HTMLElement>(
             initialPipeline.actuators
                 .map((spec, i) => [spec.id, actNodes[i]?.inPort] as [string, HTMLElement | undefined])
                 .filter((e): e is [string, HTMLElement] => !!e[1])
         );
-        initialPipeline.controllers.forEach((spec, i) => {
-            const cr = ctrlRegs[i];
-            if (!cr?.inPort || !cr?.outPort) return;
-            if (spec.observe_from) {
-                const from = obsPortById.get(spec.observe_from);
-                if (from) connectPorts(from, cr.inPort);
+
+        (initialPipeline.blocks ?? []).forEach((spec, i) => {
+            const br = blockRegs[i];
+            if (!br?.inPort || !br?.outPort) return;
+            if (spec.input_from) {
+                const from = outPortById.get(spec.input_from);
+                if (from) connectPorts(from, br.inPort);
             }
             if (spec.actuate_to) {
                 const to = actPortById.get(spec.actuate_to);
-                if (to) connectPorts(cr.outPort, to);
+                if (to) connectPorts(br.outPort, to);
+            }
+        });
+
+        (initialPipeline.sinks ?? []).forEach((spec, i) => {
+            const sr = sinkRegs[i];
+            if (!sr?.inPort) return;
+            if (spec.input_from) {
+                const from = outPortById.get(spec.input_from);
+                if (from) connectPorts(from, sr.inPort);
             }
         });
     }
@@ -1096,7 +1234,7 @@ function renderPipeline(container: HTMLElement, data: InspectionData, scenarioId
         durInput.className = "form-control form-control-sm";
         durInput.style.width = "80px";
         durInput.min = "0";
-        durInput.placeholder = "∞";
+        durInput.placeholder = "0";
         if (phase.duration_s !== null) durInput.value = String(phase.duration_s);
         durInput.addEventListener("input", () => {
             phase.duration_s = durInput.value ? Number(durInput.value) : null;

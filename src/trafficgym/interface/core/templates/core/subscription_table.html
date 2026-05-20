@@ -15,7 +15,7 @@
         {% for data in subscription_data %}
         <tr>
             <td>{{ data.simulation_time }}</td>
-            <td>{{ data.payload }}</td>
+            <td>{{ data.payload|floatformat:6 }}</td>
         </tr>
         {% endfor %}
     </tbody>

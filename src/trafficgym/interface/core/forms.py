@@ -129,10 +129,10 @@ class ScenarioForm(forms.ModelForm):
                 f"{preview_request.id} for scenario {scenario.id}"
             )
 
+            preview_id = str(preview_request.id)
+            sid = str(scenario.id)
             transaction.on_commit(
-                lambda: derive_from_artefact.delay(
-                    str(preview_request.id)
-                )
+                lambda: derive_from_artefact.delay(preview_id, scenario_id=sid)
             )
 
             inspect_request = TransformationRequest.objects.create(
@@ -171,10 +171,9 @@ class ScenarioForm(forms.ModelForm):
                 f"{inspect_request.id} for scenario {scenario.id}"
             )
 
+            inspect_id = str(inspect_request.id)
             transaction.on_commit(
-                lambda: derive_from_artefact.delay(
-                    str(inspect_request.id)
-                )
+                lambda: derive_from_artefact.delay(inspect_id, scenario_id=sid)
             )
 
         return scenario, created, reused

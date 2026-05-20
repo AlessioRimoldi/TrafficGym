@@ -39,7 +39,13 @@
             </div>
             {% for run_request in run_requests %}
             <div class="card mb-3">
-                <div class="card-header fw-bold"><span class="text-muted" style="font-size: 0.65em; font-family: monospace;">{{ run_request.id }}</span></div>
+                <div class="card-header fw-bold">
+                    <span class="text-muted" style="font-size: 0.65em; font-family: monospace;">{{ run_request.id }}</span>
+                    <div class="mt-1" style="font-size: 0.75em; font-weight: normal;">
+                        <span class="badge bg-secondary me-1">{{ run_request.experiment.name }} v{{ run_request.experiment.version }}</span>
+                        <span class="badge bg-light text-dark border">{{ run_request.scenario.name }}</span>
+                    </div>
+                </div>
                 <div class="card-body">
                     <form class="analytics_controls" action="{% url "subscription_data" run_request.id %}" method="get">
                         <div class="mb-3">

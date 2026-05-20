@@ -22,6 +22,7 @@ from trafficgym.interface.core.models import (
     RunRequest,
     RunExecution,
     Artefact,
+    Scenario,
     TransformationRequest,
     TransformationOutput,
 )
@@ -213,7 +214,7 @@ def process_run_request(
 
                     handler = LogPersistenceHandlerRunExecution(execution, engine_run_id)
 
-                    cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo-gui", seed=cast(int, execution.seed))
+                    cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo", seed=cast(int, execution.seed))
                     adapter = LibsumoAdapter(cfg, step_length_ms=1000)
                     experiment = ExperimentClass()
                     sub_logger = logging.getLogger("subscription")
@@ -282,7 +283,7 @@ def process_run_request(
 
 
 @shared_task
-def derive_from_artefact(artefact_transformation_request_id: str) -> None:
+def derive_from_artefact(artefact_transformation_request_id: str, scenario_id: str | None = None) -> None:
     handler: LogPersistenceHandlerTransformRequest | None = None
     try:
         import asyncio
@@ -377,6 +378,11 @@ def derive_from_artefact(artefact_transformation_request_id: str) -> None:
                             artefact=artefact,
                             role=role,
                         )
+
+                if scenario_id is not None:
+                    scenario = Scenario.objects.get(id=scenario_id)
+                    output_artefacts = [a for a in created] + [a for a in reused]
+                    scenario.artefacts.add(*output_artefacts)
 
                 with transaction.atomic():
                     transformation_request.status = "COMPLETE"

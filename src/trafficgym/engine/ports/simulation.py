@@ -6,10 +6,6 @@ from typing import Any, Callable, Generator, Mapping, Protocol, Union
 import uuid
 
 
-class _ControllerNode(Protocol):
-    def step(self, inputs: Any) -> Any: ...
-
-
 MappingValue = Union[str, int, float]
 Observation = Mapping[str, MappingValue]
 Params = Mapping[str, MappingValue]
@@ -113,6 +109,10 @@ class SimulationPort(ABC):
     ) -> None: ...
 
 
+class _ControllerNode(Protocol):
+    def step(self, adapter: SimulationPort, inputs: Any) -> Any: ...
+
+
 class _WiredController:
     def __init__(
         self,
@@ -126,6 +126,6 @@ class _WiredController:
 
     def on_tick(self, adapter: SimulationPort, sim_time: float) -> None:
         inputs = self._observe(adapter, sim_time)
-        result = self._node.step(inputs)
+        result = self._node.step(adapter, inputs)
         if result:
             self._actuate(adapter, result)

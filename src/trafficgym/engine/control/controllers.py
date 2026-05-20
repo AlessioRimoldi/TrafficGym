@@ -1,5 +1,6 @@
 from enum import Enum, auto
-from typing import TypedDict
+from typing import Any, TypedDict
+from trafficgym.engine.ports.simulation import SimulationPort
 
 
 class RampMeterInputs(TypedDict):
@@ -50,7 +51,7 @@ class RampMeterController:
                 if occupancy <= self.choke_down:     self.state = self.State.TENTH
         return self._PROGRAMS[self.state] if self.state != prev else None
 
-    def step(self, inputs: RampMeterInputs) -> RampMeterOutputs:
+    def step(self, adapter: SimulationPort, inputs: RampMeterInputs) -> RampMeterOutputs:
         new_program = self.determine_new_program(inputs["occupancy"])
         return {"program_id": new_program} if new_program else {}
 
@@ -69,7 +70,7 @@ class StaticTLSController:
         self._phase_index = 0
         self._phase_start: float | None = None
 
-    def step(self, inputs: StaticTLSInputs) -> StaticTLSOutputs:
+    def step(self, adapter: SimulationPort, inputs: StaticTLSInputs) -> StaticTLSOutputs:
         sim_time = inputs["sim_time"]
         if self._phase_start is None:
             self._phase_start = sim_time

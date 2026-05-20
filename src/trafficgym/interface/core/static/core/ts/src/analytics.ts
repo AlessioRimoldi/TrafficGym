@@ -525,6 +525,21 @@ document.addEventListener("DOMContentLoaded", () => {
         thead.innerHTML = `<tr><th>Time</th>${colNames.join('')}</tr>`;
         table.appendChild(thead);
 
+        // Seed lastSeen with the last known value per dataset before this page starts
+        const lastSeen = new Map<number, string>();
+        if (start > 0) {
+            const cutoff = times[start - 1];
+            datasets.forEach((ds, di) => {
+                const allData = ds.rawData as DataPoint[];
+                for (let i = allData.length - 1; i >= 0; i--) {
+                    if (allData[i].x <= cutoff && allData[i].y != null) {
+                        lastSeen.set(di, truncateLabel(parseFloat(Number(allData[i].y).toFixed(6)).toString()));
+                        break;
+                    }
+                }
+            });
+        }
+
         const tbody = document.createElement("tbody");
         pageTimes.forEach(t => {
             const tr = document.createElement("tr");
@@ -532,10 +547,23 @@ document.addEventListener("DOMContentLoaded", () => {
             tdTime.textContent = t.toString();
             tr.appendChild(tdTime);
 
-            datasets.forEach(ds => {
+            datasets.forEach((ds, di) => {
                 const point = (ds.rawData as DataPoint[]).find(p => p.x === t);
                 const td = document.createElement("td");
-                td.textContent = point ? truncateLabel(point.y.toString()) : "-";
+                if (point?.y != null) {
+                    const formatted = truncateLabel(parseFloat(Number(point.y).toFixed(6)).toString());
+                    lastSeen.set(di, formatted);
+                    td.textContent = formatted;
+                } else {
+                    const carried = lastSeen.get(di);
+                    if (carried != null) {
+                        td.textContent = carried;
+                        td.className = "text-muted fst-italic";
+                        td.title = "No value recorded at this step — carried forward from last known value";
+                    } else {
+                        td.textContent = "-";
+                    }
+                }
                 tr.appendChild(td);
             });
 
@@ -569,6 +597,36 @@ document.addEventListener("DOMContentLoaded", () => {
         pagination.appendChild(nextBtn);
 
         dataTable.appendChild(pagination);
+
+        if (totalPages > 1) {
+            const sliderRow = document.createElement("div");
+            sliderRow.className = "d-flex align-items-center gap-2 mt-1";
+
+            const minLabel = document.createElement("span");
+            minLabel.className = "small text-muted text-nowrap";
+            minLabel.textContent = "1";
+
+            const slider = document.createElement("input");
+            slider.type = "range";
+            slider.className = "form-range";
+            slider.min = "1";
+            slider.max = String(totalPages);
+            slider.value = String(currentPage);
+            slider.addEventListener("input", () => {
+                pageInfo.textContent = `Page ${slider.value} of ${totalPages}`;
+            });
+            slider.addEventListener("change", () => {
+                currentPage = parseInt(slider.value, 10);
+                updateDataTable();
+            });
+
+            const maxLabel = document.createElement("span");
+            maxLabel.className = "small text-muted text-nowrap";
+            maxLabel.textContent = String(totalPages);
+
+            sliderRow.append(minLabel, slider, maxLabel);
+            dataTable.appendChild(sliderRow);
+        }
 
         if (datasets.length === 0) {
             tablePlaceholder.style.display = "block";
