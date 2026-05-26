@@ -22,8 +22,14 @@
             </select>
         </div>
         <div class="mb-4">
+            <label for="seedsInput" class="form-label">Seeds <span class="text-muted small fw-normal">(optional, comma-separated)</span></label>
+            <input type="text" id="seedsInput" name="seeds" class="form-control" placeholder="e.g. 42, 123, 456">
+            <div id="seedsError" class="invalid-feedback"></div>
+        </div>
+        <div class="mb-4">
             <label for="rerunCount" class="form-label">Rerun Count</label>
             <input type="number" min="1" id="rerunCount" name="rerun_count" class="form-control" value="1">
+            <div id="rerunCountHelp" class="form-text text-muted" style="display: none;">Derived from seeds above — edit seeds to change.</div>
         </div>
         <div class="mb-4">
             <label for="simParams" class="form-label">Simulation Parameters (JSON)</label>

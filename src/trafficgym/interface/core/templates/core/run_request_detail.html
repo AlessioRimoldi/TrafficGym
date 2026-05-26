@@ -14,8 +14,9 @@
         <div class="card-body">
         <p><strong>Run Request ID:</strong> {{ run_request.id }}</p>
         <p><strong>Rerun Count:</strong> {{ run_request.rerun_count }}</p>
-        <p><strong>Status:</strong> 
-            {% include "core/components/status_badge.html" with status=run_request.status %}
+        <p><strong>Status:</strong>
+            <span data-status-id="rr_{{ run_request.id }}">{% include "core/components/status_badge.html" with status=run_request.status %}</span>
+            <span data-progress-id="rr_{{ run_request.id }}" class="ms-3"></span>
         </p>
         </div>
     </div>
@@ -28,7 +29,8 @@
             data-bs-target="#experiment_artefacts"
             style="cursor: pointer;">
             <i class="bi bi-chevron-right me-2 caret-icon"></i> Experiment — {{ run_request.experiment.name }} v{{ run_request.experiment.version }}</div>
-        <div class="card-body collapse" id="experiment_artefacts">
+        <div class="collapse" id="experiment_artefacts">
+        <div class="card-body">
             {% comment %} <p><strong>Name:</strong> {{run_request.experiment.name}} v{{run_request.experiment.version}}</p> {% endcomment %}
             <table class="table table-striped table-hover">
                 <thead>
@@ -48,6 +50,7 @@
                 </tbody>
             </table>
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -60,7 +63,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Scenario — {{ run_request.scenario.name }} ({{ run_request.scenario.artefacts.count }})
         </div>
-        <div class="card-body collapse" id="scenario_artefacts">
+        <div class="collapse" id="scenario_artefacts">
+        <div class="card-body">
             <p><strong>ID:</strong> {{ run_request.scenario.id }}</p>
             {% comment %} <p><strong>Name:</strong> {{ run_request.scenario.name }}</p> {% endcomment %}
 
@@ -85,6 +89,7 @@
                 </tbody>
             </table>
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -97,12 +102,13 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Aggregated Subscriptions Data ({{ aggregated_subscriptions_count }})
         </div>
-        <div class="card-body collapse" id="aggregate_subscriptions_content">
+        <div class="collapse" id="aggregate_subscriptions_content">
+        <div class="card-body">
             {% if aggregated_subscriptions %}
             {% if has_missing_subs %}
             <div class="alert alert-warning">
                 <i class="bi bi-exclamation-triangle h6"></i>&nbsp;
-                Some subscriptions are missing in 
+                Some subscriptions are missing in
                 one or more executions. Aggregate may be incomplete.
             </div>
             {% endif %}
@@ -138,6 +144,7 @@
             No subscription data to show
             {% endif %}
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -148,26 +155,27 @@
             data-bs-target="#run_executions_content"
             style="cursor: pointer;">
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
-            Run Executions ({{ run_request.executions.count }})
+            Run Executions ({{ executions.paginator.count }})
         </div>
-        <div class="card-body collapse" id="run_executions_content">
+        <div class="collapse" id="run_executions_content">
+        <div class="card-body">
             {% if executions %}
             <table class="table table-striped table-hover">
                 <thead>
                     <tr>
                         <th class="text-center">Status</th>
                         <th class="text-left">Execution ID</th>
-                        <th class="text-left">Engine Run ID</th>
+                        <th class="text-left">Execution Seed<gth>
                     </tr>
                 </thead>
                 <tbody>
                     {% for execution in executions %}
                     <tr>
-                        <td class="text-center"> 
+                        <td class="text-center" data-status-id="re_{{ execution.id }}">
                             {% include "core/components/status_badge.html" with status=execution.status %}
                         </td>
                         <td><a href="{% url "run_execution_detail" execution.id %}">{{ execution.id }}</a></td>
-                        <td>{{ execution.engine_run_id }}</td>
+                        <td style="font-family:'monospace'">{{ execution.seed }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -190,7 +198,7 @@
                             <li class="page-item">
                                 <a class="page-link" href="?executions_page={{ num }}">{{ num }}</a>
                             </li>
-                        {% endif %}                        
+                        {% endif %}
                     {% endfor %}
 
                     {% if executions.has_next %}
@@ -206,6 +214,7 @@
                 <p>No executions to show</p>
             {% endif %}
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -218,7 +227,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Worker Logs ({{ worker_log_count }}{% if level_filter %} with filter {{ level_filter }}{% endif %})
         </div>
-        <div class="card-body collapse show" id="logs_content">
+        <div class="collapse show" id="logs_content">
+        <div class="card-body">
             <form method="get" class="mb-3">
                 <label for="level" class="form-label">Filter by Level:</label>
                 <select name="level" id="level" class="form-select w-auto d-inline-block">
@@ -291,7 +301,7 @@
                             <li class="page-item">
                                 <a class="page-link" href="?logs_page={{ num }}{% if level_filter %}&level={{ level_filter }}{% endif %}">{{ num }}</a>
                             </li>
-                        {% endif %}                        
+                        {% endif %}
                     {% endfor %}
 
                     {% if worker_logs.has_next %}
@@ -306,6 +316,7 @@
             {% else %}
                 <p>No log entries to show</p>
             {% endif %}
+        </div>
         </div>
     </div>
 

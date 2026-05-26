@@ -22,7 +22,7 @@
                 <td>{{ run_request.scenario.name }}</td>
                 <td>{{ run_request.experiment.name }}</td>
                 <td>{{ run_request.created_at|date:"m.d.y H:i:s" }}</td>
-                <td class="status">
+                <td class="status" data-status-id="rr_{{ run_request.id }}">
                     {% include "core/components/status_badge.html" with status=run_request.status %}
                 </td>
             </tr>

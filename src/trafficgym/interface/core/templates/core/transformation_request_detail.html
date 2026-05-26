@@ -21,7 +21,7 @@
 
     {% if transformation_request.spec_snapshot and transformation_request.spec_snapshot.key %}
     <div class="card m-4" id="method_details_card">
-    
+
         <div class="card-header fs-4 fw-bold py-3 collapsed"
             data-bs-toggle="collapse"
             data-bs-target="#method_details_content"
@@ -32,23 +32,24 @@
                 at transformation time
             </span>
         </div>
-    
-        <div class="card-body collapse" id="method_details_content">
-    
+
+        <div class="collapse" id="method_details_content">
+        <div class="card-body">
+
             <div class="mb-2">
                 <div class="text-muted small">Method</div>
                 <div class="fw-bold">
                     {{ transformation_request.spec_snapshot.key }}
                 </div>
             </div>
-    
+
             <div class="mb-2">
                 <div class="text-muted small">Description</div>
                 <div>
                     {{ transformation_request.spec_snapshot.docstring|default:"-" }}
                 </div>
             </div>
-    
+
             <div class="mb-2">
                 <div class="text-muted small">Inputs</div>
                 {% for i in transformation_request.spec_snapshot.inputs %}
@@ -59,14 +60,15 @@
                     </div>
                 {% endfor %}
             </div>
-    
+
             <div class="mb-2">
                 <div class="text-muted small">Outputs</div>
                 <div class="small">
                     {{ transformation_request.spec_snapshot.outputs|join:", " }}
                 </div>
             </div>
-    
+
+        </div>
         </div>
     </div>
     {% endif %}
@@ -81,7 +83,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Input Artefacts
         </div>
-        <div class="card-body collapse" id="input_artefacts_content">
+        <div class="collapse" id="input_artefacts_content">
+        <div class="card-body">
             <table class="table table-sm table-hover align-middle table-striped">
                 <thead>
                     <tr>
@@ -135,6 +138,7 @@
                 </tbody>
             </table>
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -147,7 +151,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Output Artefacts
         </div>
-        <div class="card-body collapse" id="output_artefacts_content">
+        <div class="collapse" id="output_artefacts_content">
+        <div class="card-body">
             <table class="table table-sm table-hover align-middle table-striped">
                 <thead>
                     <tr>
@@ -205,6 +210,7 @@
                 </tbody>
             </table>
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -217,7 +223,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Worker Logs ({{ worker_log_count }}{% if level_filter %} with filter {{ level_filter }}{% endif %})
         </div>
-        <div class="card-body collapse show" id="logs_content">
+        <div class="collapse show" id="logs_content">
+        <div class="card-body">
             <form method="get" class="mb-3">
                 <label for="level" class="form-label">Filter by Level:</label>
                 <select name="level" id="level" class="form-select w-auto d-inline-block">
@@ -290,7 +297,7 @@
                             <li class="page-item">
                                 <a class="page-link" href="?logs_page={{ num }}{% if level_filter %}&level={{ level_filter }}{% endif %}">{{ num }}</a>
                             </li>
-                        {% endif %}                        
+                        {% endif %}
                     {% endfor %}
 
                     {% if worker_logs.has_next %}
@@ -305,6 +312,7 @@
             {% else %}
                 <p>No log entries to show</p>
             {% endif %}
+        </div>
         </div>
     </div>
 

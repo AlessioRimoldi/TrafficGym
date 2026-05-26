@@ -32,12 +32,13 @@ from django.http import FileResponse, Http404
 from django.contrib import messages
 from pathlib import Path
 from collections import defaultdict
-from typing import DefaultDict, Set, TypedDict, cast, Literal
+from typing import Any, DefaultDict, Set, TypedDict, cast, Literal
 from trafficgym.engine.transformations.registry import REGISTRY
 from trafficgym.engine.control.codegen import _GraphSpec
 
 import json
 import mimetypes
+import random
 
 aggregation_map = {
     "sum": Sum("payload"),
@@ -110,8 +111,29 @@ def select_run_modal(request: HttpRequest) -> HttpResponse:
 def create_run_request(request: HttpRequest) -> HttpResponse:
     scenario_id = request.POST.get("scenario")
     experiment_id = request.POST.get("experiment")
-    rerun_count = int(request.POST.get("rerun_count", "1"))
+    raw_seeds = request.POST.get("seeds", "").strip()
+    raw_rerun_count = request.POST.get("rerun_count",  "1")
     simulation_parameters = request.POST.get("simulation_parameters", "{}")
+
+    try:
+        rerun_count = int(raw_rerun_count)
+        if rerun_count < 1:
+            raise ValueError
+    except ValueError:
+        return HttpResponseBadRequest("rerun_count must be a positive integer")
+
+    try:
+        parsed_parameters = json.loads(simulation_parameters)
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("simulation_parameters must be valid JSON")
+
+    seed_ints: list[int] = []
+    if raw_seeds:
+        try:
+            seed_ints = [int(s.strip()) for s in raw_seeds.split(",")]
+        except ValueError:
+            return HttpResponseBadRequest("seeds must be a comma-separated list of integers")
+        rerun_count = len(seed_ints)
 
     scenario = get_object_or_404(Scenario, pk=scenario_id)
     experiment = get_object_or_404(Experiment, pk=experiment_id)
@@ -120,10 +142,20 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
         scenario=scenario,
         experiment=experiment,
         rerun_count=rerun_count,
-        simulation_parameters=json.loads(simulation_parameters),
+        simulation_parameters=parsed_parameters,
     )
-
     run.save()
+
+    if seed_ints:
+        RunExecution.objects.bulk_create([
+            RunExecution(run_request=run, seed=seed, status="PENDING")
+            for seed in seed_ints
+        ])
+    else:
+        RunExecution.objects.bulk_create([
+            RunExecution(run_request=run, seed=int(random.random() * (2**31 - 1)), status="PENDING")
+            for _ in range(rerun_count)
+        ])
 
     return redirect("run_request_detail", pk=run.pk)
 
@@ -990,3 +1022,85 @@ def create_transform_request(request: HttpRequest) -> HttpResponse:
     TransformationInput.objects.bulk_create(bindings)
 
     return redirect("transformation_request_detail", pk=tr.pk)
+
+
+def status_events(_: HttpRequest) -> StreamingHttpResponse:
+    import time
+    from typing import Generator
+
+    terminal = frozenset({"COMPLETE", "FAILED"})
+    models_cfg: list[tuple[type[Any], str, str]] = [
+        (RunRequest,            "rr", "run_request"),
+        (RunExecution,          "re", "run_execution"),
+        (TransformationRequest, "tr", "transformation_request"),
+    ]
+    model_by_prefix: dict[str, type[Any]] = {p: m for m, p, _ in models_cfg}
+    type_by_prefix:  dict[str, str]       = {p: t for _, p, t in models_cfg}
+
+    def event_stream() -> Generator[str, None, None]:
+        seen: dict[str, str] = {}
+        watching: set[str] = set()
+
+        while True:
+            updates: list[dict[str, Any]] = []
+            current_active: set[str] = set()
+
+            for model, prefix, type_name in models_cfg:
+                for obj in model.objects.exclude(status__in=terminal).values("id", "status"):
+                    key = f"{prefix}_{obj['id']}"
+                    current_active.add(key)
+                    watching.add(key)
+                    if seen.get(key) != obj["status"]:
+                        seen[key] = obj["status"]
+                        updates.append({"type": type_name, "id": str(obj["id"]), "status": obj["status"]})
+
+            for key in watching - current_active:
+                watching.discard(key)
+                prefix, _, id_str = key.partition("_")
+                final = model_by_prefix[prefix].objects.filter(id=id_str).values("status").first()
+                if final and seen.get(key) != final["status"]:
+                    seen[key] = final["status"]
+                    updates.append({"type": type_by_prefix[prefix], "id": id_str, "status": final["status"]})
+
+            for obj in RunExecution.objects.filter(status="RUNNING").values(
+                "id", "current_step", "run_request__experiment__total_steps"
+            ):
+                key = f"re_progress_{obj['id']}"
+                step_str = str(obj["current_step"])
+                if seen.get(key) != step_str:
+                    seen[key] = step_str
+                    updates.append({
+                        "type": "run_execution_progress",
+                        "id": str(obj["id"]),
+                        "current_step": obj["current_step"],
+                        "total_steps": obj["run_request__experiment__total_steps"],
+                    })
+
+            for obj in RunRequest.objects.filter(status="RUNNING").annotate(
+                current_steps_sum=Sum("executions__current_step"),
+            ).values("id", "current_steps_sum", "rerun_count", "experiment__total_steps"):
+                current = obj["current_steps_sum"] or 0
+                exp_total = obj["experiment__total_steps"] or -1
+                total = exp_total * obj["rerun_count"] if exp_total > 0 else -1
+                key = f"rr_progress_{obj['id']}"
+                step_str = str(current)
+                if seen.get(key) != step_str:
+                    seen[key] = step_str
+                    updates.append({
+                        "type": "run_request_progress",
+                        "id": str(obj["id"]),
+                        "current_step": current,
+                        "total_steps": total,
+                    })
+
+            for update in updates:
+                yield f"data: {json.dumps(update)}\n\n"
+            if not updates:
+                yield ": heartbeat\n\n"
+
+            time.sleep(1)
+
+    response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")  # type: ignore[arg-type]
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response

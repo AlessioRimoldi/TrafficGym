@@ -4,7 +4,6 @@ import shutil
 import importlib.util
 import hashlib
 import logging
-import random
 
 from celery import shared_task, Task
 from django.db import transaction
@@ -32,10 +31,6 @@ from trafficgym.interface.core.logging_setup import (
     LogPersistenceHandlerRunExecution,
     LogPersistenceHandlerTransformRequest,
 )
-
-# event_logger = logging.getLogger("event")
-# subscription_logger = logging.getLogger("subscription")
-# telemetry_logger = logging.getLogger("telemetry")
 
 def _compute_file_sha256(file: File) -> str:
     hasher = hashlib.sha256()
@@ -76,7 +71,27 @@ def materialise_artefacts(
 
 P = ParamSpec("P")
 
-class RunTask(Task[P, None]):
+
+def _maybe_complete_run_request(run_request_id: str | uuid.UUID) -> None:
+    with transaction.atomic():
+        run_request = RunRequest.objects.select_for_update().get(id=run_request_id)
+        if run_request.status in ["COMPLETE", "FAILED"]:
+            return
+        remaining = RunExecution.objects.filter(
+            run_request=run_request,
+            status__in=["PENDING", "RUNNING"],
+        ).count()
+        if remaining > 0:
+            return
+        has_failures = RunExecution.objects.filter(
+            run_request=run_request, status="FAILED"
+        ).exists()
+        run_request.status = "FAILED" if has_failures else "COMPLETE"
+        run_request.finished_at = timezone.now()
+        run_request.save(update_fields=["status", "finished_at"])
+
+
+class RunRequestTask(Task[P, None]):
     abstract = True
 
     def on_failure(
@@ -91,30 +106,50 @@ class RunTask(Task[P, None]):
 
         with transaction.atomic():
             try:
-                run = RunRequest.objects.get(id=run_request_id)
-
-                if run.status not in ["COMPLETE", "FAILED"]:
-                    run.status = "FAILED"
-                    run.finished_at = timezone.now()
-                    run.save(update_fields=["status", "finished_at"])
-
+                run_request = RunRequest.objects.select_for_update().get(id=run_request_id)
+                if run_request.status not in ["COMPLETE", "FAILED"]:
+                    run_request.status = "FAILED"
+                    run_request.finished_at = timezone.now()
+                    run_request.save(update_fields=["status", "finished_at"])
+                RunExecution.objects.filter(
+                    run_request_id=run_request_id, status="PENDING"
+                ).update(status="FAILED", finished_at=timezone.now())
             except RunRequest.DoesNotExist:
                 pass
 
 
-@shared_task(bind=True, base=RunTask)
+class RunExecutionTask(Task[P, None]):
+    abstract = True
+
+    def on_failure(
+        self,
+        exc: BaseException,
+        task_id: str,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        einfo: Any,
+    ) -> None:
+        run_request_id = args[0]
+        execution_id = args[1]
+
+        with transaction.atomic():
+            RunExecution.objects.filter(
+                id=execution_id,
+                status__in=["PENDING", "RUNNING"],
+            ).update(status="FAILED", finished_at=timezone.now())
+
+        _maybe_complete_run_request(run_request_id)
+
+
+@shared_task(bind=True, base=RunRequestTask)
 def process_run_request(
-    self: RunTask[tuple[str | uuid.UUID], None], run_request_id: str | uuid.UUID
+    self: RunRequestTask[tuple[str | uuid.UUID], None], run_request_id: str | uuid.UUID
 ) -> None:
     handler: BaseLogPersistenceHandler | None = None
     try:
         with transaction.atomic():
             run_request = (
                 RunRequest.objects.select_for_update()
-                .select_related("scenario")
-                .prefetch_related("scenario__artefacts")
-                .select_related("experiment")
-                .prefetch_related("experiment__artefact")
                 .get(id=run_request_id)
             )
 
@@ -123,160 +158,133 @@ def process_run_request(
             if run_request.status != "PENDING":
                 return
 
-            run_request.status = "PREPARING"
+            run_request.status = "RUNNING"
             run_request.worker_id = uuid.uuid4()
             run_request.started_at = timezone.now()
+            run_request.save(update_fields=["status", "worker_id", "started_at"])
 
-            run_request.save(
-                update_fields=["status", "worker_id", "started_at"]
-            )
-
-        scenario = run_request.scenario
-
-        artefacts_from_scenario = scenario.artefacts.all()
-
-        experiment_artefact = run_request.experiment.artefact
-
-        all_artefacts = [*artefacts_from_scenario, experiment_artefact]
-
-        sumocfg_artefacts = artefacts_from_scenario.filter(
-            original_name__iendswith=".sumocfg"
+        execution_ids = list(
+            run_request.executions.filter(status="PENDING").values_list("id", flat=True)
         )
 
-        sumocfg_list = list(sumocfg_artefacts)
+        for exec_id in execution_ids:
+            process_run_execution.delay(str(run_request_id), str(exec_id))
 
+    except Exception as e:
+        logging.error(f"{e}", exc_info=True)
+        raise
+
+    finally:
+        if handler is not None:
+            handler.flush_queue()
+            handler.deregister()
+
+
+@shared_task(bind=True, base=RunExecutionTask)
+def process_run_execution(
+    self: RunExecutionTask[tuple[str | uuid.UUID, str | uuid.UUID], None],
+    run_request_id: str | uuid.UUID,
+    execution_id: str | uuid.UUID,
+) -> None:
+    handler: BaseLogPersistenceHandler | None = None
+    adapter: LibsumoAdapter | None = None
+    try:
+        engine_run_id = uuid.uuid4()
+
+        with transaction.atomic():
+            execution = RunExecution.objects.select_for_update().get(id=execution_id)
+            if execution.status != "PENDING":
+                return
+            execution.status = "RUNNING"
+            execution.engine_run_id = engine_run_id
+            execution.started_at = timezone.now()
+            execution.save(update_fields=["status", "engine_run_id", "started_at"])
+
+        handler = LogPersistenceHandlerRunExecution(execution, engine_run_id)
+
+        run_request = (
+            RunRequest.objects
+            .select_related("scenario")
+            .prefetch_related("scenario__artefacts")
+            .select_related("experiment")
+            .prefetch_related("experiment__artefact")
+            .get(id=run_request_id)
+        )
+
+        scenario = run_request.scenario
+        artefacts_from_scenario = scenario.artefacts.all()
+        experiment_artefact = run_request.experiment.artefact
+        all_artefacts = [*artefacts_from_scenario, experiment_artefact]
+
+        sumocfg_list = list(
+            artefacts_from_scenario.filter(original_name__iendswith=".sumocfg")
+        )
         if len(sumocfg_list) != 1:
             raise ValueError("Scenario must contain exactly one .sumocfg!")
 
-        sumocfg_file = sumocfg_list[0]
-
         with tempfile.TemporaryDirectory() as run_dir:
             run_dir_path = Path(run_dir)
-
             sha256_to_paths = materialise_artefacts(all_artefacts, run_dir_path)
+            sumocfg_path = sha256_to_paths[cast(str, sumocfg_list[0].sha256)]
+            experiment_path = sha256_to_paths[cast(str, experiment_artefact.sha256)]
 
-            sumocfg_path = sha256_to_paths[cast(str, sumocfg_file.sha256)]
-            experiment_path = sha256_to_paths[
-                cast(str, experiment_artefact.sha256)
-            ]
-
-            logging.debug(sumocfg_path)
-            logging.debug(experiment_path)
-            logging.debug(sha256_to_paths)
-
-            spec = importlib.util.spec_from_file_location(
-                "experiment_module", experiment_path
-            )
-
+            spec = importlib.util.spec_from_file_location("experiment_module", experiment_path)
             if spec is None:
                 raise FileNotFoundError("Could not find experiment file")
-
             if spec.loader is None:
                 raise ValueError("Could not find experiment loader")
 
             experiment_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(experiment_module)
 
-            ExperimentClass = getattr(
-                experiment_module, str(run_request.experiment.name), None
-            )
-
+            ExperimentClass = getattr(experiment_module, str(run_request.experiment.name), None)
             if ExperimentClass is None:
                 raise ValueError(
                     f"Experiment Artefact does not define {run_request.experiment.name}"
                 )
-
             if not issubclass(ExperimentClass, Experiment):
                 raise TypeError(
                     f"{run_request.experiment.name} must be a subclass of Experiment"
                 )
 
-            with transaction.atomic():
-                run_request.status = "RUNNING"
-                run_request.save(update_fields=["status"])
+            cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo", seed=cast(int, execution.seed))
+            adapter = LibsumoAdapter(cfg, step_length_ms=1000)
+            experiment_instance = ExperimentClass()
+            sub_logger = logging.getLogger("subscription")
+            execution_pk = execution.pk
 
-            for i in range(cast(int, run_request.rerun_count)):
-                seed = int(random.random() * (2**31 - 1))
-                RunExecution.objects.create(
-                    run_request=run_request, seed=seed, status="PENDING"
-                )
+            def log_step(step: int, sim_time: float, _: Any) -> None:
+                for name, value in experiment_instance.poll(adapter).items():
+                    sub_logger.info(
+                        name,
+                        extra={
+                            "simulation_step": step,
+                            "simulation_time": sim_time,
+                            "subscription_fingerprint": name,
+                            "payload": value,
+                        }
+                    )
+                if step % 10 == 0:
+                    RunExecution.objects.filter(pk=execution_pk).update(current_step=step)
 
-            for execution in run_request.executions.all():
-                try:
-                    engine_run_id = uuid.uuid4()
-                    with transaction.atomic():
-                        execution.status = "RUNNING"
-                        execution.engine_run_id = engine_run_id
-                        execution.save(update_fields=["status", "engine_run_id"])
+            adapter.after_tick = log_step
+            adapter.start()
+            experiment_instance.run(adapter=adapter)
 
-                    handler.flush_queue()
-                    handler.deregister()
+        with transaction.atomic():
+            execution.status = "COMPLETE"
+            execution.finished_at = timezone.now()
+            execution.save(update_fields=["status", "finished_at"])
 
-                    handler = LogPersistenceHandlerRunExecution(execution, engine_run_id)
-
-                    cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo", seed=cast(int, execution.seed))
-                    adapter = LibsumoAdapter(cfg, step_length_ms=1000)
-                    experiment = ExperimentClass()
-                    sub_logger = logging.getLogger("subscription")
-
-
-                    def log_step(step: int, sim_time: float, _: Any) -> None:
-                        for name, value in experiment.poll(adapter).items():
-                            sub_logger.info(
-                                name,
-                                extra={
-                                    "simulation_step": step,
-                                    "simulation_time": sim_time,
-                                    "subscription_fingerprint": name,
-                                    "payload": value,
-                                }
-                            )
-
-                    adapter.after_tick = log_step
-                    adapter.start()
-
-                    experiment.run(adapter=adapter)
-
-                    with transaction.atomic():
-                        execution.status = "COMPLETE"
-                        execution.finished_at = timezone.now()
-                        execution.save(
-                            update_fields=[
-                                "status",
-                                "finished_at",
-                            ]
-                        )
-
-                except Exception as e:
-                    logging.error(f"{e}", exc_info=True)
-                    with transaction.atomic():
-                        execution.status = "FAILED"
-                        execution.finished_at = timezone.now()
-                        execution.save(update_fields=["status", "finished_at"])
-                    raise Exception(
-                        f"Run execution {i + 1} of {run_request.rerun_count} failed. ({execution.id})"
-                    ) from e
-                finally:
-                    adapter.close()
-
-                    handler.flush_queue()
-                    handler.deregister()
-                    handler = LogPersistenceHandlerRunRequest(run_request)
-
-            with transaction.atomic():
-                run_request.status = "COMPLETE"
-                run_request.finished_at = timezone.now()
-                run_request.save(update_fields=["status", "finished_at"])
+        _maybe_complete_run_request(run_request_id)
 
     except Exception as e:
         logging.error(f"{e}", exc_info=True)
-        with transaction.atomic():
-            run_request.status = "FAILED"
-            run_request.finished_at = timezone.now()
-            run_request.save(update_fields=["status", "finished_at"])
         raise
 
     finally:
+        if adapter is not None:
+            adapter.close()
         if handler is not None:
             handler.flush_queue()
             handler.deregister()

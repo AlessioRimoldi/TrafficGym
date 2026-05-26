@@ -26,7 +26,7 @@
             <td>{{ transformation_request.method }}</td>
             {% comment %} <td>{{ transformation_request.input_artefacts }}</td> {% endcomment %}
             <td>{{ transformation_request.created_at|date:"m.d.y H:i:s" }}</td>
-            <td class="status">
+            <td class="status" data-status-id="tr_{{ transformation_request.id }}">
                 {% include "core/components/status_badge.html" with status=transformation_request.status %}
             </td>
         </tr>

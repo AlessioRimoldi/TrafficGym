@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
   "devDependencies": {
     "@types/bootstrap": "^5.2.10",
     "@types/chart.js": "^2.9.41",

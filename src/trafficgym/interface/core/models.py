@@ -137,6 +137,7 @@ class Experiment(models.Model):
     artefact: models.ForeignKey[Artefact] = models.ForeignKey(
         Artefact, on_delete=models.PROTECT, related_name="experiments"
     )
+    total_steps = models.IntegerField(default=-1)
 
     run_requests: models.Manager[RunRequest]
 
@@ -164,6 +165,9 @@ class Experiment(models.Model):
                 models.Max("version")
             )["version__max"]
             self.version = (last or 0) + 1
+        if self.total_steps == -1:
+            from trafficgym.engine.adapters.counting_adapter import count_experiment_steps
+            self.total_steps = count_experiment_steps(self.artefact)
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -255,6 +259,7 @@ class RunExecution(models.Model):
     )
     worker_id = models.UUIDField(null=True, blank=True, editable=False)
     seed = models.BigIntegerField()
+    current_step = models.IntegerField(default=0)
     status = models.CharField(
         choices=RunStatus.choices,
         default=RunStatus.PENDING,

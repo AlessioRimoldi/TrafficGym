@@ -103,4 +103,9 @@ urlpatterns = [
         views.create_transform_request,
         name="create_transformation_request",
     ),
+    path(
+        "api/status-events/",
+        views.status_events,
+        name="status_events",
+    ),
 ]

@@ -6,7 +6,7 @@
 <div class="container mt-4">
 {% if run_execution %}
     <div class="mb-4 d-flex justify-content-between align-items-center">
-        <h1 class="mb-0">Run Execution Detail 
+        <h1 class="mb-0">Run Execution Detail
         <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ run_execution.id }}</span></h1>
     </div>
     <div class="card m-4">
@@ -16,8 +16,13 @@
         <p><strong>Run Execution ID:</strong> {{ run_execution.id }}</p>
         <p><strong>Engine Run ID:</strong> {{ run_execution.engine_run_id }}</p>
         <p><strong>Seed:</strong> {{ run_execution.seed }}</p>
-        <p><strong>Status:</strong> 
-            {% include "core/components/status_badge.html" with status=run_execution.status %}
+        <p><strong>Status:</strong>
+            <span data-status-id="re_{{ run_execution.id }}">{% include "core/components/status_badge.html" with status=run_execution.status %}</span>
+            <span data-progress-id="re_{{ run_execution.id }}" class="ms-3">
+                {% if run_execution.status == "RUNNING" %}
+                    <span class="text-muted small">{{ run_execution.current_step }}{% if run_execution.run_request.experiment.total_steps > 0 %} / {{ run_execution.run_request.experiment.total_steps }}{% endif %}</span>
+                {% endif %}
+            </span>
         </p>
         </div>
     </div>
@@ -30,7 +35,8 @@
             data-bs-target="#experiment_artefacts"
             style="cursor: pointer;">
             <i class="bi bi-chevron-right me-2 caret-icon"></i> Experiment — {{ run_execution.run_request.experiment.name }} v{{ run_execution.run_request.experiment.version }}</div>
-        <div class="card-body collapse" id="experiment_artefacts">
+        <div class="collapse" id="experiment_artefacts">
+        <div class="card-body">
             {% comment %} <p><strong>Name:</strong> {{ run_execution.experiment.name }} v{{ run_execution.experiment.version }}</p> {% endcomment %}
             <table class="table table-striped table-hover">
                 <thead>
@@ -50,6 +56,7 @@
                 </tbody>
             </table>
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -62,7 +69,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Scenario — {{ run_execution.run_request.scenario.name }} ({{ run_execution.run_request.scenario.artefacts.count }})
         </div>
-        <div class="card-body collapse" id="scenario_artefacts">
+        <div class="collapse" id="scenario_artefacts">
+        <div class="card-body">
             <p><strong>ID:</strong> {{ run_execution.run_request.scenario.id }}</p>
             {% comment %} <p><strong>Name:</strong> {{ run_execution.run_request.scenario.name }}</p> {% endcomment %}
 
@@ -87,6 +95,7 @@
                 </tbody>
             </table>
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -99,7 +108,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Subscriptions
         </div>
-        <div class="card-body collapse" id="subscriptions_content">
+        <div class="collapse" id="subscriptions_content">
+        <div class="card-body">
             {% if subscription_data %}
             <table class="table table-striped table-hover">
                 <thead>
@@ -131,6 +141,7 @@
             No subscription data to show
             {% endif %}
         </div>
+        </div>
     </div>
 
     <div class="card m-4">
@@ -143,7 +154,8 @@
             <i class="bi bi-chevron-right me-2 caret-icon"></i>
             Worker Logs ({{ worker_log_count }}{% if level_filter %} with filter {{ level_filter }}{% endif %})
         </div>
-        <div class="card-body collapse show" id="logs_content">
+        <div class="collapse show" id="logs_content">
+        <div class="card-body">
             <form method="get" class="mb-3">
                 <label for="level" class="form-label">Filter by Level:</label>
                 <select name="level" id="level" class="form-select w-auto d-inline-block">
@@ -216,7 +228,7 @@
                             <li class="page-item">
                                 <a class="page-link" href="?page={{ num }}{% if level_filter %}&level={{ level_filter }}{% endif %}">{{ num }}</a>
                             </li>
-                        {% endif %}                        
+                        {% endif %}
                     {% endfor %}
 
                     {% if worker_logs.has_next %}
@@ -231,6 +243,7 @@
             {% else %}
                 <p>No log entries to show</p>
             {% endif %}
+        </div>
         </div>
     </div>
 
