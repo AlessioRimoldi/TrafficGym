@@ -469,7 +469,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
     warnings = []
 
     if aggregation_function in ["sum", "avg", "max", "min"]:
-        # Initialize aggregation per fingerprint
+        # Initialise aggregation per fingerprint
         agg_temp: dict[tuple[float, str], AggreagatedRow] = {}
         for e in base_qs.values(
             "simulation_time",
@@ -790,16 +790,23 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
     ]
     experiment_graphs_qs = list(
         ExperimentGraph.objects.select_related("scenario", "experiment")
-        .order_by("name", "-version")
+        .order_by("scenario__name", "name", "-version")
     )
-    experiment_graph_groups = [
-        (versions[0], versions[1:])
-        for _, g in groupby(experiment_graphs_qs, key=lambda eg: eg.name)
-        for versions in [list(g)]
+    experiment_graph_scenario_groups = [
+        (
+            scenario_graphs[0].scenario,
+            [
+                (versions[0], versions[1:])
+                for _, g in groupby(scenario_graphs, key=lambda eg: eg.name)
+                for versions in [list(g)]
+            ],
+        )
+        for _, s in groupby(experiment_graphs_qs, key=lambda eg: eg.scenario.id)
+        for scenario_graphs in [list(s)]
     ]
     scenarios = Scenario.objects.order_by("name").all()
 
-    context = {"experiment_groups": experiment_groups, "experiment_graph_groups": experiment_graph_groups, "form": form, "scenarios": scenarios}
+    context = {"experiment_groups": experiment_groups, "experiment_graph_scenario_groups": experiment_graph_scenario_groups, "form": form, "scenarios": scenarios}
 
     return render(request, "core/experiment_overview.html", context)
 

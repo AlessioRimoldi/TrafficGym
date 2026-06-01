@@ -5,6 +5,7 @@ from trafficgym.engine.transformations.registry import get_spec_or_none
 from .tasks import derive_from_artefact
 from .utils import get_or_create_artefact_from_upload, ArtefactResolution
 from typing import Any
+import ast
 import logging
 
 logger = logging.getLogger(__name__)
@@ -179,17 +180,50 @@ class ScenarioForm(forms.ModelForm):
         return scenario, created, reused
 
 
+def _extract_experiment_class_name(source: str) -> str:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        raise forms.ValidationError(f"Python syntax error: {e}")
+    names = [
+        node.name for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and any(
+            (isinstance(b, ast.Name) and b.id == "Experiment")
+            or (isinstance(b, ast.Attribute) and b.attr == "Experiment")
+            for b in node.bases
+        )
+    ]
+    if len(names) == 0:
+        raise forms.ValidationError("No Experiment subclass found in the uploaded file.")
+    if len(names) > 1:
+        raise forms.ValidationError(
+            f"Multiple Experiment subclasses found: {', '.join(names)}. Use one class per file."
+        )
+    return names[0]
+
+
 class ExperimentForm(forms.ModelForm):
     upload_file = forms.FileField(required=True)
 
     class Meta:
         model = Experiment
-        fields = ["name"]
+        fields: list[str] = []  # name is inferred from the uploaded file
+
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean()
+        f = self.files.get("upload_file")
+        if f:
+            source = f.read().decode("utf-8", errors="replace")
+            f.seek(0)
+            cleaned["name"] = _extract_experiment_class_name(source)
+        return cleaned
 
     def save(
         self, commit: bool = True
     ) -> tuple[Experiment, list[Artefact], list[Artefact]]:
         experiment: Experiment = super().save(commit=False)
+        experiment.name = self.cleaned_data["name"]
 
         created = []
         reused = []

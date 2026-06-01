@@ -42,16 +42,12 @@
                 </div>
 
                 <div class="modal-body">
-                    {% comment %} {{ form }} {% endcomment %}
-                    <div class="mb-3">
-                        <label for="{{ form.name.id_for_label }}">Name</label>
-                        {{ form.name }}
-                        {% if form.name.errors %}
-                            <div class="text-danger">{{ form.name.errors }}</div>
-                        {% endif %}
-                    </div>
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+                    {% endif %}
                     <div class="mb-3">
                         <label for="{{ form.upload_file.id_for_label }}">Upload File</label>
+                        <div class="form-text text-muted mb-1">The name of the <code>Experiment</code> subclass in the file becomes the experiment name.</div>
                         {{ form.upload_file }}
                         {% if form.upload_file.errors %}
                             <div class="text-danger">{{ form.upload_file.errors }}</div>
@@ -67,59 +63,81 @@
         </div>
     </div>
 </div>
-{% if experiment_graph_groups %}
+{% if experiment_graph_scenario_groups %}
 <h5 class="text-muted mb-2 mt-1">Graph-based</h5>
-<div class="row gx-2 gy-3 mb-4">
-    {% for latest_eg, older_egs in experiment_graph_groups %}
-    <div class="col-6">
-        <div class="card h-100">
-            <div class="card-header fw-bold py-2 d-flex align-items-center gap-2">
-                <span class="text-truncate">{{ latest_eg.name }}</span>
-                <span class="badge bg-secondary fw-normal ms-1 flex-shrink-0">v{{ latest_eg.version }}</span>
-                <span class="badge bg-secondary fw-normal flex-shrink-0">graph</span>
-                <a href="#" class="btn btn-outline-secondary btn-sm ms-auto flex-shrink-0 open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ latest_eg.id }}">New from this</a>
-                {% if older_egs %}
-                <button class="btn btn-sm btn-link text-muted p-0 flex-shrink-0"
-                        data-bs-toggle="collapse" data-bs-target="#eg-older-{{ forloop.counter }}">
-                    +{{ older_egs|length }} older
-                </button>
-                {% endif %}
-            </div>
-            <div class="card-body py-2">
-                <div class="small text-muted mb-1">Scenario: <span class="text-body">{{ latest_eg.scenario.name }}</span></div>
-                <div class="small text-muted mb-1">
-                    {{ latest_eg.graph.pipelines|length }} pipeline{{ latest_eg.graph.pipelines|length|pluralize }} &middot;
-                    {{ latest_eg.graph.phases|length }} phase{{ latest_eg.graph.phases|length|pluralize }}
-                </div>
-                {% if latest_eg.experiment %}
-                <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' latest_eg.experiment.artefact_id %}" class="font-monospace">{{ latest_eg.experiment.name }} v{{ latest_eg.experiment.version }}</a></div>
-                {% endif %}
-                <div class="small text-muted">Created {{ latest_eg.created_at|date:"Y-m-d H:i" }}</div>
-            </div>
-            {% if older_egs %}
-            <div class="collapse border-top" id="eg-older-{{ forloop.counter }}">
-                {% for old_eg in older_egs %}
-                <div class="card-body py-2 {% if not forloop.last %}border-bottom{% endif %}">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="fw-bold">v{{ old_eg.version }}</span>
-                        <a href="#" class="btn btn-outline-secondary btn-sm ms-auto open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ old_eg.id }}">New from this</a>
+{% for scenario, name_groups in experiment_graph_scenario_groups %}
+<div class="card mb-4">
+    <div class="card-header d-flex align-items-center gap-3 py-2">
+        <span class="fw-semibold fs-6">{{ scenario.name }}</span>
+        {% if scenario.image_url %}
+        <div class="ms-auto d-flex align-items-center gap-2">
+            <a href="#" class="preview-btn"
+               data-filepath="{{ scenario.image_url|slice:'7:' }}"
+               data-filename="{{ scenario.name }} — network preview">
+                <img src="{{ scenario.image_url }}" alt="{{ scenario.name }}" style="height:40px;width:auto;object-fit:contain;border-radius:4px;">
+            </a>
+            <a href="#" class="btn btn-sm btn-outline-primary preview-btn"
+               data-filepath="{{ scenario.image_url|slice:'7:' }}"
+               data-filename="{{ scenario.name }} — network preview">
+                <i class="bi bi-search"></i>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <div class="row gx-2 gy-3">
+            {% for latest_eg, older_egs in name_groups %}
+            <div class="col-6">
+                <div class="card h-100 border-secondary-subtle">
+                    <div class="card-header fw-bold py-2 d-flex align-items-center gap-2">
+                        <span class="text-truncate">{{ latest_eg.name }}</span>
+                        <span class="badge bg-secondary fw-normal ms-1 flex-shrink-0">v{{ latest_eg.version }}</span>
+                        <span class="badge bg-secondary fw-normal flex-shrink-0">graph</span>
+                        {% if older_egs %}
+                        <button class="btn btn-sm btn-link text-muted ms-auto p-0 flex-shrink-0"
+                                data-bs-toggle="collapse" data-bs-target="#eg-older-{{ forloop.counter }}">
+                            +{{ older_egs|length }} older
+                        </button>
+                        {% endif %}
+                        <a href="#" class="btn btn-outline-secondary btn-sm flex-shrink-0 open-graph-builder {% if not older_egs %}ms-auto{% endif %}" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ latest_eg.id }}">New from this</a>
                     </div>
-                    <div class="small text-muted mb-1">
-                        {{ old_eg.graph.pipelines|length }} pipeline{{ old_eg.graph.pipelines|length|pluralize }} &middot;
-                        {{ old_eg.graph.phases|length }} phase{{ old_eg.graph.phases|length|pluralize }}
+                    <div class="card-body py-2">
+                        <div class="small text-muted mb-1">
+                            {{ latest_eg.graph.pipelines|length }} pipeline{{ latest_eg.graph.pipelines|length|pluralize }} &middot;
+                            {{ latest_eg.graph.phases|length }} phase{{ latest_eg.graph.phases|length|pluralize }}
+                        </div>
+                        {% if latest_eg.experiment %}
+                        <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' latest_eg.experiment.artefact_id %}" class="font-monospace">{{ latest_eg.experiment.name }} v{{ latest_eg.experiment.version }}</a></div>
+                        {% endif %}
+                        <div class="small text-muted">Created {{ latest_eg.created_at|date:"Y-m-d H:i" }}</div>
                     </div>
-                    {% if old_eg.experiment %}
-                    <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' old_eg.experiment.artefact_id %}" class="font-monospace">{{ old_eg.experiment.name }} v{{ old_eg.experiment.version }}</a></div>
+                    {% if older_egs %}
+                    <div class="collapse border-top" id="eg-older-{{ forloop.counter }}">
+                        {% for old_eg in older_egs %}
+                        <div class="card-body py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="fw-bold">v{{ old_eg.version }}</span>
+                                <a href="#" class="btn btn-outline-secondary btn-sm ms-auto open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ old_eg.id }}">New from this</a>
+                            </div>
+                            <div class="small text-muted mb-1">
+                                {{ old_eg.graph.pipelines|length }} pipeline{{ old_eg.graph.pipelines|length|pluralize }} &middot;
+                                {{ old_eg.graph.phases|length }} phase{{ old_eg.graph.phases|length|pluralize }}
+                            </div>
+                            {% if old_eg.experiment %}
+                            <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' old_eg.experiment.artefact_id %}" class="font-monospace">{{ old_eg.experiment.name }} v{{ old_eg.experiment.version }}</a></div>
+                            {% endif %}
+                            <div class="small text-muted">Created {{ old_eg.created_at|date:"Y-m-d H:i" }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
                     {% endif %}
-                    <div class="small text-muted">Created {{ old_eg.created_at|date:"Y-m-d H:i" }}</div>
                 </div>
-                {% endfor %}
             </div>
-            {% endif %}
+            {% endfor %}
         </div>
     </div>
-    {% endfor %}
 </div>
+{% endfor %}
 {% endif %}
 
 {% if experiment_groups %}
@@ -177,8 +195,6 @@
             {% endif %}
         </div>
     </div>
-    {% empty %}
-        {% if not experiment_graphs %}<div>No Experiments to Display</div>{% endif %}
     {% endfor %}
 </div>
 
