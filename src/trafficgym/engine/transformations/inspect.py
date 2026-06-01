@@ -1,7 +1,6 @@
 import hashlib
 import json
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 from .registry import InputSpec, InputType, OutputSpec, Runtime, TransformationSpec, register
 
@@ -32,14 +31,16 @@ async def handler(inputs: dict[str, str], runtime: Runtime) -> dict[str, str]:
     ]
 
     detector_ids: list[str] = []
-    if "add_xml" in inputs:
-        add_root = ET.fromstring(open(inputs["add_xml"], "rb").read())
-        detector_ids = [
+    for key, path in sorted(inputs.items()):
+        if not key.startswith("add_xml"):
+            continue
+        add_root = ET.fromstring(open(path, "rb").read())
+        detector_ids.extend(
             id_
             for el in add_root.iter()
             if el.tag in ("e1Detector", "inductionLoop")
             if (id_ := el.get("id"))
-        ]
+        )
 
     output_path = runtime.base_path / f"inspection_{digest}.json"
     output_path.write_text(json.dumps({

@@ -86,6 +86,12 @@ class ScenarioForm(forms.ModelForm):
             .first()
         )
 
+        add_artefacts = list(
+            scenario.artefacts.filter(
+                original_name__iendswith=".add.xml"
+            ).order_by("original_name")
+        )
+
         preview_spec = get_spec_or_none("netpreview")
         inspect_spec = get_spec_or_none("inspect")
 
@@ -172,11 +178,12 @@ class ScenarioForm(forms.ModelForm):
                 input_name="net_xml"
             )
 
-            # TransformationInput.objects.create(
-            #     transformation_reques=inspect_request,
-            #     artefact=add_artefact,
-            #     input_name="add_xml"
-            # )
+            for i, add_artefact in enumerate(add_artefacts):
+                TransformationInput.objects.create(
+                    transformation_request=inspect_request,
+                    artefact=add_artefact,
+                    input_name=f"add_xml_{i}",
+                )
 
 
             logger.info(
