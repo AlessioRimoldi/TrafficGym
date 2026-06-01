@@ -1,7 +1,9 @@
 from django.urls import path
+from django.http import HttpResponse
 from . import views
 
 urlpatterns = [
+    path("favicon.ico", lambda r: HttpResponse(status=204)),
     # path("", views.index, name="index"),
     path("", views.run_requests_list_view, name="run_requests_list"),
     path(
