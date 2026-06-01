@@ -255,7 +255,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                     : `${fp} (${run_execs})`,
                                 data: points
                                         .filter(p => !isNaN(Number(p.y)))
-                                        .map(p => ({x: p.x, y: Number(p.y)})),
+                                        .map(p => ({x: p.x, y: Number(p.y)}))
+                                        .sort((a, b) => a.x - b.x),
                                 runId: rid,
                                 dataIndex: dataIndex,
                                 rawData: points,
@@ -378,8 +379,50 @@ document.addEventListener("DOMContentLoaded", () => {
                         y: {
                             title: { display: true, text: "Value" }
                         }
+                    },
+                    plugins: {
+                        zoom: {
+                            zoom: {
+                                drag: {
+                                    enabled: true,
+                                    modifierKey: "alt",
+                                    backgroundColor: "rgba(13, 110, 253, 0.1)",
+                                    borderColor: "rgba(13, 110, 253, 0.5)",
+                                    borderWidth: 1,
+                                },
+                                wheel: { enabled: true },
+                                mode: "xy",
+                            },
+                            pan: { enabled: false },
+                        }
                     }
-                }
+                } as any
+            });
+
+            // Pan wired manually because the plugin's built-in mousedown handler
+            // doesn't start pan reliably when drag-zoom is also active.
+            let panOrigin: { x: number; y: number } | null = null;
+
+            chartCanvas.addEventListener("mousedown", (e) => {
+                if (e.altKey || e.button !== 0) return;
+                panOrigin = { x: e.clientX, y: e.clientY };
+                chartCanvas.style.cursor = "grabbing";
+            });
+
+            window.addEventListener("mousemove", (e) => {
+                if (!panOrigin || !chart) return;
+                (chart as any).pan({ x: e.clientX - panOrigin.x, y: e.clientY - panOrigin.y });
+                panOrigin = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener("mouseup", () => {
+                if (!panOrigin) return;
+                panOrigin = null;
+                chartCanvas.style.cursor = "default";
+            });
+
+            document.getElementById("resetZoomBtn")?.addEventListener("click", () => {
+                (chart as any)?.resetZoom();
             });
         }
 
