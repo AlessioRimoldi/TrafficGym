@@ -79,6 +79,16 @@ urlpatterns = [
         name="transformation_request_detail",
     ),
     path(
+        "api/blocks",
+        views.blocks_registry_view,
+        name="blocks_registry",
+    ),
+    path(
+        "api/domains",
+        views.domains_view,
+        name="domains",
+    ),
+    path(
         "api/list_transformations",
         views.list_transformations_view,
         name="list_transformations",

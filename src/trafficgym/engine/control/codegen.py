@@ -2,6 +2,10 @@ from __future__ import annotations
 from typing import Any, TypedDict
 import re
 
+# Importing the package ensures @block decorators on controllers/aggregators fire.
+import trafficgym.engine.control  # noqa: F401
+from trafficgym.engine.control.registry import BLOCK_REGISTRY
+
 
 class _ObserverSpec(TypedDict):
     id: str
@@ -17,12 +21,15 @@ class _ActuatorSpec(TypedDict):
     object_id: str
 
 
-class _BlockSpec(TypedDict):
+class _BlockSpecBase(TypedDict):
     id: str
     key: str
     params: dict[str, Any]
     input_from: str | None
     actuate_to: str | None
+
+class _BlockSpec(_BlockSpecBase, total=False):
+    inputs_from: list[str]
 
 
 class _SinkSpec(TypedDict):
@@ -59,31 +66,14 @@ class _GraphSpec(TypedDict):
 
 
 _BLOCK_INPUT_KEY: dict[str, str] = {
-    "RampMeterController": "occupancy",
-    "StaticTLSController": "sim_time",
+    k: v.input_key for k, v in BLOCK_REGISTRY.items() if v.input_key is not None
 }
 
 _BLOCK_OUTPUT_KEY: dict[str, str] = {
-    "RampMeterController": "program_id",
-    "StaticTLSController": "state",
+    k: v.output_key for k, v in BLOCK_REGISTRY.items() if v.output_key is not None
 }
 
-_SETTER_PARAM_KEY: dict[str, str] = {
-    "setProgram":             "programID",
-    "setRedYellowGreenState": "state",
-    "setPhase":               "index",
-}
-
-_GETTER_CAST: dict[str, str] = {
-    "getLastIntervalOccupancy": "float",
-    "getLastStepOccupancy":     "float",
-    "getLastStepVehicleNumber": "int",
-    "getLastStepMeanSpeed":     "float",
-    "getSpentDuration":         "float",
-    "getPhase":                 "int",
-}
-
-_AGGREGATOR_KEYS = {"RollingAverage", "ExponentialMovingAverage"}
+from trafficgym.engine.ports.sumo_domains import GETTER_CAST as _GETTER_CAST, SETTER_PARAM_KEY as _SETTER_PARAM_KEY
 
 _I = "    "  # 4-space indent unit
 
@@ -102,14 +92,19 @@ def generate(graph: _GraphSpec, name: str) -> str:
         for b in p.get("blocks", []):
             needed_keys.add(b["key"])
 
-    needed_aggs = needed_keys & _AGGREGATOR_KEYS
-    needed_ctrls = needed_keys - _AGGREGATOR_KEYS
+    # Group needed keys by their source module for clean import lines.
+    from collections import defaultdict as _defaultdict
+    by_module: dict[str, list[str]] = _defaultdict(list)
+    for key in needed_keys:
+        mod = BLOCK_REGISTRY[key].module if key in BLOCK_REGISTRY else "controllers"
+        by_module[mod].append(key)
+
+    def _controlled_count(pipe: _PipelineSpec) -> int:
+        sink_ids = {s["input_from"] for s in pipe.get("sinks", []) if s.get("input_from")}
+        return sum(1 for b in pipe.get("blocks", []) if b.get("actuate_to") or b["id"] in sink_ids)
 
     needs_exit_stack = any(
-        sum(
-            sum(1 for b in pipelines[pid].get("blocks", []) if b.get("actuate_to"))
-            for pid in ph["active_pipeline_ids"] if pid in pipelines
-        ) > 1
+        sum(_controlled_count(pipelines[pid]) for pid in ph["active_pipeline_ids"] if pid in pipelines) > 1
         for ph in phases
     )
 
@@ -117,15 +112,10 @@ def generate(graph: _GraphSpec, name: str) -> str:
     lines.append("from typing import Any")
     lines.append("from trafficgym.experiment_sdk.experiments.base import Experiment")
     lines.append("from trafficgym.engine.ports.simulation import SimulationPort")
-    if needed_ctrls:
+    for mod, class_names in sorted(by_module.items()):
         lines.append(
-            "from trafficgym.engine.control.controllers import "
-            + ", ".join(sorted(needed_ctrls))
-        )
-    if needed_aggs:
-        lines.append(
-            "from trafficgym.engine.control.aggregators import "
-            + ", ".join(sorted(needed_aggs))
+            f"from trafficgym.engine.control.{mod} import "
+            + ", ".join(sorted(class_names))
         )
     if needs_exit_stack:
         lines.append("import contextlib")
@@ -172,7 +162,7 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                 durations = [r["duration"] for r in rows]
                 out.append(f"{var} = StaticTLSController({phase_strs!r}, {durations!r})")
             else:
-                kwargs = ", ".join(f"{k}={v}" for k, v in blk.get("params", {}).items())
+                kwargs = ", ".join(f"{k}={repr(v)}" for k, v in blk.get("params", {}).items())
                 out.append(f"{var} = {blk['key']}({kwargs})")
     if blk_var:
         out.append("")
@@ -213,7 +203,10 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
             }
 
             for blk in pipe.get("blocks", []):
-                if not blk.get("actuate_to"):
+                has_actuate = bool(blk.get("actuate_to"))
+                has_sink = blk["id"] in sink_by_input_id
+                # Blocks with neither an actuator nor a sink output need no controlled loop.
+                if not has_actuate and not has_sink:
                     continue
 
                 blk_key = blk["key"]
@@ -221,7 +214,7 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                 ctrl_var = f"_ctrl_{ctrl_counter}"
                 ctrl_counter += 1
 
-                # Observe function
+                # Observe function — builds the inputs dict passed to block.step().
                 obs_fn = f"_obs_{ctrl_var}"
                 out.append(f"def {obs_fn}(a: SimulationPort, t: float) -> dict[str, Any]:")
                 if blk_key == "StaticTLSController":
@@ -229,11 +222,27 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                     out.append(f'{_I}return {{"{input_key}": t}}')
                 else:
                     source_id = blk.get("input_from") or ""
-                    if source_id:
+                    multi_sources: list[str] = list(blk.get("inputs_from") or [])
+                    counter: list[int] = [0]
+                    if len(multi_sources) > 1:
+                        # Fan-in at the top level: each source uses a unique key
+                        source_vars: list[str] = []
+                        for _i, _src in enumerate(multi_sources):
+                            _stmts, _var = _build_obs_stmts(
+                                _src, obs_by_id, blk_by_id, blk_var, pid,
+                                sink_by_input_id, f"_src{_i}", counter,
+                            )
+                            for stmt in _stmts:
+                                out.append(f"{_I}{stmt}")
+                            source_vars.append(_var)
+                        merge = "{" + ", ".join(f"**{v}" for v in source_vars) + "}"
+                        out.append(f"{_I}return {merge}")
+                    elif source_id or (multi_sources and multi_sources[0]):
+                        effective_src = source_id or multi_sources[0]
                         input_key = _BLOCK_INPUT_KEY.get(blk_key, "value")
                         stmts, final_var = _build_obs_stmts(
-                            source_id, obs_by_id, blk_by_id, blk_var, pid,
-                            sink_by_input_id, input_key,
+                            effective_src, obs_by_id, blk_by_id, blk_var, pid,
+                            sink_by_input_id, input_key, counter,
                         )
                         for stmt in stmts:
                             out.append(f"{_I}{stmt}")
@@ -241,19 +250,26 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                     else:
                         out.append(f"{_I}return {{}}")
 
-                # Actuate function
-                output_key = _BLOCK_OUTPUT_KEY.get(blk_key, "value")
+                # Actuate function — receives block.step() output; applies to SUMO and/or records.
+                # For blocks with dynamic output keys (e.g. Renamer) fall back to params.
+                output_key = (
+                    _BLOCK_OUTPUT_KEY.get(blk_key)
+                    or str(blk.get("params", {}).get("output_key", "value"))
+                )
                 act: _ActuatorSpec | None = act_by_id.get(blk.get("actuate_to") or "")
                 act_fn = f"_act_{ctrl_var}"
                 out.append(f"def {act_fn}(a: SimulationPort, r: dict[str, Any]) -> None:")
                 out.append(f'{_I}if "{output_key}" not in r:')
                 out.append(f"{_I * 2}return")
-                if act:
+                if has_actuate and act:
                     param_key = _SETTER_PARAM_KEY.get(act["setter"], "value")
                     out.append(
                         f'{_I}a.apply("{act["domain"]}", "{act["setter"]}", '
                         f'"{act["object_id"]}", {{"{param_key}": r["{output_key}"]}})'
                     )
+                if has_sink:
+                    sink_label = sink_by_input_id[blk["id"]]
+                    out.append(f'{_I}self._record("{sink_label}", r["{output_key}"])')
 
                 controlled.append((instance_var, obs_fn, act_fn))
 
@@ -288,12 +304,18 @@ def _build_obs_stmts(
     pid: str,
     sink_by_input_id: dict[str, str],
     obs_wrap_key: str,
+    counter: list[int] | None = None,
 ) -> tuple[list[str], str]:
-    """Walk the input chain, emit sequential statements, return (stmts, final_var_name)."""
-    stmts: list[str] = []
-    counter = [0]
+    """Walk the input chain, emit sequential statements, return (stmts, final_var_name).
 
-    def walk(sid: str) -> str:
+    counter is shared across fan-in calls so variable names never collide.
+    """
+    stmts: list[str] = []
+    if counter is None:
+        counter = [0]
+
+    def walk(sid: str, wrap_key: str | None = None) -> str:
+        key = wrap_key if wrap_key is not None else obs_wrap_key
         if not sid:
             return "{}"
         if sid in obs_by_id:
@@ -305,19 +327,33 @@ def _build_obs_stmts(
             )
             var = f"_r{counter[0]}"
             counter[0] += 1
-            stmts.append(f'{var} = {{"{obs_wrap_key}": {raw}}}')
+            stmts.append(f'{var} = {{"{key}": {raw}}}')
             if sid in sink_by_input_id:
-                stmts.append(f'self._record("{sink_by_input_id[sid]}", {var}["{obs_wrap_key}"])')
+                stmts.append(f'self._record("{sink_by_input_id[sid]}", {var}["{key}"])')
             return var
         if sid in blk_by_id:
             _b = blk_by_id[sid]
             _bv = blk_var.get((pid, _b["id"]), "_missing_blk")
-            prev_var = walk(_b.get("input_from") or "")
-            var = f"_r{counter[0]}"
-            counter[0] += 1
-            stmts.append(f"{var} = {_bv}.step(a, {prev_var})")
+            multi: list[str] = list(_b.get("inputs_from") or [])
+            if len(multi) > 1:
+                # Fan-in: walk each source with a unique key, then merge
+                src_vars: list[str] = []
+                for _i, _src in enumerate(multi):
+                    sv = walk(_src, wrap_key=f"_src{_i}")
+                    src_vars.append(sv)
+                merge_var = f"_r{counter[0]}"
+                counter[0] += 1
+                stmts.append(f"{merge_var} = {{{', '.join(f'**{v}' for v in src_vars)}}}")
+                var = f"_r{counter[0]}"
+                counter[0] += 1
+                stmts.append(f"{var} = {_bv}.step(a, {merge_var})")
+            else:
+                single = (multi[0] if multi else None) or (_b.get("input_from") or "")
+                prev_var = walk(single)
+                var = f"_r{counter[0]}"
+                counter[0] += 1
+                stmts.append(f"{var} = {_bv}.step(a, {prev_var})")
             if sid in sink_by_input_id:
-                # record the first value in the output dict
                 stmts.append(f'self._record("{sink_by_input_id[sid]}", next(iter({var}.values()), None))')
             return var
         return "{}"
