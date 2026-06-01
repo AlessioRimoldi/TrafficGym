@@ -5,67 +5,69 @@ interface InspectionData {
     detector_ids: string[];
 }
 
-// ─── Domain definitions ───────────────────────────────────────────────────────
+// ─── Domain definitions (populated from /api/domains) ────────────────────────
 
-const OBSERVER_GETTERS: Record<string, string[]> = {
-    detector: ["getLastIntervalOccupancy", "getLastStepOccupancy", "getLastStepVehicleNumber"],
-    tls:      ["getRedYellowGreenState", "getSpentDuration", "getPhase"],
-    edge:     ["getLastStepVehicleIDs", "getLastStepMeanSpeed", "getLastStepOccupancy"],
-    lane:     ["getLastStepOccupancy", "getLastStepVehicleNumber", "getLastStepMeanSpeed"],
-};
+interface GetterDef { getter: string; type: string; output_key?: string }
+interface SetterDef { setter: string; sumo_param: string; type: string; input_key?: string }
+interface ObserverDomainEntry { domain: string; getters: GetterDef[] }
+interface ActuatorDomainEntry { domain: string; setters: SetterDef[] }
 
-const ACTUATOR_SETTERS: Record<string, string[]> = {
-    tls: ["setProgram", "setRedYellowGreenState", "setPhase"],
-};
+// These are populated by openBuilder before renderPipeline is called.
+let OBSERVER_DEFS: Record<string, ObserverDomainEntry> = {};
+let ACTUATOR_DEFS: Record<string, ActuatorDomainEntry> = {};
 
-const OBSERVER_DOMAIN: Record<string, string> = {
-    detector: "inductionloop",
-    tls:      "trafficlight",
-    edge:     "edge",
-    lane:     "lane",
-};
+// Derived flat lookups — recomputed after each fetch.
+let OBSERVER_GETTERS:      Record<string, string[]>              = {};
+let GETTER_TYPE:            Record<string, string>               = {};
+let GETTER_DEF:             Record<string, GetterDef>            = {};
+let ACTUATOR_SETTERS:       Record<string, string[]>             = {};
+let SETTER_INPUT:           Record<string, { sumo_param: string; type: string; input_key?: string }> = {};
+let OBSERVER_DOMAIN:        Record<string, string>               = {};
+let ACTUATOR_DOMAIN:        Record<string, string>               = {};
+let OBSERVER_TYPE_FROM_DOMAIN: Record<string, string>            = {};
+let ACTUATOR_TYPE_FROM_DOMAIN: Record<string, string>            = {};
 
-const ACTUATOR_DOMAIN: Record<string, string> = {
-    tls: "trafficlight",
-};
+function applyDomainData(data: { observers: Record<string, ObserverDomainEntry>; actuators: Record<string, ActuatorDomainEntry> }): void {
+    OBSERVER_DEFS = data.observers;
+    ACTUATOR_DEFS = data.actuators;
 
-const OBSERVER_TYPE_FROM_DOMAIN = Object.fromEntries(Object.entries(OBSERVER_DOMAIN).map(([t, d]) => [d, t]));
-const ACTUATOR_TYPE_FROM_DOMAIN = Object.fromEntries(Object.entries(ACTUATOR_DOMAIN).map(([t, d]) => [d, t]));
+    OBSERVER_GETTERS = Object.fromEntries(Object.entries(OBSERVER_DEFS).map(([k, v]) => [k, v.getters.map(g => g.getter)]));
+    GETTER_TYPE = {};
+    GETTER_DEF  = {};
+    for (const { getters } of Object.values(OBSERVER_DEFS))
+        for (const g of getters) { GETTER_TYPE[g.getter] = g.type; GETTER_DEF[g.getter] = g; }
+
+    ACTUATOR_SETTERS = Object.fromEntries(Object.entries(ACTUATOR_DEFS).map(([k, v]) => [k, v.setters.map(s => s.setter)]));
+    SETTER_INPUT = {};
+    for (const { setters } of Object.values(ACTUATOR_DEFS))
+        for (const s of setters) SETTER_INPUT[s.setter] = { sumo_param: s.sumo_param, type: s.type, input_key: s.input_key };
+
+    OBSERVER_DOMAIN = Object.fromEntries(Object.entries(OBSERVER_DEFS).map(([k, v]) => [k, v.domain]));
+    ACTUATOR_DOMAIN = Object.fromEntries(Object.entries(ACTUATOR_DEFS).map(([k, v]) => [k, v.domain]));
+    OBSERVER_TYPE_FROM_DOMAIN = Object.fromEntries(Object.entries(OBSERVER_DOMAIN).map(([t, d]) => [d, t]));
+    ACTUATOR_TYPE_FROM_DOMAIN = Object.fromEntries(Object.entries(ACTUATOR_DOMAIN).map(([t, d]) => [d, t]));
+}
 
 type ParamDef =
     | { type?: "number"; name: string; label: string; default: number }
     | { type: "string";  name: string; label: string; default: string }
-    | { type: "phase_list"; name: string; label: string };
+    | { type: "phase_list"; name: string; label: string }
+    | { type: "select"; name: string; label: string; default: string; choices: string[] };
 
-const BLOCKS: { key: string; label: string; params?: ParamDef[] }[] = [
-    {
-        key: "RampMeterController",
-        label: "Ramp Meter",
-        params: [
-            { name: "off_up",        label: "OFF → QTR",   default: 15 },
-            { name: "quarter_up",    label: "QTR → 10TH",  default: 20 },
-            { name: "quarter_down",  label: "QTR → OFF",   default: 10 },
-            { name: "tenth_up",      label: "10TH → CHK",  default: 30 },
-            { name: "tenth_down",    label: "10TH → QTR",  default: 15 },
-            { name: "choke_down",    label: "CHK → 10TH",  default: 25 },
-        ],
-    },
-    {
-        key: "StaticTLSController",
-        label: "Static TLS",
-        params: [{ type: "phase_list", name: "phase_rows", label: "Phases" }],
-    },
-    {
-        key: "RollingAverage",
-        label: "Rolling Avg",
-        params: [{ name: "window", label: "Window", default: 10 }],
-    },
-    {
-        key: "ExponentialMovingAverage",
-        label: "Exp Avg",
-        params: [{ name: "alpha", label: "Alpha (0–1)", default: 0.3 }],
-    },
-];
+interface BlockEntry {
+    key: string;
+    label: string;
+    module?: string;
+    description?: string;
+    input_key?: string;
+    input_type?: string;
+    output_key?: string;
+    output_type?: string;
+    params?: ParamDef[];
+}
+
+// Populated from /api/blocks and /api/domains when the graph builder opens.
+let BLOCKS: BlockEntry[] = [];
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 
@@ -139,13 +141,13 @@ interface SinkReg {
     inPort: HTMLElement;
 }
 
-// ─── Serialized graph spec ─────────────────────────────────────────────────────
+// ─── Serialised graph spec ─────────────────────────────────────────────────────
 
 interface BlockSpec {
     id: string;
     key: string;
     params: Record<string, unknown>;
-    input_from: string | null;
+    inputs_from: string[];
     actuate_to: string | null;
 }
 
@@ -156,6 +158,7 @@ interface PipelineSpec {
     blocks: BlockSpec[];
     actuators: { id: string; domain: string; setter: string; object_id: string }[];
     sinks: { id: string; label: string; input_from: string | null }[];
+    stage_order?: { type: "block" | "sink"; index: number }[];
 }
 
 interface GraphSpec {
@@ -173,7 +176,40 @@ const ENTER_DOMAIN_SETTERS: Record<string, string[]> = {
     trafficlight: ["setProgram", "setRedYellowGreenState", "setPhase"],
 };
 
-interface Conn { from: HTMLElement; to: HTMLElement; line: SVGLineElement }
+interface Conn { from: HTMLElement; to: HTMLElement; line: SVGLineElement; compatible: boolean }
+
+// ─── Custom port tooltip ──────────────────────────────────────────────────────
+
+let _portTooltipEl: HTMLDivElement | null = null;
+
+function getPortTooltipEl(): HTMLDivElement {
+    if (!_portTooltipEl) {
+        _portTooltipEl = document.createElement("div");
+        Object.assign(_portTooltipEl.style, {
+            position: "fixed",
+            background: "rgba(15,15,15,0.82)",
+            color: "#fff",
+            padding: "2px 8px",
+            borderRadius: "4px",
+            fontSize: "12px",
+            fontFamily: "monospace",
+            pointerEvents: "none",
+            zIndex: "9999",
+            display: "none",
+            whiteSpace: "nowrap",
+        });
+        document.body.appendChild(_portTooltipEl);
+    }
+    return _portTooltipEl;
+}
+
+// ─── Type-compatibility check ─────────────────────────────────────────────────
+
+function typesCompatible(a: string, b: string): boolean {
+    if (a === b) return true;
+    const numeric = new Set(["int", "float"]);
+    return numeric.has(a) && numeric.has(b);
+}
 
 // ─── Top-level utility builders ───────────────────────────────────────────────
 
@@ -248,12 +284,15 @@ function addDropdown(
 ): HTMLDivElement {
     const wrap = document.createElement("div");
     wrap.className = "dropdown";
+    wrap.style.minWidth = "0";
 
     const btn = document.createElement("button");
-    btn.className = `btn btn-sm ${btnClass} dropdown-toggle`;
+    btn.className = `btn btn-sm ${btnClass} dropdown-toggle w-100`;
     btn.setAttribute("data-bs-toggle", "dropdown");
     btn.setAttribute("data-bs-auto-close", "outside");
     btn.textContent = `+ ${label}`;
+    btn.title = label;
+    Object.assign(btn.style, { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" });
 
     const menu = document.createElement("ul");
     menu.className = "dropdown-menu";
@@ -309,6 +348,16 @@ function addDropdown(
 
     menu.appendChild(scrollLi);
     wrap.append(btn, menu);
+
+    // Must come after wrap.append so nextElementSibling resolves.
+    // Fixed strategy escapes overflow-clipping ancestors; z-index 2000 clears the modal (1055).
+    wrap.style.setProperty("--bs-dropdown-zindex", "2000");
+    if ((window as any).bootstrap?.Dropdown) {
+        new (window as any).bootstrap.Dropdown(btn, {
+            popperConfig(d: any) { return { ...d, strategy: "fixed" }; },
+        });
+    }
+
     return wrap;
 }
 
@@ -399,7 +448,9 @@ function createPipelineRow(
     data: InspectionData,
     reg: PipelineReg,
     onRemove: () => void,
+    onErrorsChange: (errors: string[]) => void = () => {},
     initialPipeline: PipelineSpec | null = null,
+    missingObjectIds: Set<string> = new Set(),
 ): { el: HTMLDivElement; serialize: () => PipelineSpec; drawConnections: () => void } {
     let pendingPort: HTMLElement | null = null;
     let svgEl!: SVGSVGElement;
@@ -412,8 +463,10 @@ function createPipelineRow(
     let obsCounter = 0;
     let actCounter = 0;
     let sinkCounter = 0;
+    let stageSeq = 0;
 
-    const markerId = `arrow_${reg.id}`;
+    const markerId      = `arrow_${reg.id}`;
+    const errorMarkerId = `arrow_err_${reg.id}`;
 
     // ── Connection helpers ────────────────────────────────────────────────────
 
@@ -439,11 +492,19 @@ function createPipelineRow(
                 conns.splice(i, 1);
             }
         }
+        revalidate();
     }
 
-    function makePort(side: "input" | "output"): HTMLSpanElement {
+    // portType: raw type for compatibility checks (e.g. "float", "list[str]")
+    // portLabel: display string for tooltip (e.g. "occupancy: float")
+    // portKey: semantic variable name for strict matching (e.g. "occupancy")
+    // All stored in dataset so they can be updated after creation.
+    function makePort(side: "input" | "output", portType?: string, portLabel?: string, portKey?: string): HTMLSpanElement {
         const p = document.createElement("span");
         p.dataset.side = side;
+        if (portType)  p.dataset.portType  = portType;
+        if (portLabel) p.dataset.portLabel = portLabel;
+        if (portKey)   p.dataset.portKey   = portKey;
         Object.assign(p.style, {
             position: "absolute",
             top: "50%",
@@ -459,18 +520,152 @@ function createPipelineRow(
             transition: "border-color .15s, background .15s",
         });
         p.addEventListener("click", (e) => { e.stopPropagation(); onPort(p); });
+        // Custom tooltip reads dataset dynamically so updates after creation are reflected.
+        // Set display:block first so offsetWidth/offsetHeight are accurate (forces reflow).
+        p.addEventListener("mousemove", (e) => {
+            const text = p.dataset.portLabel ?? p.dataset.portType;
+            if (!text) return;
+            const el = getPortTooltipEl();
+            el.textContent = text;
+            el.style.display = "block";
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            const left = Math.max(4, Math.min(e.clientX - w / 2, window.innerWidth - w - 4));
+            el.style.left = `${left}px`;
+            el.style.top  = `${e.clientY - h - 10}px`;
+        });
+        p.addEventListener("mouseleave", () => { getPortTooltipEl().style.display = "none"; });
         return p;
     }
 
+    function connIsCompatible(from: HTMLElement, to: HTMLElement): boolean {
+        const ft = from.dataset.portType;
+        const tt = to.dataset.portType;
+        if (!ft || !tt) return true;                  // either side unknown = wildcard
+        if (!typesCompatible(ft, tt)) return false;   // type mismatch
+        const fk = from.dataset.portKey;
+        const tk = to.dataset.portKey;
+        if (fk && tk && fk !== tk) return false;      // explicit key mismatch
+        if (!fk && tk) return false;                  // destination requires a key but source has none
+        return true;
+    }
+
+    function applyConnStyle(conn: Conn): void {
+        const ok = conn.compatible;
+        conn.line.setAttribute("stroke", ok ? "#6c757d" : "#dc3545");
+        conn.line.setAttribute("stroke-width", ok ? "2" : "2.5");
+        conn.line.setAttribute("marker-end", `url(#${ok ? markerId : errorMarkerId})`);
+    }
+
     function connectPorts(from: HTMLElement, to: HTMLElement): void {
+        const compatible = connIsCompatible(from, to);
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("stroke", "#6c757d");
-        line.setAttribute("stroke-width", "2");
-        line.setAttribute("marker-end", `url(#${markerId})`);
+        const conn: Conn = { from, to, line, compatible };
+        applyConnStyle(conn);
         svgEl.appendChild(line);
-        const conn: Conn = { from, to, line };
         conns.push(conn);
         syncLine(conn);
+        revalidate();
+    }
+
+    function revalidate(): void {
+        // Step 1: infer output types for blocks with no declared output_type.
+        for (const br of blockRegs) {
+            const bDef = BLOCKS.find(b => b.key === br.key);
+            if (bDef?.output_type) continue;  // has a declared type — skip
+
+            const inConns = conns.filter(c => c.to === br.inPort);
+
+            // Constant: output type from params["value_type"], key from params["output_key"].
+            // Not input-driven — always set regardless of connections.
+            if (br.key === "Constant") {
+                const outKey  = (br.params["output_key"] as string) || "";
+                const outType = (br.params["value_type"] as string) || "float";
+                br.outPort.dataset.portType  = outType;
+                br.outPort.dataset.portKey   = outKey;
+                br.outPort.dataset.portLabel = outKey ? `${outKey}: ${outType}` : outType;
+                continue;
+            }
+
+            // Renamer: output key from params["output_key"], type passes through from single input.
+            if (br.key === "Renamer") {
+                if (inConns.length === 0) {
+                    br.outPort.dataset.portType  = "";
+                    br.outPort.dataset.portKey   = "";
+                    br.outPort.dataset.portLabel = "";
+                } else {
+                    const outKey  = (br.params["output_key"] as string) || "";
+                    const outType = inConns[0].from.dataset.portType || "";
+                    br.outPort.dataset.portType  = outType;
+                    br.outPort.dataset.portKey   = outKey;
+                    br.outPort.dataset.portLabel = outKey && outType ? `${outKey}: ${outType}` : (outType || outKey);
+                }
+                continue;
+            }
+
+            // Aggregator inference: derive output from connected inputs.
+            const hasDynOutputKey = Object.prototype.hasOwnProperty.call(br.params, "output_key");
+            if (inConns.length === 0) {
+                // Show the param value so the port isn't invisibly empty.
+                const paramKey = hasDynOutputKey ? String(br.params["output_key"] || "") : "";
+                br.outPort.dataset.portType  = "";
+                br.outPort.dataset.portKey   = paramKey;
+                br.outPort.dataset.portLabel = paramKey;
+                continue;
+            }
+            const keys  = [...new Set(inConns.map(c => c.from.dataset.portKey).filter(Boolean))];
+            const types = [...new Set(inConns.map(c => c.from.dataset.portType).filter(Boolean))];
+            const allNumeric = types.length > 0 && types.every(t => t === "float" || t === "int");
+            const outKey  = keys.length === 1 ? keys[0] : "";
+            // Averaging always produces float; if types are incompatible leave blank.
+            const outType = allNumeric ? "float" : (types.length === 1 ? types[0] : "");
+            br.outPort.dataset.portType  = outType;
+            br.outPort.dataset.portKey   = outKey;
+            br.outPort.dataset.portLabel = outKey && outType ? `${outKey}: ${outType}` : outType;
+            // Keep the output_key param in sync so codegen uses the inferred key.
+            if (outKey && hasDynOutputKey) br.params["output_key"] = outKey;
+        }
+
+        // Step 2: re-check all connection compatibility (uses updated port data).
+        for (const conn of conns) {
+            conn.compatible = connIsCompatible(conn.from, conn.to);
+            applyConnStyle(conn);
+        }
+
+        // Step 3: collect errors.
+        const errors: string[] = [];
+
+        // Aggregator input uniformity errors (skip Renamer — single input by design).
+        for (const br of blockRegs) {
+            const bDef = BLOCKS.find(b => b.key === br.key);
+            if (bDef?.output_type || br.key === "Renamer") continue;
+            const inConns = conns.filter(c => c.to === br.inPort);
+            if (inConns.length < 2) continue;
+            const label = bDef?.label ?? br.key;
+            const keys  = [...new Set(inConns.map(c => c.from.dataset.portKey).filter(Boolean))];
+            const types = [...new Set(inConns.map(c => c.from.dataset.portType).filter(Boolean))];
+            if (keys.length > 1)
+                errors.push(`${label}: inputs have different variable names (${keys.join(", ")})`);
+            if (types.length > 1 && !types.every(t => t === "float" || t === "int"))
+                errors.push(`${label}: incompatible input types (${types.join(", ")})`);
+        }
+
+        // Connection type/key mismatch errors.
+        for (const conn of conns) {
+            if (!conn.compatible) {
+                const ft = conn.from.dataset.portType ?? "?";
+                const tt = conn.to.dataset.portType   ?? "?";
+                const fk = conn.from.dataset.portKey;
+                const tk = conn.to.dataset.portKey;
+                const fl = conn.from.dataset.portLabel ?? ft;
+                const tl = conn.to.dataset.portLabel   ?? tt;
+                const reason = !typesCompatible(ft, tt)
+                    ? `type mismatch: ${ft} ≠ ${tt}`
+                    : `variable mismatch: ${fk} ≠ ${tk}`;
+                errors.push(`${fl} → ${tl} (${reason})`);
+            }
+        }
+        onErrorsChange(errors);
     }
 
     function onPort(port: HTMLElement): void {
@@ -496,6 +691,7 @@ function createPipelineRow(
             pendingPort.style.background = "#fff";
             pendingPort.style.borderColor = "#adb5bd";
             pendingPort = null;
+            revalidate();
             return;
         }
 
@@ -533,16 +729,43 @@ function createPipelineRow(
     // ── Node builders ─────────────────────────────────────────────────────────
 
     function makeObserverNode(type: string, objectId: string, onRemoveCard: () => void): HTMLDivElement {
-        const out = makePort("output");
         const getterSel = makeSelect(OBSERVER_GETTERS[type] ?? []);
+        const obsPortLabel = (getter: string) => {
+            const def = GETTER_DEF[getter];
+            const t   = def?.type;
+            const k   = def?.output_key;
+            if (k && t) return `${getter} → ${k}: ${t}`;
+            return t ? `${getter} → ${t}` : getter;
+        };
+        const initialDef  = GETTER_DEF[getterSel.value];
+        const initialType = initialDef?.type ?? "";
+        const initialKey  = initialDef?.output_key ?? "";
+        const out = makePort("output", initialType, obsPortLabel(getterSel.value), initialKey);
         const nodeId = `obs_${obsCounter++}`;
         const rec: ObserverNodeRec = { id: nodeId, type, objectId, getterEl: getterSel, outPort: out };
         obsNodes.push(rec);
+        getterSel.addEventListener("change", () => {
+            const def = GETTER_DEF[getterSel.value];
+            out.dataset.portType  = def?.type  ?? "";
+            out.dataset.portKey   = def?.output_key ?? "";
+            out.dataset.portLabel = obsPortLabel(getterSel.value);
+            revalidate();
+        });
         const { card, body } = makeCard([out], () => {
             obsNodes.splice(obsNodes.indexOf(rec), 1);
             onRemoveCard();
         });
-        body.prepend(badge(type), idLabel(objectId), getterSel);
+        body.classList.remove("d-flex", "align-items-center");
+        body.classList.add("d-block");
+        const rmBtn = body.lastElementChild as HTMLElement;
+        const topRow = document.createElement("div");
+        topRow.className = "d-flex align-items-center gap-1 mb-1";
+        topRow.append(badge(type), idLabel(objectId), rmBtn);
+        body.prepend(topRow);
+        getterSel.classList.remove("ms-2");
+        getterSel.style.maxWidth = "";
+        getterSel.style.width = "100%";
+        body.appendChild(getterSel);
         return card;
     }
 
@@ -552,10 +775,18 @@ function createPipelineRow(
         paramValues: Record<string, unknown>,
         onRemoveCard: () => void,
         showRemoveBtn = true,
+        inputKey?: string,
+        inputType?: string,
+        outputKey?: string,
+        outputType?: string,
+        onParamChange?: () => void,
+        showInputPort = true,
     ): { card: HTMLDivElement; inPort: HTMLElement; outPort: HTMLElement } {
-        const inp = makePort("input");
-        const out = makePort("output");
-        const { card, body } = makeCard([inp, out], onRemoveCard, showRemoveBtn);
+        const inpLabel  = inputKey  && inputType  ? `${inputKey}: ${inputType}`   : inputType  ?? inputKey;
+        const outLabel  = outputKey && outputType ? `${outputKey}: ${outputType}` : outputType ?? outputKey;
+        const inp = makePort("input",  inputType,  inpLabel,  inputKey);
+        const out = makePort("output", outputType, outLabel, outputKey);
+        const { card, body } = makeCard(showInputPort ? [inp, out] : [out], onRemoveCard, showRemoveBtn);
 
         if (params.length > 0) {
             body.classList.remove("d-flex", "align-items-center");
@@ -569,6 +800,10 @@ function createPipelineRow(
 
             const grid = document.createElement("div");
             grid.className = "row g-1";
+
+            // Keyed references used for inter-param linking after the loop.
+            const inputEls = new Map<string, HTMLInputElement>();
+            const selectEls = new Map<string, HTMLSelectElement>();
 
             for (const p of params) {
                 if (p.type === "phase_list") {
@@ -602,6 +837,26 @@ function createPipelineRow(
                     });
                     phaseWrap.append(lbl, rowsContainer, addRowBtn);
                     grid.appendChild(phaseWrap);
+                } else if (p.type === "select") {
+                    const col = document.createElement("div");
+                    col.className = "col-6";
+                    const lbl = document.createElement("label");
+                    lbl.className = "form-label mb-0 small text-muted";
+                    lbl.textContent = p.label;
+                    const sel = document.createElement("select");
+                    sel.className = "form-select form-select-sm";
+                    const cur = String(paramValues[p.name] ?? p.default);
+                    for (const choice of p.choices) {
+                        const opt = document.createElement("option");
+                        opt.value = opt.textContent = choice;
+                        if (choice === cur) opt.selected = true;
+                        sel.appendChild(opt);
+                    }
+                    paramValues[p.name] = cur;
+                    sel.addEventListener("change", () => { paramValues[p.name] = sel.value; onParamChange?.(); });
+                    selectEls.set(p.name, sel);
+                    col.append(lbl, sel);
+                    grid.appendChild(col);
                 } else if (p.type === "string") {
                     const col = document.createElement("div");
                     col.className = "col-6";
@@ -612,7 +867,8 @@ function createPipelineRow(
                     input.type = "text";
                     input.className = "form-control form-control-sm";
                     input.value = String(paramValues[p.name] ?? p.default);
-                    input.addEventListener("input", () => { paramValues[p.name] = input.value; });
+                    input.addEventListener("input", () => { paramValues[p.name] = input.value; onParamChange?.(); });
+                    inputEls.set(p.name, input);
                     col.append(lbl, input);
                     grid.appendChild(col);
                 } else {
@@ -627,10 +883,27 @@ function createPipelineRow(
                     input.value = String(paramValues[p.name] ?? p.default);
                     input.addEventListener("input", () => {
                         paramValues[p.name] = input.value !== "" ? Number(input.value) : p.default;
+                        onParamChange?.();
                     });
+                    inputEls.set(p.name, input);
                     col.append(lbl, input);
                     grid.appendChild(col);
                 }
+            }
+
+            // Link value_type selector → value input type (number vs text).
+            const typeSelEl = selectEls.get("value_type");
+            const valueInputEl = inputEls.get("value");
+            if (typeSelEl && valueInputEl) {
+                const syncValueInput = () => {
+                    const isNumeric = typeSelEl.value === "float" || typeSelEl.value === "int";
+                    valueInputEl.type = isNumeric ? "number" : "text";
+                    if (isNumeric) {
+                        valueInputEl.step = typeSelEl.value === "int" ? "1" : "any";
+                    }
+                };
+                typeSelEl.addEventListener("change", syncValueInput);
+                syncValueInput();
             }
 
             body.appendChild(grid);
@@ -642,39 +915,69 @@ function createPipelineRow(
     }
 
     function makeActuatorNode(type: string, objectId: string, onRemoveCard: () => void): HTMLDivElement {
-        const inp = makePort("input");
         const setterSel = makeSelect(ACTUATOR_SETTERS[type] ?? []);
+        const actPortLabel = (setter: string) => {
+            const si = SETTER_INPUT[setter];
+            return si ? `${setter} ← ${si.input_key ?? si.sumo_param}: ${si.type}` : setter;
+        };
+        const actPortType  = (setter: string) => SETTER_INPUT[setter]?.type;
+        const actPortKey   = (setter: string) => SETTER_INPUT[setter]?.input_key;
+        const inp = makePort("input", actPortType(setterSel.value), actPortLabel(setterSel.value), actPortKey(setterSel.value));
         const nodeId = `act_${actCounter++}`;
         const rec: ActuatorNodeRec = { id: nodeId, type, objectId, setterEl: setterSel, inPort: inp };
         actNodes.push(rec);
+        setterSel.addEventListener("change", () => {
+            inp.dataset.portType  = actPortType(setterSel.value) ?? "";
+            inp.dataset.portKey   = actPortKey(setterSel.value)  ?? "";
+            inp.dataset.portLabel = actPortLabel(setterSel.value);
+            revalidate();
+        });
         const { card, body } = makeCard([inp], () => {
             actNodes.splice(actNodes.indexOf(rec), 1);
             onRemoveCard();
         });
-        body.prepend(badge(type), idLabel(objectId), setterSel);
+        body.classList.remove("d-flex", "align-items-center");
+        body.classList.add("d-block");
+        const rmBtn = body.lastElementChild as HTMLElement;
+        const topRow = document.createElement("div");
+        topRow.className = "d-flex align-items-center gap-1 mb-1";
+        topRow.append(badge(type), idLabel(objectId), rmBtn);
+        body.prepend(topRow);
+        setterSel.classList.remove("ms-2");
+        setterSel.style.maxWidth = "";
+        setterSel.style.width = "100%";
+        body.appendChild(setterSel);
         return card;
     }
 
     // ── Serialization ─────────────────────────────────────────────────────────
 
-    function byDomOrder<T extends { inPort: HTMLElement }>(regs: T[]): T[] {
+    function byDomOrder<T>(regs: T[], getPort: (r: T) => HTMLElement): T[] {
         return [...regs].sort((a, b) => {
-            const aEl = a.inPort.closest("[data-stage-id]");
-            const bEl = b.inPort.closest("[data-stage-id]");
+            const aEl = getPort(a).closest("[data-stage-id]");
+            const bEl = getPort(b).closest("[data-stage-id]");
             if (!aEl || !bEl) return 0;
             return aEl.compareDocumentPosition(bEl) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
         });
     }
 
     function serialize(): PipelineSpec {
-        const orderedBlocks = byDomOrder(blockRegs);
-        const orderedSinks  = byDomOrder(sinkRegs);
+        const orderedBlocks = byDomOrder(blockRegs, br => br.outPort);
+        const orderedSinks  = byDomOrder(sinkRegs,  sr => sr.inPort);
 
         const outPortToNodeId = new Map<HTMLElement, string>([
             ...obsNodes.map(o => [o.outPort, o.id] as [HTMLElement, string]),
             ...orderedBlocks.map(b => [b.outPort, b.id] as [HTMLElement, string]),
         ]);
         const inPortToActId = new Map<HTMLElement, string>(actNodes.map(a => [a.inPort, a.id]));
+
+        // Build interleaved stage order so hydration can restore the original layout.
+        const mixedStages: { type: "block" | "sink"; index: number; el: Element }[] = [
+            ...orderedBlocks.map((b, i) => ({ type: "block" as const, index: i, el: b.outPort.closest("[data-stage-id]")! })),
+            ...orderedSinks.map((s, i) => ({ type: "sink"  as const, index: i, el: s.inPort.closest("[data-stage-id]")! })),
+        ].filter(e => e.el != null);
+        mixedStages.sort((a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+        const stage_order = mixedStages.map(({ type, index }) => ({ type, index }));
 
         return {
             id: reg.id,
@@ -686,14 +989,14 @@ function createPipelineRow(
                 object_id: o.objectId,
             })),
             blocks: orderedBlocks.map(b => {
-                const inConn  = conns.find(cn => cn.to   === b.inPort);
-                const outConn = conns.find(cn => cn.from === b.outPort);
+                const inConns = conns.filter(cn => cn.to   === b.inPort);
+                const outConn = conns.find(cn  => cn.from  === b.outPort);
                 return {
                     id: b.id,
                     key: b.key,
                     params: { ...b.params },
-                    input_from: inConn  ? (outPortToNodeId.get(inConn.from) ?? null) : null,
-                    actuate_to: outConn ? (inPortToActId.get(outConn.to)    ?? null) : null,
+                    inputs_from: inConns.map(cn => outPortToNodeId.get(cn.from) ?? null).filter((id): id is string => id !== null),
+                    actuate_to: outConn ? (inPortToActId.get(outConn.to) ?? null) : null,
                 };
             }),
             actuators: actNodes.map(a => ({
@@ -710,6 +1013,7 @@ function createPipelineRow(
                     input_from: inConn ? (outPortToNodeId.get(inConn.from) ?? null) : null,
                 };
             }),
+            stage_order,
         };
     }
 
@@ -724,6 +1028,9 @@ function createPipelineRow(
         <marker id="${markerId}" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0,8 3,0 6" fill="#6c757d"/>
         </marker>
+        <marker id="${errorMarkerId}" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0,8 3,0 6" fill="#dc3545"/>
+        </marker>
     </defs>`;
     svgEl = svg;
     wrap.appendChild(svg);
@@ -733,7 +1040,7 @@ function createPipelineRow(
     row.addEventListener("scroll", () => conns.forEach(syncLine));
     wrap.appendChild(row);
 
-    const STAGE_W = "270px";
+    const STAGE_W = "340px";
     const ANCHOR_IDS = new Set(["obs", "act"]);
 
     function buildStage(
@@ -746,6 +1053,7 @@ function createPipelineRow(
 
         const card = document.createElement("div");
         card.className = "card h-100";
+        card.style.overflow = "visible";
 
         const headerEl = document.createElement("div");
         headerEl.className = "card-header fw-semibold d-flex flex-column gap-1 py-2";
@@ -795,7 +1103,7 @@ function createPipelineRow(
         headerEl.appendChild(titleRow);
 
         const buttonsRow = document.createElement("div");
-        buttonsRow.className = "d-flex gap-1 flex-wrap";
+        buttonsRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;";
         headerEl.appendChild(buttonsRow);
 
         const body = document.createElement("div");
@@ -876,16 +1184,19 @@ function createPipelineRow(
         const stage = buildStage(label, true, () => {
             blockRegs.splice(blockRegs.indexOf(br), 1);
         });
-        stage.stageEl.dataset.stageId = `stage_${Date.now()}`;
+        stage.stageEl.dataset.stageId = `stage_${stageSeq++}`;
 
         const { card, inPort, outPort } = makeBlockNode(
             key, bDef?.params ?? [], paramValues, () => {}, false,
+            bDef?.input_key, bDef?.input_type, bDef?.output_key, bDef?.output_type,
+            revalidate,
+            key !== "Constant",
         );
         br.inPort = inPort;
         br.outPort = outPort;
         stage.body.appendChild(card);
 
-        row.insertBefore(stage.stageEl, addStageBtnEl);
+        row.insertBefore(stage.stageEl, actStage.stageEl);
         conns.forEach(syncLine);
         return br;
     }
@@ -898,9 +1209,9 @@ function createPipelineRow(
         const stage = buildStage("Sink", true, () => {
             sinkRegs.splice(sinkRegs.indexOf(sr), 1);
         });
-        stage.stageEl.dataset.stageId = `stage_${Date.now()}`;
+        stage.stageEl.dataset.stageId = `stage_${stageSeq++}`;
 
-        const inp = makePort("input");
+        const inp = makePort("input", undefined, "recorded value");
         const card = document.createElement("div");
         card.className = "card mb-3";
         Object.assign(card.style, { position: "relative", overflow: "visible" });
@@ -918,49 +1229,86 @@ function createPipelineRow(
         sr.inPort = inp;
 
         stage.body.appendChild(card);
-        row.insertBefore(stage.stageEl, addStageBtnEl);
+        row.insertBefore(stage.stageEl, actStage.stageEl);
         conns.forEach(syncLine);
         return sr;
     }
 
-    // ── Add-stage button + actuator at end ────────────────────────────────────
+    // ── Add-stage dropdown (moved to pipeline card header below) ─────────────
 
-    const addStageBtnEl = document.createElement("div");
-    addStageBtnEl.style.cssText = "flex:0 0 auto;display:flex;align-items:flex-start;padding-top:2px;";
+    const MODULE_LABELS: Record<string, string> = {
+        controllers: "Controllers",
+        aggregators: "Aggregators",
+        utils: "Utilities",
+    };
 
     const stageDropdown = document.createElement("div");
     stageDropdown.className = "dropdown";
 
     const stageToggle = document.createElement("button");
     stageToggle.type = "button";
-    stageToggle.className = "btn btn-outline-secondary btn-sm dropdown-toggle";
+    stageToggle.className = "btn btn-sm btn-outline-secondary dropdown-toggle";
     stageToggle.setAttribute("data-bs-toggle", "dropdown");
-    stageToggle.innerHTML = `<i class="bi bi-plus-lg me-1"></i>Stage`;
+    stageToggle.innerHTML = `<i class="bi bi-plus-lg me-1"></i>Add Stage`;
 
     const stageMenu = document.createElement("ul");
     stageMenu.className = "dropdown-menu";
+    stageMenu.style.minWidth = "280px";
 
-    const stageBlocksHdr = document.createElement("li");
-    stageBlocksHdr.innerHTML = '<h6 class="dropdown-header">Blocks</h6>';
-    stageMenu.appendChild(stageBlocksHdr);
-
+    // Group blocks by module, preserving registry order within each group.
+    const blocksByModule = new Map<string, BlockEntry[]>();
     for (const b of BLOCKS) {
-        const li = document.createElement("li");
-        const a = document.createElement("a");
-        a.className = "dropdown-item";
-        a.href = "#";
-        a.textContent = b.label;
-        a.addEventListener("click", (e) => {
-            e.preventDefault();
-            const pv: Record<string, unknown> = {};
-            for (const p of b.params ?? []) {
-                if (p.type === "phase_list") pv[p.name] = [];
-                else pv[p.name] = p.default;
+        const mod = b.module ?? "controllers";
+        if (!blocksByModule.has(mod)) blocksByModule.set(mod, []);
+        blocksByModule.get(mod)!.push(b);
+    }
+
+    let firstGroup = true;
+    for (const [mod, groupBlocks] of blocksByModule) {
+        if (!firstGroup) {
+            const divLi = document.createElement("li");
+            divLi.innerHTML = '<hr class="dropdown-divider my-1">';
+            stageMenu.appendChild(divLi);
+        }
+        firstGroup = false;
+
+        const hdrLi = document.createElement("li");
+        hdrLi.innerHTML = `<h6 class="dropdown-header">${MODULE_LABELS[mod] ?? mod}</h6>`;
+        stageMenu.appendChild(hdrLi);
+
+        for (const b of groupBlocks) {
+            const li = document.createElement("li");
+            const a = document.createElement("a");
+            a.className = "dropdown-item py-2";
+            a.href = "#";
+
+            const labelEl = document.createElement("div");
+            labelEl.className = "fw-semibold small";
+            labelEl.textContent = b.label;
+            a.appendChild(labelEl);
+
+            if (b.description) {
+                const descEl = document.createElement("div");
+                descEl.className = "text-muted lh-sm";
+                descEl.style.fontSize = "0.72rem";
+                // Show only the first sentence to keep the item compact.
+                const dotIdx = b.description.indexOf(".");
+                descEl.textContent = dotIdx !== -1 ? b.description.slice(0, dotIdx + 1) : b.description;
+                a.appendChild(descEl);
             }
-            makeBlockStage(b.key, pv);
-        });
-        li.appendChild(a);
-        stageMenu.appendChild(li);
+
+            a.addEventListener("click", (e) => {
+                e.preventDefault();
+                const pv: Record<string, unknown> = {};
+                for (const p of b.params ?? []) {
+                    if (p.type === "phase_list") pv[p.name] = [];
+                    else pv[p.name] = p.default;
+                }
+                makeBlockStage(b.key, pv);
+            });
+            li.appendChild(a);
+            stageMenu.appendChild(li);
+        }
     }
 
     const stageSinkDivLi = document.createElement("li");
@@ -981,29 +1329,53 @@ function createPipelineRow(
     stageMenu.appendChild(stageSinkLi);
 
     stageDropdown.append(stageToggle, stageMenu);
-    addStageBtnEl.appendChild(stageDropdown);
+    stageDropdown.style.setProperty("--bs-dropdown-zindex", "2000");
+    if ((window as any).bootstrap?.Dropdown) {
+        new (window as any).bootstrap.Dropdown(stageToggle, {
+            popperConfig(d: any) { return { ...d, strategy: "fixed" }; },
+        });
+    }
 
-    row.append(addStageBtnEl, actStage.stageEl);
+    row.append(actStage.stageEl);
 
     // ── Hydration or empty seed ───────────────────────────────────────────────
 
     if (initialPipeline) {
-        for (const bs of initialPipeline.blocks ?? []) {
-            makeBlockStage(bs.key, { ...bs.params });
-        }
-        for (const sk of initialPipeline.sinks ?? []) {
-            makeSinkStage(sk.label);
+        const blocks = initialPipeline.blocks ?? [];
+        const sinks  = initialPipeline.sinks  ?? [];
+        if (initialPipeline.stage_order) {
+            for (const { type, index } of initialPipeline.stage_order) {
+                if (type === "block" && blocks[index]) makeBlockStage(blocks[index].key, { ...blocks[index].params });
+                else if (type === "sink"  && sinks[index])  makeSinkStage(sinks[index].label);
+            }
+        } else {
+            for (const bs of blocks) makeBlockStage(bs.key, { ...bs.params });
+            for (const sk of sinks)  makeSinkStage(sk.label);
         }
         for (const obs of initialPipeline.observers) {
             const type = OBSERVER_TYPE_FROM_DOMAIN[obs.domain] ?? obs.domain;
             const card = makeObserverNode(type, obs.object_id, () => {});
-            obsNodes[obsNodes.length - 1].getterEl.value = obs.getter;
+            const rec = obsNodes[obsNodes.length - 1];
+            rec.getterEl.value = obs.getter;
+            rec.getterEl.dispatchEvent(new Event("change"));
+            if (missingObjectIds.has(`${obs.domain}:${obs.object_id}`)) {
+                card.classList.add("border-danger");
+                card.title = `"${obs.object_id}" not found in the selected scenario`;
+                card.querySelector<HTMLElement>(".font-monospace.small")?.classList.add("text-danger");
+            }
             obsStage.body.appendChild(card);
         }
         for (const act of initialPipeline.actuators) {
             const type = ACTUATOR_TYPE_FROM_DOMAIN[act.domain] ?? act.domain;
             const card = makeActuatorNode(type, act.object_id, () => {});
-            actNodes[actNodes.length - 1].setterEl.value = act.setter;
+            const rec = actNodes[actNodes.length - 1];
+            rec.setterEl.value = act.setter;
+            rec.setterEl.dispatchEvent(new Event("change"));
+            if (missingObjectIds.has(`${act.domain}:${act.object_id}`)) {
+                card.classList.add("border-danger");
+                card.title = `"${act.object_id}" not found in the selected scenario`;
+                card.querySelector<HTMLElement>(".font-monospace.small")?.classList.add("text-danger");
+            }
             actStage.body.appendChild(card);
         }
     }
@@ -1028,8 +1400,8 @@ function createPipelineRow(
         (initialPipeline.blocks ?? []).forEach((spec, i) => {
             const br = blockRegs[i];
             if (!br?.inPort || !br?.outPort) return;
-            if (spec.input_from) {
-                const from = outPortById.get(spec.input_from);
+            for (const fromId of (spec.inputs_from ?? [])) {
+                const from = outPortById.get(fromId);
                 if (from) connectPorts(from, br.inPort);
             }
             if (spec.actuate_to) {
@@ -1052,6 +1424,7 @@ function createPipelineRow(
 
     const panelEl = document.createElement("div");
     panelEl.className = "card mb-3";
+    panelEl.style.overflow = "visible";
     panelEl.dataset.pipelineId = reg.id;
 
     const panelHeader = document.createElement("div");
@@ -1062,11 +1435,12 @@ function createPipelineRow(
     panelTitle.textContent = reg.name;
 
     const rmBtn = document.createElement("button");
-    rmBtn.className = "btn btn-sm btn-link text-danger p-0 ms-auto";
+    rmBtn.className = "btn btn-sm btn-link text-danger p-0";
     rmBtn.innerHTML = "&times;";
     rmBtn.addEventListener("click", () => { onRemove(); panelEl.remove(); });
 
-    panelHeader.append(panelTitle, rmBtn);
+    stageDropdown.classList.add("ms-auto", "me-2");
+    panelHeader.append(panelTitle, stageDropdown, rmBtn);
 
     const panelBody = document.createElement("div");
     panelBody.className = "card-body p-2";
@@ -1076,10 +1450,68 @@ function createPipelineRow(
     return { el: panelEl, serialize, drawConnections };
 }
 
+// ─── Missing ID helpers ───────────────────────────────────────────────────────
+
+function computeMissingIds(graph: GraphSpec, data: InspectionData): Set<string> {
+    const domainIds: Record<string, Set<string>> = {
+        inductionloop: new Set(data.detector_ids),
+        trafficlight:  new Set(data.tls_ids),
+        edge:          new Set(data.edge_ids),
+        lane:          new Set(data.lane_ids),
+    };
+    const missing = new Set<string>();
+    for (const pl of graph.pipelines) {
+        for (const obs of pl.observers) {
+            if (!(domainIds[obs.domain] ?? new Set()).has(obs.object_id))
+                missing.add(`${obs.domain}:${obs.object_id}`);
+        }
+        for (const act of pl.actuators) {
+            if (!(domainIds[act.domain] ?? new Set()).has(act.object_id))
+                missing.add(`${act.domain}:${act.object_id}`);
+        }
+    }
+    return missing;
+}
+
 // ─── Main renderer ────────────────────────────────────────────────────────────
 
-function renderPipeline(container: HTMLElement, data: InspectionData, scenarioId: string, initialGraph: GraphSpec | null = null): () => void {
+function renderPipeline(
+    container: HTMLElement,
+    data: InspectionData,
+    scenarioId: string,
+    initialGraph: GraphSpec | null = null,
+    missingObjectIds: Set<string> = new Set(),
+): { draw: () => void; getSpec: () => GraphSpec | null } {
     container.innerHTML = "";
+
+    // ── Validation banner ─────────────────────────────────────────────────────
+
+    const validationBanner = document.createElement("div");
+    validationBanner.className = "alert alert-danger py-2 mb-3 d-none";
+    container.appendChild(validationBanner);
+
+    if (missingObjectIds.size > 0) {
+        const missingBanner = document.createElement("div");
+        missingBanner.className = "alert alert-warning py-2 mb-3";
+        missingBanner.textContent =
+            `${missingObjectIds.size} observer/actuator ID(s) were not found in the selected scenario and are highlighted in red.`;
+        container.appendChild(missingBanner);
+    }
+
+    const pipelineErrors = new Map<string, string[]>();
+
+    function updateValidationBanner(): void {
+        const all = Array.from(pipelineErrors.values()).flat();
+        if (all.length === 0) {
+            validationBanner.classList.add("d-none");
+        } else {
+            validationBanner.classList.remove("d-none");
+            validationBanner.innerHTML =
+                `<strong>Type mismatches:</strong><ul class="mb-0 mt-1">${
+                    all.map(e => `<li class="font-monospace small">${e}</li>`).join("")
+                }</ul>`;
+        }
+    }
 
     const pipelineRegs: PipelineReg[] = [];
     interface PipelineEntry { reg: PipelineReg; serialize: () => PipelineSpec; }
@@ -1122,7 +1554,13 @@ function renderPipeline(container: HTMLElement, data: InspectionData, scenarioId
             allPhases.forEach(p => p.active_pipelines.delete(id));
             phaseList?.querySelectorAll<HTMLElement>(`[data-pipeline-id="${id}"]`).forEach(el => el.remove());
             refreshNoPipelineNotices();
-        }, spec);
+            pipelineErrors.delete(id);
+            updateValidationBanner();
+        }, (errors) => {
+            if (errors.length === 0) pipelineErrors.delete(id);
+            else pipelineErrors.set(id, errors.map(e => `${name}: ${e}`));
+            updateValidationBanner();
+        }, spec, missingObjectIds);
         pipelineEntries.push({ reg, serialize });
         pipelinesList.appendChild(el);
         if (spec) pendingDraws.push(drawConnections);
@@ -1402,6 +1840,7 @@ function renderPipeline(container: HTMLElement, data: InspectionData, scenarioId
             if (resp.ok) {
                 saveStatus.className = "text-success small";
                 saveStatus.textContent = `Saved — ${body.id}`;
+                setTimeout(() => window.location.reload(), 600);
             } else {
                 saveStatus.className = "text-danger small";
                 saveStatus.textContent = body.error ?? `HTTP ${resp.status}`;
@@ -1450,7 +1889,14 @@ function renderPipeline(container: HTMLElement, data: InspectionData, scenarioId
         addPhase();
     }
 
-    return () => pendingDraws.forEach(fn => fn());
+    return {
+        draw: () => pendingDraws.forEach(fn => fn()),
+        getSpec: () => {
+            const name = nameInput.value.trim() || "__temp__";
+            const result = collectGraph(name);
+            return "error" in result ? null : result.spec;
+        },
+    };
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
@@ -1463,7 +1909,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const modal = new bootstrap.Modal(modalEl);
 
     async function openBuilder(url: string): Promise<void> {
-        const html = await fetch(url).then(r => r.text());
+        const [html, blocksData, domainsData] = await Promise.all([
+            fetch(url).then(r => r.text()),
+            fetch("/api/blocks").then(r => r.ok ? r.json() : BLOCKS).catch(() => BLOCKS),
+            fetch("/api/domains").then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        BLOCKS = blocksData as BlockEntry[];
+        if (domainsData) applyDomainData(domainsData);
         modalContent!.innerHTML = html;
         modal.show();
 
@@ -1471,6 +1923,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const builder = modalContent!.querySelector("#gbBuilder") as HTMLElement | null;
         if (!select || !builder) return;
         const b = builder;
+
+        // Holds the serialiser of the currently rendered graph so the scenario-change
+        // handler can capture state before re-rendering.
+        let getCurrentSpec: (() => GraphSpec | null) | null = null;
 
         const initScript = modalContent!.querySelector("#gbInitialGraph");
         const initialGraph: GraphSpec | null = initScript
@@ -1519,14 +1975,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 return;
             }
-            const drawAll = renderPipeline(b, await res.json(), scenarioId, initial);
+            const inspectionData = await res.json() as InspectionData;
+            const missingIds = initial ? computeMissingIds(initial, inspectionData) : new Set<string>();
+            const { draw, getSpec } = renderPipeline(b, inspectionData, scenarioId, initial, missingIds);
+            getCurrentSpec = getSpec;
             if (initial) {
                 if (modalEl!.classList.contains("show")) {
-                    requestAnimationFrame(drawAll);
+                    requestAnimationFrame(draw);
                 } else {
                     const onShown = () => {
                         modalEl!.removeEventListener("shown.bs.modal", onShown);
-                        requestAnimationFrame(drawAll);
+                        requestAnimationFrame(draw);
                     };
                     modalEl!.addEventListener("shown.bs.modal", onShown);
                 }
@@ -1535,8 +1994,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         select.addEventListener("change", () => {
             const scenarioId = select.value;
-            if (!scenarioId) { b.innerHTML = ""; return; }
-            loadScenario(scenarioId);
+            if (!scenarioId) { b.innerHTML = ""; getCurrentSpec = null; return; }
+            loadScenario(scenarioId, getCurrentSpec?.() ?? null);
         });
 
         if (initialGraph) {

@@ -872,6 +872,37 @@ def experiment_graph_builder_modal(request: HttpRequest) -> HttpResponse:
     })
 
 
+def scenario_experiments_view(request: HttpRequest, scenario_id: str) -> JsonResponse:
+    get_object_or_404(Scenario, pk=scenario_id)
+    from django.db.models import Q
+    graph_sha256s = set(
+        ExperimentGraph.objects.filter(scenario_id=scenario_id, experiment__isnull=False)
+        .values_list("experiment_id", flat=True)
+    )
+    rows: list[dict[str, Any]] = [
+        dict(r) for r in
+        Experiment.objects
+        .filter(
+            Q(experiment_graphs__isnull=True) |
+            Q(experiment_graphs__scenario_id=scenario_id)
+        )
+        .distinct()
+        .order_by("name", "-version")
+        .values("sha256", "name", "version")
+    ]
+    for row in rows:
+        row["source"] = "graph" if row["sha256"] in graph_sha256s else "file"
+    return JsonResponse(rows, safe=False)
+
+
+def scenario_preview_url_view(request: HttpRequest, scenario_id: str) -> JsonResponse:
+    scenario = get_object_or_404(Scenario, pk=scenario_id)
+    url = scenario.image_url
+    if not url:
+        return JsonResponse({"error": "preview not ready"}, status=404)
+    return JsonResponse({"url": url})
+
+
 def scenario_inspection_view(request: HttpRequest, scenario_id: str) -> JsonResponse:
     import json
 
@@ -957,6 +988,39 @@ def transformation_request_detail_view(
     }
 
     return render(request, "core/transformation_request_detail.html", context)
+
+
+def blocks_registry_view(_: HttpRequest) -> JsonResponse:
+    # Import triggers @block decorators if not already fired.
+    import trafficgym.engine.control  # noqa: F401
+    from trafficgym.engine.control.registry import BLOCK_REGISTRY
+
+    return JsonResponse(
+        [
+            {
+                "key": b.key,
+                "label": b.label,
+                "module": b.module,
+                "description": b.description,
+                "input_key": b.input_key,
+                "input_type": b.input_type,
+                "output_key": b.output_key,
+                "output_type": b.output_type,
+                "params": [
+                    {"name": p.name, "type": p.type, "label": p.label, "default": p.default,
+                     **({"choices": p.choices} if p.choices is not None else {})}
+                    for p in b.params
+                ],
+            }
+            for b in BLOCK_REGISTRY.values()
+        ],
+        safe=False,
+    )
+
+
+def domains_view(_: HttpRequest) -> JsonResponse:
+    from trafficgym.engine.ports.sumo_domains import OBSERVER_DOMAINS, ACTUATOR_DOMAINS
+    return JsonResponse({"observers": OBSERVER_DOMAINS, "actuators": ACTUATOR_DOMAINS})
 
 
 def list_transformations_view(_: HttpRequest) -> JsonResponse:
