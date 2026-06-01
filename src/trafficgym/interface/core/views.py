@@ -84,7 +84,40 @@ def create_run_modal(request: HttpRequest) -> HttpResponse:
         "name", "version"
     )
 
-    context = {"scenarios": scenarios, "experiments": experiments}
+    default_scenario_id: str | None = None
+    default_experiment_sha256: str | None = None
+
+    last_run = (
+        RunRequest.objects
+        .select_related("scenario", "experiment")
+        .order_by("-created_at")
+        .first()
+    )
+    if last_run:
+        default_scenario_id = str(last_run.scenario.id)
+        default_experiment_sha256 = (
+            Experiment.objects
+            .filter(name=last_run.experiment.name)
+            .order_by("-version")
+            .values_list("sha256", flat=True)
+            .first()
+        )
+
+    from django.db.models import Exists, OuterRef
+    graph_sha256s = set(
+        ExperimentGraph.objects.filter(experiment__isnull=False)
+        .values_list("experiment_id", flat=True)
+    )
+    graph_experiments = [e for e in experiments if e.sha256 in graph_sha256s]
+    file_experiments  = [e for e in experiments if e.sha256 not in graph_sha256s]
+
+    context = {
+        "scenarios": scenarios,
+        "graph_experiments": graph_experiments,
+        "file_experiments": file_experiments,
+        "default_scenario_id": default_scenario_id,
+        "default_experiment_sha256": default_experiment_sha256,
+    }
 
     return render(request, "core/create_run_modal.html", context)
 
@@ -112,8 +145,10 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
     scenario_id = request.POST.get("scenario")
     experiment_id = request.POST.get("experiment")
     raw_seeds = request.POST.get("seeds", "").strip()
-    raw_rerun_count = request.POST.get("rerun_count",  "1")
+    raw_rerun_count = request.POST.get("rerun_count", "1")
+    raw_step_length_ms = request.POST.get("step_length_ms", "1000")
     simulation_parameters = request.POST.get("simulation_parameters", "{}")
+    open_gui = bool(request.POST.get("open_gui"))
 
     try:
         rerun_count = int(raw_rerun_count)
@@ -121,6 +156,13 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
             raise ValueError
     except ValueError:
         return HttpResponseBadRequest("rerun_count must be a positive integer")
+
+    try:
+        step_length_ms = int(raw_step_length_ms)
+        if step_length_ms < 1:
+            raise ValueError
+    except ValueError:
+        return HttpResponseBadRequest("step_length_ms must be a positive integer")
 
     try:
         parsed_parameters = json.loads(simulation_parameters)
@@ -135,6 +177,10 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
             return HttpResponseBadRequest("seeds must be a comma-separated list of integers")
         rerun_count = len(seed_ints)
 
+    if open_gui:
+        rerun_count = 1
+        seed_ints = seed_ints[:1]
+
     scenario = get_object_or_404(Scenario, pk=scenario_id)
     experiment = get_object_or_404(Experiment, pk=experiment_id)
 
@@ -142,6 +188,8 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
         scenario=scenario,
         experiment=experiment,
         rerun_count=rerun_count,
+        open_gui=open_gui,
+        step_length_ms=step_length_ms,
         simulation_parameters=parsed_parameters,
     )
     run.save()

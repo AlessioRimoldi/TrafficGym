@@ -247,8 +247,9 @@ def process_run_execution(
                     f"{run_request.experiment.name} must be a subclass of Experiment"
                 )
 
-            cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary="sumo", seed=cast(int, execution.seed))
-            adapter = LibsumoAdapter(cfg, step_length_ms=1000)
+            sumo_binary = "sumo-gui" if run_request.open_gui else "sumo"
+            cfg = RunConfig(sumocfg_path=str(sumocfg_path), sumo_binary=sumo_binary, seed=cast(int, execution.seed))
+            adapter = LibsumoAdapter(cfg, step_length_ms=cast(int, run_request.step_length_ms))
             experiment_instance = ExperimentClass()
             sub_logger = logging.getLogger("subscription")
             execution_pk = execution.pk
@@ -283,8 +284,21 @@ def process_run_execution(
         raise
 
     finally:
+        # Mark FAILED before closing the adapter — libsumo can SIGABRT on close
+        # after an error, which would kill the process before the DB update runs.
+        try:
+            updated = RunExecution.objects.filter(
+                id=execution_id, status="RUNNING"
+            ).update(status="FAILED", finished_at=timezone.now())
+            if updated:
+                _maybe_complete_run_request(run_request_id)
+        except Exception:
+            pass
         if adapter is not None:
-            adapter.close()
+            try:
+                adapter.close()
+            except Exception:
+                pass
         if handler is not None:
             handler.flush_queue()
             handler.deregister()

@@ -201,6 +201,8 @@ class RunRequest(models.Model):
         editable=False,
     )
     rerun_count = models.IntegerField()
+    open_gui = models.BooleanField(default=False)
+    step_length_ms = models.IntegerField(default=1000)
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
     started_at = models.DateTimeField(null=True, blank=True, editable=False)
     finished_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -341,6 +343,12 @@ class SubscriptionLogEntry(models.Model):
 
     def __str__(self) -> str:
         return f"{self.subscription_fingerprint}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["run_execution", "subscription_fingerprint"]),
+            models.Index(fields=["run_execution", "subscription_fingerprint", "simulation_time"]),
+        ]
 
 
 class TelemetryLogEntry(models.Model):

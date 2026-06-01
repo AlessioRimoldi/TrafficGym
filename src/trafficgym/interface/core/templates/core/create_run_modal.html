@@ -9,16 +9,27 @@
             <label for="scenarioSelect" class="form-label">Scenario</label>
             <select name="scenario" id="scenarioSelect" class="form-select" required>
             {% for scenario in scenarios %}
-                <option value="{{ scenario.id }}">{{ scenario.name }}</option>
+                <option value="{{ scenario.id }}"{% if scenario.id|stringformat:"s" == default_scenario_id %} selected{% endif %}>{{ scenario.name }}</option>
             {% endfor %}
             </select>
         </div>
         <div class="mb-4">
             <label for="experimentSelect" class="form-label">Experiment</label>
             <select id="experimentSelect" name="experiment" class="form-select" required>
-            {% for experiment in experiments %}
-                <option value="{{ experiment.sha256 }}">{{ experiment.name }} v{{ experiment.version}}</option>
-            {% endfor %}
+            {% if graph_experiments %}
+            <optgroup label="Graph-based">
+                {% for experiment in graph_experiments %}
+                <option value="{{ experiment.sha256 }}"{% if experiment.sha256 == default_experiment_sha256 %} selected{% endif %}>{{ experiment.name }} v{{ experiment.version }}</option>
+                {% endfor %}
+            </optgroup>
+            {% endif %}
+            {% if file_experiments %}
+            <optgroup label="File-based">
+                {% for experiment in file_experiments %}
+                <option value="{{ experiment.sha256 }}"{% if experiment.sha256 == default_experiment_sha256 %} selected{% endif %}>{{ experiment.name }} v{{ experiment.version }}</option>
+                {% endfor %}
+            </optgroup>
+            {% endif %}
             </select>
         </div>
         <div class="mb-4">
@@ -32,8 +43,26 @@
             <div id="rerunCountHelp" class="form-text text-muted" style="display: none;">Derived from seeds above — edit seeds to change.</div>
         </div>
         <div class="mb-4">
+            <label for="stepLengthMs" class="form-label">Step Length <span class="text-muted small fw-normal">(ms)</span></label>
+            <input type="number" min="1" id="stepLengthMs" name="step_length_ms" class="form-control" value="1000">
+            <div id="stepLengthWarning" class="form-text text-warning-emphasis" style="display:none;">Values above 1000 ms may cause unstable vehicle dynamics.</div>
+        </div>
+        <div class="mb-4">
             <label for="simParams" class="form-label">Simulation Parameters (JSON)</label>
             <textarea name="simulation_parameters" class="form-control" id="simParams" rows="3">{}</textarea>
+        </div>
+        <div class="border rounded p-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="openGuiCheck" name="open_gui" value="1">
+                <label class="form-check-label" for="openGuiCheck">
+                    Open GUI
+                    <span class="badge bg-warning text-dark ms-1">experimental</span>
+                </label>
+            </div>
+            <div id="openGuiWarning" class="alert alert-warning py-2 mt-2 mb-0 small" style="display:none;">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                The SUMO GUI will open <strong>on the server where the workers are running</strong>, not in this browser. libsumo is still used but is more likely to crash in GUI mode. Limited to 1 run.
+            </div>
         </div>
     </div>
     <div class="modal-footer">

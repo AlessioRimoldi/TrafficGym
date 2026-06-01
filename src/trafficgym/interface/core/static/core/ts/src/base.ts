@@ -99,6 +99,73 @@ function initCreateRunModal(): void {
     const rerunCount = document.getElementById("rerunCount") as HTMLInputElement | null;
     const rerunCountHelp = document.getElementById("rerunCountHelp") as HTMLElement | null;
     const submitBtn = document.querySelector<HTMLButtonElement>("#createRunForm button[type='submit']");
+    const scenarioSelect = document.getElementById("scenarioSelect") as HTMLSelectElement | null;
+    const experimentSelect = document.getElementById("experimentSelect") as HTMLSelectElement | null;
+
+    async function refreshExperiments(scenarioId: string): Promise<void> {
+        if (!experimentSelect) return;
+        const res = await fetch(`/api/scenarios/${scenarioId}/experiments`);
+        if (!res.ok) return;
+        const experiments = await res.json() as { sha256: string; name: string; version: number; source: string }[];
+        const current = experimentSelect.value;
+        experimentSelect.innerHTML = "";
+
+        function addGroup(label: string, exps: typeof experiments): void {
+            if (!exps.length) return;
+            const group = document.createElement("optgroup");
+            group.label = label;
+            for (const exp of exps) {
+                const opt = document.createElement("option");
+                opt.value = exp.sha256;
+                opt.textContent = `${exp.name} v${exp.version}`;
+                if (exp.sha256 === current) opt.selected = true;
+                group.appendChild(opt);
+            }
+            experimentSelect!.appendChild(group);
+        }
+
+        addGroup("Graph-based", experiments.filter(e => e.source === "graph"));
+        addGroup("File-based",  experiments.filter(e => e.source === "file"));
+    }
+
+    const stepLengthInput = document.getElementById("stepLengthMs") as HTMLInputElement | null;
+    const stepLengthWarning = document.getElementById("stepLengthWarning") as HTMLElement | null;
+    if (stepLengthInput && stepLengthWarning) {
+        const checkStepLength = () => {
+            stepLengthWarning.style.display = Number(stepLengthInput.value) > 1000 ? "" : "none";
+        };
+        stepLengthInput.addEventListener("input", checkStepLength);
+        checkStepLength();
+    }
+
+    const openGuiCheck = document.getElementById("openGuiCheck") as HTMLInputElement | null;
+    const openGuiWarning = document.getElementById("openGuiWarning") as HTMLElement | null;
+
+    if (openGuiCheck) {
+        openGuiCheck.addEventListener("change", () => {
+            const on = openGuiCheck.checked;
+            if (openGuiWarning) openGuiWarning.style.display = on ? "" : "none";
+            if (seedsInput) {
+                seedsInput.placeholder = on ? "e.g. 42 (optional, one seed only)" : "e.g. 42, 123, 456";
+                // Re-run validation so any multi-seed error appears immediately.
+                seedsInput.dispatchEvent(new Event("input"));
+            }
+            if (on) {
+                if (rerunCount) { rerunCount.disabled = true; rerunCount.value = "1"; }
+                if (rerunCountHelp) rerunCountHelp.style.display = "none";
+            } else {
+                // Let the seeds handler decide whether rerun count should be re-enabled.
+                seedsInput?.dispatchEvent(new Event("input"));
+            }
+        });
+    }
+
+    if (scenarioSelect && experimentSelect) {
+        scenarioSelect.addEventListener("change", () => {
+            if (scenarioSelect.value) refreshExperiments(scenarioSelect.value);
+        });
+        if (scenarioSelect.value) refreshExperiments(scenarioSelect.value);
+    }
 
     if (!seedsInput || !rerunCount || !rerunCountHelp) return;
 
@@ -109,6 +176,11 @@ function initCreateRunModal(): void {
             return true;
         }
         const parts = raw.split(",").map(s => s.trim());
+        if (openGuiCheck?.checked && parts.length > 1) {
+            seedsInput!.classList.add("is-invalid");
+            if (seedsError) seedsError.textContent = "Only one seed allowed in GUI mode";
+            return false;
+        }
         const valid = parts.every(s => /^-?\d+$/.test(s));
         seedsInput!.classList.toggle("is-invalid", !valid);
         if (seedsError) seedsError.textContent = valid ? "" : "Integers only";
