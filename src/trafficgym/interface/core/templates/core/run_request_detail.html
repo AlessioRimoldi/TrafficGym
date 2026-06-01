@@ -149,13 +149,20 @@
 
     <div class="card m-4">
         <div
-            class="card-header fs-4 fw-bold py-3 collapsed"
+            class="card-header fs-4 fw-bold py-3 collapsed d-flex align-items-center justify-content-between"
             id="subscriptions_header"
             data-bs-toggle="collapse"
             data-bs-target="#run_executions_content"
             style="cursor: pointer;">
-            <i class="bi bi-chevron-right me-2 caret-icon"></i>
-            Run Executions ({{ executions.paginator.count }})
+            <span>
+                <i class="bi bi-chevron-right me-2 caret-icon"></i>
+                Run Executions ({{ executions.paginator.count }})
+            </span>
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    title="Copy seeds to clipboard"
+                    onclick="event.stopPropagation(); navigator.clipboard.writeText('{% for execution in run_request.executions.all %}{{ execution.seed }}{% if not forloop.last %},{% endif %}{% endfor %}').then(() => { this.textContent = '✓'; setTimeout(() => { this.innerHTML = '<i class=\'bi bi-clipboard\'></i>'; }, 1200); });"
+            >Copy Seeds to Clipboard <i class="bi bi-clipboard"></i></button>
         </div>
         <div class="collapse" id="run_executions_content">
         <div class="card-body">
