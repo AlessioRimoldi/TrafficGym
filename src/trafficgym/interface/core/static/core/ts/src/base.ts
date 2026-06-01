@@ -59,6 +59,7 @@ function applyProgressUpdate(el: HTMLElement, current: number, total: number): v
 
 function initStatusEvents(): void {
     const es = new EventSource("/api/status-events/");
+    window.addEventListener("beforeunload", () => es.close());
     es.onmessage = (e: MessageEvent) => {
         const payload = JSON.parse(e.data) as { type: string; id: string; status?: string; current_step?: number; total_steps?: number };
         const { type, id } = payload;
