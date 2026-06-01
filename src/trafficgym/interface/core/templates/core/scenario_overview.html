@@ -78,7 +78,9 @@
                         style="width:90%; height:90%; object-fit:contain;">
        
                {% elif tr and tr.status in "PENDING PREPARING RUNNING" %}
-                   <div class="text-center text-muted">
+                   <div class="text-center text-muted"
+                        data-preview-tr-id="{{ tr.pk }}"
+                        data-scenario-id="{{ scenario.id }}">
                        <div class="spinner-border spinner-border-sm mb-2"></div>
                        <div>Generating preview…</div>
                    </div>

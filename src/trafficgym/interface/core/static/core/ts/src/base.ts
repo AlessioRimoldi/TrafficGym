@@ -204,6 +204,32 @@ function initCreateRunModal(): void {
     });
 }
 
+function initScenarioPreviews(): void {
+    document.addEventListener("status-update", (e: Event) => {
+        const { type, id, status } = (e as CustomEvent).detail as { type: string; id: string; status?: string };
+        if (type !== "transformation_request" || status !== "COMPLETE") return;
+
+        const el = document.querySelector<HTMLElement>(`[data-preview-tr-id="${id}"]`);
+        if (!el) return;
+
+        const scenarioId = el.dataset.scenarioId;
+        if (!scenarioId) return;
+
+        fetch(`/api/scenarios/${scenarioId}/preview-url`)
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(({ url }: { url: string }) => {
+                const container = el.parentElement;
+                if (!container) return;
+                const img = document.createElement("img");
+                img.src = url;
+                img.alt = "Network preview";
+                img.style.cssText = "width:90%; height:90%; object-fit:contain;";
+                container.replaceChildren(img);
+            })
+            .catch(() => {});
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     if (window.__previewHandlersAttached) return;
 
@@ -211,6 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.__previewHandlersAttached = true;
 
     initStatusEvents();
+    initScenarioPreviews();
 
     const openBtn = document.getElementById("openCreateRunModal") as HTMLButtonElement | null;
     if (openBtn) {

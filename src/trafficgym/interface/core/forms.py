@@ -101,40 +101,52 @@ class ScenarioForm(forms.ModelForm):
             logger.error("No spec found for inspect. Check the scenario inspect transformation method is registered")
 
         else:
-            preview_request = TransformationRequest.objects.create(
-                method=preview_spec.key,
-                spec_snapshot={
-                    "key": preview_spec.key,
-                    "inputs": [
-                        {
-                            "name": i.name,
-                            "type": i.type.value,
-                            "required": i.required,
-                        }
-                        for i in preview_spec.inputs
-                    ],
-                    "outputs": [o.name for o in preview_spec.outputs],
-                    "docstring": preview_spec.docstring,
-                },
-                parameters={},
-            )
-
-            TransformationInput.objects.create(
-                transformation_request=preview_request,
-                artefact=net_artefact,
-                input_name="net_xml",
-            )
-
-            logger.info(
-                f"Created netpreview transform request "
-                f"{preview_request.id} for scenario {scenario.id}"
-            )
-
-            preview_id = str(preview_request.id)
             sid = str(scenario.id)
-            transaction.on_commit(
-                lambda: derive_from_artefact.delay(preview_id, scenario_id=sid)
-            )
+
+            # Reuse an existing netpreview TR if one already ran (or is running) for this
+            # net artefact.  Creating a fresh TR would make image_transformation_request
+            # return the new PENDING TR for every scenario sharing the same net file,
+            # causing their previews to get stuck on "Generating…" while the fast
+            # dedup-reuse path completes before the SSE connection is re-established.
+            preview_already_exists = TransformationRequest.objects.filter(
+                method=preview_spec.key,
+                input_bindings__artefact=net_artefact,
+            ).exclude(status="FAILED").exists()
+
+            if not preview_already_exists:
+                preview_request = TransformationRequest.objects.create(
+                    method=preview_spec.key,
+                    spec_snapshot={
+                        "key": preview_spec.key,
+                        "inputs": [
+                            {
+                                "name": i.name,
+                                "type": i.type.value,
+                                "required": i.required,
+                            }
+                            for i in preview_spec.inputs
+                        ],
+                        "outputs": [o.name for o in preview_spec.outputs],
+                        "docstring": preview_spec.docstring,
+                    },
+                    parameters={},
+                )
+
+                TransformationInput.objects.create(
+                    transformation_request=preview_request,
+                    artefact=net_artefact,
+                    input_name="net_xml",
+                )
+
+                logger.info(
+                    f"Created netpreview transform request "
+                    f"{preview_request.id} for scenario {scenario.id}"
+                )
+
+                preview_id = str(preview_request.id)
+                transaction.on_commit(
+                    lambda: derive_from_artefact.delay(preview_id, scenario_id=sid)
+                )
 
             inspect_request = TransformationRequest.objects.create(
                 method=inspect_spec.key,

@@ -99,6 +99,16 @@ urlpatterns = [
         name="scenario_inspection",
     ),
     path(
+        "api/scenarios/<uuid:scenario_id>/experiments",
+        views.scenario_experiments_view,
+        name="scenario_experiments",
+    ),
+    path(
+        "api/scenarios/<uuid:scenario_id>/preview-url",
+        views.scenario_preview_url_view,
+        name="scenario_preview_url",
+    ),
+    path(
         "api/experiment_graphs/",
         views.save_experiment_graph,
         name="save_experiment_graph",
