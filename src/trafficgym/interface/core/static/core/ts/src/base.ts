@@ -21,6 +21,49 @@ const TYPE_PREFIX: Record<string, string> = {
     transformation_request: "tr",
 };
 
+let currentWorkerCount: number | null = null;
+
+function applyWorkerStatus(count: number): void {
+    const dot = document.getElementById("workerDot") as HTMLElement | null;
+    if (dot) {
+        if (count < 0) {
+            dot.style.background = "#dc3545";
+            dot.textContent = "!";
+            dot.title = "Broker unreachable";
+        } else if (count === 0) {
+            dot.style.background = "#ffc107";
+            dot.textContent = "0";
+            dot.title = "No workers running";
+        } else {
+            dot.style.background = "#198754";
+            dot.textContent = String(count);
+            dot.title = `${count} concurrent worker slot${count !== 1 ? "s" : ""} available`;
+        }
+    }
+    currentWorkerCount = count;
+    syncPendingWarnings();
+}
+
+function syncPendingWarnings(): void {
+    const show = currentWorkerCount !== null && currentWorkerCount <= 0;
+    document.querySelectorAll<HTMLElement>("[data-status-id]").forEach(el => {
+        const isPending = !!el.querySelector(".badge.text-bg-secondary");
+        let warn = el.querySelector<HTMLElement>(".no-worker-warn");
+        if (isPending && show) {
+            if (!warn) {
+                warn = document.createElement("span");
+                warn.className = "no-worker-warn badge text-bg-warning ms-1";
+                warn.title = "No workers available";
+                warn.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>No workers`;
+                el.appendChild(warn);
+            }
+            warn.style.display = "";
+        } else {
+            warn?.remove();
+        }
+    });
+}
+
 function renderBadge(status: string): string {
     const [cls, label] = STATUS_BADGE[status] ?? ["light", status];
     return `<span class="badge text-bg-${cls}">${label}</span>`;
@@ -41,7 +84,8 @@ function renderProgressDone(status: string): string {
         return `<span class="text-muted small">Simulation complete &mdash; </span>
                 <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">Refresh page</button>`;
     }
-    return `<span class="text-muted small">Simulation failed.</span>`;
+    return `<span class="text-muted small">Simulation failed &mdash; </span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">Refresh page</button>`;
 }
 
 function applyProgressUpdate(el: HTMLElement, current: number, total: number): void {
@@ -65,23 +109,9 @@ function initStatusEvents(): void {
         const { type, id } = payload;
 
         if (type === "worker_status") {
-            const dot = document.getElementById("workerDot") as HTMLElement | null;
             const count = (payload as unknown as { count: number }).count;
-            if (dot) {
-                if (count < 0) {
-                    dot.style.background = "#dc3545";
-                    dot.textContent = "!";
-                    dot.title = "Broker unreachable";
-                } else if (count === 0) {
-                    dot.style.background = "#ffc107";
-                    dot.textContent = "0";
-                    dot.title = "No workers running";
-                } else {
-                    dot.style.background = "#198754";
-                    dot.textContent = String(count);
-                    dot.title = `${count} concurrent worker slot${count !== 1 ? "s" : ""} available`;
-                }
-            }
+            applyWorkerStatus(count);
+            localStorage.setItem("workerCount", String(count));
             return;
         }
 
@@ -100,7 +130,7 @@ function initStatusEvents(): void {
         const prefix = TYPE_PREFIX[type];
         if (!prefix) return;
         const el = document.querySelector<HTMLElement>(`[data-status-id="${prefix}_${id}"]`);
-        if (el) el.innerHTML = renderBadge(payload.status ?? "");
+        if (el) { el.innerHTML = renderBadge(payload.status ?? ""); syncPendingWarnings(); }
 
         if (payload.status === "COMPLETE" || payload.status === "FAILED") {
             const progressPrefix = type === "run_request" ? "rr" : type === "run_execution" ? "re" : null;
@@ -256,6 +286,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     attachPreviewHandlers(document);
     window.__previewHandlersAttached = true;
+
+    const stored = localStorage.getItem("workerCount");
+    if (stored !== null) applyWorkerStatus(Number(stored));
 
     initStatusEvents();
     initScenarioPreviews();

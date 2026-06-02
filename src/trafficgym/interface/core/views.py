@@ -187,26 +187,28 @@ def create_run_request(request: HttpRequest) -> HttpResponse:
     scenario = get_object_or_404(Scenario, pk=scenario_id)
     experiment = get_object_or_404(Experiment, pk=experiment_id)
 
-    run = RunRequest(
-        scenario=scenario,
-        experiment=experiment,
-        rerun_count=rerun_count,
-        open_gui=open_gui,
-        step_length_ms=step_length_ms,
-        simulation_parameters=parsed_parameters,
-    )
-    run.save()
+    from django.db import transaction as _tx
+    with _tx.atomic():
+        run = RunRequest(
+            scenario=scenario,
+            experiment=experiment,
+            rerun_count=rerun_count,
+            open_gui=open_gui,
+            step_length_ms=step_length_ms,
+            simulation_parameters=parsed_parameters,
+        )
+        run.save()
 
-    if seed_ints:
-        RunExecution.objects.bulk_create([
-            RunExecution(run_request=run, seed=seed, status="PENDING")
-            for seed in seed_ints
-        ])
-    else:
-        RunExecution.objects.bulk_create([
-            RunExecution(run_request=run, seed=int(random.random() * (2**31 - 1)), status="PENDING")
-            for _ in range(rerun_count)
-        ])
+        if seed_ints:
+            RunExecution.objects.bulk_create([
+                RunExecution(run_request=run, seed=seed, status="PENDING")
+                for seed in seed_ints
+            ])
+        else:
+            RunExecution.objects.bulk_create([
+                RunExecution(run_request=run, seed=int(random.random() * (2**31 - 1)), status="PENDING")
+                for _ in range(rerun_count)
+            ])
 
     return redirect("run_request_detail", pk=run.pk)
 
@@ -840,7 +842,7 @@ def save_experiment_graph(request: HttpRequest) -> JsonResponse:
     except Scenario.DoesNotExist:
         return JsonResponse({"error": "Scenario not found"}, status=404)
 
-    from trafficgym.engine.control.codegen import generate
+    from trafficgym.engine.control.codegen import generate, class_name_from
     from django.core.files.base import ContentFile
     from django.utils import timezone
     import hashlib
@@ -899,7 +901,7 @@ def save_experiment_graph(request: HttpRequest) -> JsonResponse:
 
     experiment = Experiment.objects.filter(artefact=py_artefact).first()
     if not experiment:
-        experiment = Experiment.objects.create(name=name[:64], artefact=py_artefact)
+        experiment = Experiment.objects.create(name=class_name_from(name)[:64], artefact=py_artefact)
 
     eg = ExperimentGraph.objects.create(
         name=name,
@@ -1162,6 +1164,8 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
 
     def event_stream() -> Generator[str, None, None]:
         from .celery_setup import app as celery_app
+        from datetime import timedelta
+        from django.utils import timezone as tz
 
         seen: dict[str, str] = {}
         watching: set[str] = set()
@@ -1208,6 +1212,17 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
                 if final and seen.get(key) != final["status"]:
                     seen[key] = final["status"]
                     updates.append({"type": type_by_prefix[prefix], "id": id_str, "status": final["status"]})
+
+            # Catch items that finished before the SSE loop ever saw them as non-terminal.
+            recent_cutoff = tz.now() - timedelta(seconds=10)
+            for model, prefix, type_name in models_cfg:
+                for obj in model.objects.filter(
+                    status__in=terminal, finished_at__gte=recent_cutoff
+                ).values("id", "status"):
+                    key = f"{prefix}_{obj['id']}"
+                    if seen.get(key) != obj["status"]:
+                        seen[key] = obj["status"]
+                        updates.append({"type": type_name, "id": str(obj["id"]), "status": obj["status"]})
 
             for obj in RunExecution.objects.filter(status="RUNNING").values(
                 "id", "current_step", "run_request__experiment__total_steps"

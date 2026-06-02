@@ -3,7 +3,7 @@ from .models import Scenario, Artefact, Experiment, TransformationRequest, Trans
 from django.db import transaction
 from trafficgym.engine.transformations.registry import get_spec_or_none
 from .tasks import derive_from_artefact
-from .utils import get_or_create_artefact_from_upload, ArtefactResolution
+from .utils import get_or_create_artefact_from_upload, ArtefactResolution, safe_delay
 from typing import Any
 import ast
 import logging
@@ -150,9 +150,12 @@ class ScenarioForm(forms.ModelForm):
                 )
 
                 preview_id = str(preview_request.id)
-                transaction.on_commit(
-                    lambda: derive_from_artefact.delay(preview_id, scenario_id=sid)
-                )
+                transaction.on_commit(lambda: safe_delay(
+                    derive_from_artefact, preview_id, scenario_id=sid,
+                    on_broker_error=lambda _: TransformationRequest.objects.filter(
+                        id=preview_id, status="PENDING"
+                    ).update(status="FAILED"),
+                ))
 
             inspect_request = TransformationRequest.objects.create(
                 method=inspect_spec.key,
@@ -192,9 +195,12 @@ class ScenarioForm(forms.ModelForm):
             )
 
             inspect_id = str(inspect_request.id)
-            transaction.on_commit(
-                lambda: derive_from_artefact.delay(inspect_id, scenario_id=sid)
-            )
+            transaction.on_commit(lambda: safe_delay(
+                derive_from_artefact, inspect_id, scenario_id=sid,
+                on_broker_error=lambda _: TransformationRequest.objects.filter(
+                    id=inspect_id, status="PENDING"
+                ).update(status="FAILED"),
+            ))
 
         return scenario, created, reused
 

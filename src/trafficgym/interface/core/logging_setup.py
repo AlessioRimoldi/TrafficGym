@@ -201,7 +201,7 @@ class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
     #     self.engine_run_id = engine_run_id
 
     def _emit_batch(self, records: list[logging.LogRecord]) -> None:
-        rpc_objs, sub_objs, tele_objs, worker_objs = [], [], [], []
+        rpc_objs, sub_objs, tele_objs, worker_objs, rr_error_objs = [], [], [], [], []
 
         for record in records:
             try:
@@ -222,6 +222,17 @@ class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
                             traceback=tb,
                         )
                     )
+                    if record.levelno >= logging.ERROR and exception_type:
+                        rr_error_objs.append(
+                            WorkerLogEntryRunRequest(
+                                run_request_id=self.run_execution.run_request_id,
+                                event_time=event_time,
+                                level=record.levelname,
+                                message=f"[seed {self.run_execution.seed}] {record.getMessage()}",
+                                exception_type=exception_type,
+                                traceback=tb,
+                            )
+                        )
                     continue
 
             except Exception as e:
@@ -298,3 +309,6 @@ class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
 
             if worker_objs:
                 WorkerLogEntryRunExecution.objects.bulk_create(worker_objs)
+
+            if rr_error_objs:
+                WorkerLogEntryRunRequest.objects.bulk_create(rr_error_objs)

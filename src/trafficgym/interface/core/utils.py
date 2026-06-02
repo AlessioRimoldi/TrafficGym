@@ -1,9 +1,23 @@
 from dataclasses import dataclass
 from django.core.files import File
 from django.core.files.uploadedfile import UploadedFile
+from typing import Any, Callable
 import hashlib
+import logging
+import traceback
 
 from .models import Artefact
+
+logger = logging.getLogger(__name__)
+
+
+def safe_delay(task: Any, *args: Any, on_broker_error: Callable[[Exception], Any], **kwargs: Any) -> None:
+    try:
+        task.delay(*args, **kwargs)
+    except Exception as e:
+        msg = f"Broker unreachable — could not dispatch {getattr(task, 'name', task)}: {e}"
+        logger.error(msg)
+        on_broker_error(Exception(msg))
 
 
 @dataclass(frozen=True)
