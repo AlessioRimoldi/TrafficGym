@@ -11,7 +11,7 @@ class Mean:
     Connect multiple observer nodes to this block's input port to fan-in their
     readings into one averaged signal for a downstream controller."""
 
-    def __init__(self, output_key: str = "value") -> None:
+    def __init__(self, output_key: str = "avg_value") -> None:
         self._output_key = output_key
 
     def step(self, adapter: SimulationPort, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -19,6 +19,21 @@ class Mean:
             return {}
         mean = sum(float(v) for v in inputs.values()) / len(inputs)
         return {self._output_key: mean}
+
+@block("Max")
+class Max:
+    """Returns the greatest of provided value in the inputs dict.
+    Connect multiple observer nodes to this block's input port to fan-in their 
+    readings into one signal for a downstream controller."""
+
+    def __init__(self, output_key: str = "max_value") -> None:
+        self._output_key = output_key
+
+    def step(self, adapter: SimulationPort, inputs: dict[str, Any]) -> dict[str, Any]:
+        if not inputs:
+            return {}
+        max_val = max(float(v) for v in inputs.values())
+        return {self._output_key: max_val}
 
 
 @block("Rolling Avg")
