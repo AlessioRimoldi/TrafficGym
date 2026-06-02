@@ -796,16 +796,20 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
     ]
     experiment_graphs_qs = list(
         ExperimentGraph.objects.select_related("scenario", "experiment", "experiment__artefact")
-        .order_by("scenario__name", "name", "-version")
+        .order_by("scenario__name", "name", "-created_at")
     )
     experiment_graph_scenario_groups = [
         (
             scenario_graphs[0].scenario,
-            [
-                (versions[0], versions[1:])
-                for _, g in groupby(scenario_graphs, key=lambda eg: eg.name)
-                for versions in [list(g)]
-            ],
+            sorted(
+                [
+                    (versions[0], versions[1:])
+                    for _, g in groupby(scenario_graphs, key=lambda eg: eg.name)
+                    for versions in [list(g)]
+                ],
+                key=lambda t: t[0].created_at,
+                reverse=True,
+            ),
         )
         for _, s in groupby(experiment_graphs_qs, key=lambda eg: eg.scenario.id)
         for scenario_graphs in [list(s)]

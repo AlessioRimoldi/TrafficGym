@@ -7,33 +7,28 @@ from trafficgym.engine.control.registry import block
 
 @block("Mean")
 class Mean:
-    """Averages all values in the inputs dict and returns a single output key.
-    Connect multiple observer nodes to this block's input port to fan-in their
-    readings into one averaged signal for a downstream controller."""
-
-    def __init__(self, output_key: str = "avg_value") -> None:
-        self._output_key = output_key
+    """Averages numeric values from all connected inputs.
+    Connect multiple observer nodes to fan-in their readings into one averaged
+    signal for a downstream controller. Non-numeric inputs raise ValueError."""
 
     def step(self, adapter: SimulationPort, inputs: dict[str, Any]) -> dict[str, Any]:
         if not inputs:
             return {}
-        mean = sum(float(v) for v in inputs.values()) / len(inputs)
-        return {self._output_key: mean}
+        key = next(iter(inputs))
+        values = [float(v) for v in inputs.values()]
+        return {key: sum(values) / len(values)}
 
 @block("Max")
 class Max:
-    """Returns the greatest of provided value in the inputs dict.
-    Connect multiple observer nodes to this block's input port to fan-in their 
-    readings into one signal for a downstream controller."""
-
-    def __init__(self, output_key: str = "max_value") -> None:
-        self._output_key = output_key
+    """Returns the greatest numeric value from all connected inputs.
+    Connect multiple observer nodes to fan-in their readings into one signal
+    for a downstream controller. Non-numeric inputs raise ValueError."""
 
     def step(self, adapter: SimulationPort, inputs: dict[str, Any]) -> dict[str, Any]:
         if not inputs:
             return {}
-        max_val = max(float(v) for v in inputs.values())
-        return {self._output_key: max_val}
+        key = next(iter(inputs))
+        return {key: max(float(v) for v in inputs.values())}
 
 
 @block("Rolling Avg")

@@ -24,7 +24,7 @@ def enqueue_run_request(instance: RunRequest, created: bool, **_: Any) -> None:
             status=RunStatus.FAILED, finished_at=now,
         )
         RunExecution.objects.filter(
-            run_request_id=instance.id, status="PENDING"
+            run_request=instance, status="PENDING"
         ).update(status="FAILED", finished_at=now)
         WorkerLogEntryRunRequest.objects.create(
             run_request_id=instance.id,

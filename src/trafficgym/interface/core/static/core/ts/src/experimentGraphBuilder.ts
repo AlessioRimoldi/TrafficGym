@@ -91,7 +91,7 @@ interface OnEnterAction {
     domain: string;
     setter: string;
     object_id: string;
-    params: string;
+    param_value: string; // just the value; sumo_param name derived from setter def
 }
 
 interface Phase {
@@ -172,9 +172,6 @@ interface GraphSpec {
     }[];
 }
 
-const ENTER_DOMAIN_SETTERS: Record<string, string[]> = {
-    trafficlight: ["setProgram", "setRedYellowGreenState", "setPhase"],
-};
 
 interface Conn { from: HTMLElement; to: HTMLElement; line: SVGLineElement; compatible: boolean }
 
@@ -367,64 +364,203 @@ function renumberPhases(phaseList: HTMLElement): void {
     });
 }
 
+function settersForDomain(domain: string): SetterDef[] {
+    for (const entry of Object.values(ACTUATOR_DEFS))
+        if (entry.domain === domain) return entry.setters;
+    return [];
+}
+
+function domainToIds(domain: string, data: InspectionData): string[] {
+    const ids: Record<string, string[]> = {
+        trafficlight: data.tls_ids,
+        edge: data.edge_ids,
+        lane: data.lane_ids,
+        inductionloop: data.detector_ids,
+    };
+    return ids[domain] ?? [];
+}
+
+const CUSTOM = "__custom__";
+
 function makeActionRow(action: OnEnterAction, phase: Phase, data: InspectionData): HTMLDivElement {
     const row = document.createElement("div");
     row.className = "d-flex align-items-center gap-1 flex-wrap mb-1";
 
-    const domainSel = document.createElement("select");
-    domainSel.className = "form-select form-select-sm";
-    domainSel.style.width = "130px";
-
-    const setterSel = document.createElement("select");
-    setterSel.className = "form-select form-select-sm";
-    setterSel.style.width = "170px";
-
-    const objSel = document.createElement("select");
-    objSel.className = "form-select form-select-sm";
-    objSel.style.width = "110px";
-
-    const paramsInput = document.createElement("input");
-    paramsInput.type = "text";
-    paramsInput.className = "form-control form-control-sm font-monospace";
-    paramsInput.style.width = "160px";
-    paramsInput.placeholder = '{"key": "val"}';
-    paramsInput.value = action.params;
-    paramsInput.addEventListener("input", () => { action.params = paramsInput.value; });
-
-    const domainIds: Record<string, string[]> = { trafficlight: data.tls_ids };
-
-    function refreshSetters() {
-        setterSel.innerHTML = "";
-        for (const s of (ENTER_DOMAIN_SETTERS[action.domain] ?? [])) {
-            const o = document.createElement("option");
-            o.value = o.textContent = s;
-            if (s === action.setter) o.selected = true;
-            setterSel.appendChild(o);
-        }
-        action.setter = setterSel.value;
+    function sel(w: string): HTMLSelectElement {
+        const s = document.createElement("select");
+        s.className = "form-select form-select-sm";
+        s.style.width = w;
+        return s;
+    }
+    function customInput(placeholder: string, w: string): HTMLInputElement {
+        const i = document.createElement("input");
+        i.type = "text";
+        i.className = "form-control form-control-sm font-monospace";
+        i.placeholder = placeholder;
+        i.style.width = w;
+        i.style.display = "none";
+        return i;
     }
 
-    function refreshObjects() {
+    const domainSel       = sel("130px");
+    const domainCustomIn  = customInput("domain", "110px");
+    const setterSel       = sel("180px");
+    const setterCustomIn  = customInput("setter", "150px");
+    const objSel          = sel("110px");
+    const objCustomIn     = customInput("object id", "100px");
+
+    // Normal-setter param widgets
+    const paramLabel = document.createElement("span");
+    paramLabel.className = "text-muted small font-monospace";
+    const typeBadge = document.createElement("span");
+    typeBadge.className = "badge bg-secondary";
+    const valueInput = document.createElement("input");
+    valueInput.type = "text";
+    valueInput.className = "form-control form-control-sm";
+    valueInput.style.width = "100px";
+    valueInput.value = action.param_value;
+    valueInput.addEventListener("input", () => { action.param_value = valueInput.value; });
+
+    // Custom-setter JSON widget
+    const jsonInput = document.createElement("input");
+    jsonInput.type = "text";
+    jsonInput.className = "form-control form-control-sm font-monospace";
+    jsonInput.placeholder = "{}";
+    jsonInput.style.width = "160px";
+    jsonInput.style.display = "none";
+    jsonInput.value = action.param_value || "{}";
+    jsonInput.addEventListener("input", () => { action.param_value = jsonInput.value; });
+
+    const knownDomains = Object.values(ACTUATOR_DEFS).map(e => e.domain);
+
+    function isCustomDomain(): boolean { return !knownDomains.includes(action.domain); }
+    function isCustomSetter(): boolean { return !settersForDomain(action.domain).find(s => s.setter === action.setter); }
+    function isCustomObj(): boolean    { return !domainToIds(action.domain, data).includes(action.object_id); }
+
+    function refreshParamArea(): void {
+        const custom = isCustomSetter();
+        paramLabel.style.display = custom ? "none" : "";
+        typeBadge.style.display  = custom ? "none" : "";
+        valueInput.style.display = custom ? "none" : "";
+        jsonInput.style.display  = custom ? "" : "none";
+        if (!custom) {
+            const def = settersForDomain(action.domain).find(s => s.setter === action.setter);
+            paramLabel.textContent = def ? def.sumo_param : "";
+            typeBadge.textContent  = def ? def.type : "";
+            valueInput.placeholder = def?.type ?? "value";
+        }
+    }
+
+    function refreshSetters(): void {
+        setterSel.innerHTML = "";
+        const setters = settersForDomain(action.domain);
+        for (const s of setters) {
+            const o = document.createElement("option");
+            o.value = o.textContent = s.setter;
+            if (s.setter === action.setter) o.selected = true;
+            setterSel.appendChild(o);
+        }
+        const customOpt = document.createElement("option");
+        customOpt.value = CUSTOM;
+        customOpt.textContent = "Custom…";
+        setterSel.appendChild(customOpt);
+        if (isCustomSetter()) {
+            setterSel.value = CUSTOM;
+            setterCustomIn.style.display = "";
+            setterCustomIn.value = action.setter;
+        } else {
+            action.setter = setterSel.value;
+            setterCustomIn.style.display = "none";
+        }
+        refreshParamArea();
+    }
+
+    function refreshObjects(): void {
         objSel.innerHTML = "";
-        for (const id of (domainIds[action.domain] ?? [])) {
+        for (const id of domainToIds(action.domain, data)) {
             const o = document.createElement("option");
             o.value = o.textContent = id;
             if (id === action.object_id) o.selected = true;
             objSel.appendChild(o);
         }
-        action.object_id = objSel.value;
+        const customOpt = document.createElement("option");
+        customOpt.value = CUSTOM;
+        customOpt.textContent = "Custom…";
+        objSel.appendChild(customOpt);
+        if (isCustomObj()) {
+            objSel.value = CUSTOM;
+            objCustomIn.style.display = "";
+            objCustomIn.value = action.object_id;
+        } else {
+            action.object_id = objSel.value;
+            objCustomIn.style.display = "none";
+        }
     }
 
-    for (const d of Object.keys(ENTER_DOMAIN_SETTERS)) {
+    // Domain dropdown
+    for (const entry of Object.values(ACTUATOR_DEFS)) {
         const o = document.createElement("option");
-        o.value = o.textContent = d;
-        if (d === action.domain) o.selected = true;
+        o.value = o.textContent = entry.domain;
+        if (entry.domain === action.domain) o.selected = true;
         domainSel.appendChild(o);
     }
+    const domainCustomOpt = document.createElement("option");
+    domainCustomOpt.value = CUSTOM;
+    domainCustomOpt.textContent = "Custom…";
+    domainSel.appendChild(domainCustomOpt);
+    if (isCustomDomain()) {
+        domainSel.value = CUSTOM;
+        domainCustomIn.style.display = "";
+        domainCustomIn.value = action.domain;
+    }
 
-    domainSel.addEventListener("change", () => { action.domain = domainSel.value; refreshSetters(); refreshObjects(); });
-    setterSel.addEventListener("change", () => { action.setter = setterSel.value; });
-    objSel.addEventListener("change", () => { action.object_id = objSel.value; });
+    domainSel.addEventListener("change", () => {
+        if (domainSel.value === CUSTOM) {
+            domainCustomIn.style.display = "";
+            domainCustomIn.value = "";
+            domainCustomIn.focus();
+            action.domain = "";
+        } else {
+            domainCustomIn.style.display = "none";
+            action.domain = domainSel.value;
+        }
+        action.setter = ""; setterCustomIn.value = "";
+        action.object_id = ""; objCustomIn.value = "";
+        refreshSetters();
+        refreshObjects();
+    });
+    domainCustomIn.addEventListener("input", () => {
+        action.domain = domainCustomIn.value;
+        action.setter = ""; setterCustomIn.value = "";
+        action.object_id = ""; objCustomIn.value = "";
+        refreshSetters();
+        refreshObjects();
+    });
+
+    setterSel.addEventListener("change", () => {
+        if (setterSel.value === CUSTOM) {
+            setterCustomIn.style.display = "";
+            setterCustomIn.focus();
+            action.setter = setterCustomIn.value;
+        } else {
+            setterCustomIn.style.display = "none";
+            action.setter = setterSel.value;
+        }
+        refreshParamArea();
+    });
+    setterCustomIn.addEventListener("input", () => { action.setter = setterCustomIn.value; });
+
+    objSel.addEventListener("change", () => {
+        if (objSel.value === CUSTOM) {
+            objCustomIn.style.display = "";
+            objCustomIn.focus();
+            action.object_id = objCustomIn.value;
+        } else {
+            objCustomIn.style.display = "none";
+            action.object_id = objSel.value;
+        }
+    });
+    objCustomIn.addEventListener("input", () => { action.object_id = objCustomIn.value; });
 
     refreshSetters();
     refreshObjects();
@@ -438,7 +574,8 @@ function makeActionRow(action: OnEnterAction, phase: Phase, data: InspectionData
         row.remove();
     });
 
-    row.append(domainSel, setterSel, objSel, paramsInput, rmBtn);
+    row.append(domainSel, domainCustomIn, setterSel, setterCustomIn, objSel, objCustomIn,
+               paramLabel, typeBadge, valueInput, jsonInput, rmBtn);
     return row;
 }
 
@@ -1714,11 +1851,12 @@ function renderPipeline(
         addActionBtn.className = "btn btn-sm btn-outline-secondary mt-1";
         addActionBtn.textContent = "+ Add action";
         addActionBtn.addEventListener("click", () => {
+            const firstDomain = Object.values(ACTUATOR_DEFS)[0]?.domain ?? "trafficlight";
             const action: OnEnterAction = {
-                domain: "trafficlight",
-                setter: ENTER_DOMAIN_SETTERS["trafficlight"]?.[0] ?? "",
-                object_id: data.tls_ids[0] ?? "",
-                params: "{}",
+                domain: firstDomain,
+                setter: settersForDomain(firstDomain)[0]?.setter ?? "",
+                object_id: domainToIds(firstDomain, data)[0] ?? "",
+                param_value: "",
             };
             phase.on_enter.push(action);
             enterList.appendChild(makeActionRow(action, phase, data));
@@ -1767,14 +1905,24 @@ function renderPipeline(
             const phase = allPhases[i];
             const actions: GraphSpec["phases"][number]["on_enter"] = [];
             for (const action of phase.on_enter) {
+                const def = settersForDomain(action.domain).find(s => s.setter === action.setter);
                 let params: Record<string, unknown>;
-                try {
-                    params = JSON.parse(action.params || "{}");
-                } catch {
-                    return { error: `Phase ${i + 1} on-enter action has invalid JSON: ${action.params}` };
-                }
-                if (typeof params !== "object" || Array.isArray(params)) {
-                    return { error: `Phase ${i + 1} on-enter params must be a JSON object` };
+                if (!def) {
+                    try { params = JSON.parse(action.param_value || "{}"); }
+                    catch { return { error: `Phase ${i + 1} custom on-enter params is not valid JSON` }; }
+                } else {
+                    const raw = action.param_value;
+                    let typedVal: unknown = raw;
+                    if (def.type === "int") {
+                        const n = parseInt(raw);
+                        if (isNaN(n)) return { error: `Phase ${i + 1} on-enter "${action.setter}": expected int for "${def.sumo_param}", got "${raw}"` };
+                        typedVal = n;
+                    } else if (def.type === "float") {
+                        const n = parseFloat(raw);
+                        if (isNaN(n)) return { error: `Phase ${i + 1} on-enter "${action.setter}": expected float for "${def.sumo_param}", got "${raw}"` };
+                        typedVal = n;
+                    }
+                    params = { [def.sumo_param]: typedVal };
                 }
                 actions.push({ domain: action.domain, setter: action.setter, object_id: action.object_id, params });
             }
@@ -1880,7 +2028,7 @@ function renderPipeline(
                     domain: a.domain,
                     setter: a.setter,
                     object_id: a.object_id,
-                    params: JSON.stringify(a.params),
+                    param_value: String(Object.values(a.params ?? {})[0] ?? ""),
                 })),
             };
             allPhases.push(phase);
