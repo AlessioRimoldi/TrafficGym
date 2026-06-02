@@ -84,24 +84,27 @@ def create_run_modal(request: HttpRequest) -> HttpResponse:
         "name", "version"
     )
 
-    default_scenario_id: str | None = None
-    default_experiment_sha256: str | None = None
+    default_scenario_id: str | None = request.GET.get("scenario") or None
+    default_experiment_sha256: str | None = request.GET.get("experiment") or None
 
-    last_run = (
-        RunRequest.objects
-        .select_related("scenario", "experiment")
-        .order_by("-created_at")
-        .first()
-    )
-    if last_run:
-        default_scenario_id = str(last_run.scenario.id)
-        default_experiment_sha256 = (
-            Experiment.objects
-            .filter(name=last_run.experiment.name)
-            .order_by("-version")
-            .values_list("sha256", flat=True)
+    if not default_scenario_id or not default_experiment_sha256:
+        last_run = (
+            RunRequest.objects
+            .select_related("scenario", "experiment")
+            .order_by("-created_at")
             .first()
         )
+        if last_run:
+            if not default_scenario_id:
+                default_scenario_id = str(last_run.scenario.id)
+            if not default_experiment_sha256:
+                default_experiment_sha256 = (
+                    Experiment.objects
+                    .filter(name=last_run.experiment.name)
+                    .order_by("-version")
+                    .values_list("sha256", flat=True)
+                    .first()
+                )
 
     from django.db.models import Exists, OuterRef
     graph_sha256s = set(

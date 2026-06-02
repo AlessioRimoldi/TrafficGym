@@ -103,7 +103,14 @@
                             +{{ older_egs|length }} older
                         </button>
                         {% endif %}
-                        <a href="#" class="btn btn-outline-secondary btn-sm flex-shrink-0 open-graph-builder {% if not older_egs %}ms-auto{% endif %}" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ latest_eg.id }}">New from this</a>
+                        <a href="#" class="btn btn-outline-secondary btn-sm flex-shrink-0 open-graph-builder {% if not older_egs %}ms-auto{% endif %}"
+                           title="New from this"
+                           data-url="{% url 'experiment_graph_builder_modal' %}?from={{ latest_eg.id }}"><i class="bi bi-copy"></i></a>
+                        {% if latest_eg.experiment %}
+                        <a href="#" class="btn btn-outline-success btn-sm flex-shrink-0 open-run-modal"
+                           title="Create Run Request"
+                           data-url="{% url 'create_run_modal' %}?scenario={{ latest_eg.scenario.id }}&experiment={{ latest_eg.experiment.sha256 }}"><i class="bi bi-play-fill"></i></a>
+                        {% endif %}
                     </div>
                     <div class="card-body py-2">
                         <div class="small text-muted mb-1">
@@ -124,7 +131,16 @@
                         <div class="card-body py-2 {% if not forloop.last %}border-bottom{% endif %}">
                             <div class="d-flex align-items-center gap-2 mb-1">
                                 <span class="fw-bold">v{{ old_eg.version }}</span>
-                                <a href="#" class="btn btn-outline-secondary btn-sm ms-auto open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}?from={{ old_eg.id }}">New from this</a>
+                                <div class="ms-auto d-flex gap-1">
+                                <a href="#" class="btn btn-outline-secondary btn-sm open-graph-builder"
+                                   title="New from this"
+                                   data-url="{% url 'experiment_graph_builder_modal' %}?from={{ old_eg.id }}"><i class="bi bi-copy"></i></a>
+                                {% if old_eg.experiment %}
+                                <a href="#" class="btn btn-outline-success btn-sm open-run-modal"
+                                   title="Create Run Request"
+                                   data-url="{% url 'create_run_modal' %}?scenario={{ old_eg.scenario.id }}&experiment={{ old_eg.experiment.sha256 }}"><i class="bi bi-play-fill"></i></a>
+                                {% endif %}
+                                </div>
                             </div>
                             <div class="small text-muted mb-1">
                                 {{ old_eg.graph.pipelines|length }} pipeline{{ old_eg.graph.pipelines|length|pluralize }} &middot;
@@ -166,6 +182,9 @@
                     +{{ older|length }} older
                 </button>
                 {% endif %}
+                <a href="#" class="btn btn-outline-success btn-sm flex-shrink-0 open-run-modal {% if not older %}ms-auto{% endif %}"
+                   title="Create Run Request"
+                   data-url="{% url 'create_run_modal' %}?experiment={{ latest.sha256 }}"><i class="bi bi-play-fill"></i></a>
             </div>
             <div class="card-body">
                 <div class="mb-2">
@@ -192,12 +211,15 @@
             <div class="collapse border-top" id="exp-older-{{ forloop.counter }}">
                 {% for old in older %}
                 <div class="card-body {% if not forloop.last %}border-bottom{% endif %}">
-                    <div class="mb-2">
+                    <div class="mb-2 d-flex align-items-center gap-2">
                         <a href="#" class="preview-btn fw-bold text-decoration-none"
                             data-filepath="{{ old.artefact.file.name }}"
                             data-filename="{{ old.name }} v{{ old.version }}"
                             data-artefact-url="{% url 'artefact_detail' old.artefact_id %}">v{{ old.version }}</a>
-                        <span class="text-muted ms-1" style="font-size:0.7em;font-family:monospace;">{{ old.sha256|slice:":20" }}…</span>
+                        <span class="text-muted" style="font-size:0.7em;font-family:monospace;">{{ old.sha256|slice:":20" }}…</span>
+                        <a href="#" class="btn btn-outline-success btn-sm ms-auto open-run-modal"
+                           title="Create Run Request"
+                           data-url="{% url 'create_run_modal' %}?experiment={{ old.sha256 }}"><i class="bi bi-play-fill"></i></a>
                     </div>
                     <ul class="list-unstyled mb-0">
                         <li><strong>Used in Run Requests (scenarios)</strong>:

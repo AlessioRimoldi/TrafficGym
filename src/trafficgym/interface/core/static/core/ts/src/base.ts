@@ -260,17 +260,26 @@ document.addEventListener("DOMContentLoaded", () => {
     initStatusEvents();
     initScenarioPreviews();
 
+    function openRunModal(url: string): void {
+        fetch(url)
+            .then(r => r.text())
+            .then(html => {
+                document.getElementById("createRunModalContent")!.innerHTML = html;
+                const modal = new (window as any).bootstrap.Modal(document.getElementById("createRunModal"));
+                modal.show();
+                initCreateRunModal();
+            });
+    }
+
     const openBtn = document.getElementById("openCreateRunModal") as HTMLButtonElement | null;
     if (openBtn) {
-        openBtn.addEventListener("click", () => {
-            fetch(openBtn.dataset.url!)
-                .then(r => r.text())
-                .then(html => {
-                    document.getElementById("createRunModalContent")!.innerHTML = html;
-                    const modal = new (window as any).bootstrap.Modal(document.getElementById("createRunModal"));
-                    modal.show();
-                    initCreateRunModal();
-                });
-        });
+        openBtn.addEventListener("click", () => openRunModal(openBtn.dataset.url!));
     }
+
+    document.addEventListener("click", (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLElement>(".open-run-modal");
+        if (!btn || !btn.dataset.url) return;
+        e.preventDefault();
+        openRunModal(btn.dataset.url);
+    });
 });
