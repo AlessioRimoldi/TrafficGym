@@ -1,6 +1,9 @@
 export function attachPreviewHandlers(root: Document | HTMLElement = document) {
     const previewModalEl = document.getElementById("previewModal") as HTMLDivElement;
     const previewModal = new window.bootstrap.Modal(previewModalEl);
+    const artefactLink = document.getElementById("previewArtefactLink") as HTMLAnchorElement;
+    const newTabLink = document.getElementById("previewNewTabLink") as HTMLAnchorElement;
+    const previewFooter = document.getElementById("previewFooter") as HTMLElement;
     let currentBlobUrl: string | null = null;
 
     previewModalEl.addEventListener("hidden.bs.modal", () => {
@@ -20,6 +23,7 @@ export function attachPreviewHandlers(root: Document | HTMLElement = document) {
 
         const filepath = btn.dataset.filepath;
         const filename = btn.dataset.filename ?? "Preview";
+        const artefactUrl = btn.dataset.artefactUrl ?? null;
 
         if (!filepath) return;
 
@@ -27,6 +31,15 @@ export function attachPreviewHandlers(root: Document | HTMLElement = document) {
 
         const titleEl = document.getElementById("previewTitle") as HTMLHeadingElement;
         const container = document.getElementById("previewContent") as HTMLElement;
+
+        newTabLink.href = `/media/${filepath}`;
+        if (artefactUrl) {
+            artefactLink.href = artefactUrl;
+            artefactLink.style.display = "";
+        } else {
+            artefactLink.style.display = "none";
+        }
+        previewFooter.style.display = "";
 
         titleEl.textContent = filename;
         container.innerHTML = "";

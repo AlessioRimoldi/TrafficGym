@@ -62,22 +62,21 @@ class Scenario(models.Model):
     run_requests: models.Manager[RunRequest]
 
     @property
-    def image_url(self) -> str:
+    def image_artefact(self) -> "Artefact | None":
         request = self.image_transformation_request
-
         if request is None:
-            return ""
-
+            return None
         output = (
             request.output_bindings.select_related("artefact")
             .order_by("id")
             .first()
         )
+        return output.artefact if output else None
 
-        if output is None:
-            return ""
-
-        return output.artefact.file.url
+    @property
+    def image_url(self) -> str:
+        artefact = self.image_artefact
+        return artefact.file.url if artefact else ""
 
     @property
     def image_transformation_request(self) -> TransformationRequest | None:

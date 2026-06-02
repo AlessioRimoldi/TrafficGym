@@ -779,7 +779,8 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
 
     from itertools import groupby
     experiments_qs = list(
-        Experiment.objects.prefetch_related("run_requests__scenario")
+        Experiment.objects.select_related("artefact")
+        .prefetch_related("run_requests__scenario")
         .filter(experiment_graphs__isnull=True)
         .order_by("name", "-version")
     )
@@ -789,7 +790,7 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
         for versions in [list(g)]
     ]
     experiment_graphs_qs = list(
-        ExperimentGraph.objects.select_related("scenario", "experiment")
+        ExperimentGraph.objects.select_related("scenario", "experiment", "experiment__artefact")
         .order_by("scenario__name", "name", "-version")
     )
     experiment_graph_scenario_groups = [

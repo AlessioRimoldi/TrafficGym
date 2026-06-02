@@ -70,18 +70,22 @@
     <div class="card-header d-flex align-items-center gap-3 py-2">
         <span class="fw-semibold fs-6">{{ scenario.name }}</span>
         {% if scenario.image_url %}
+        {% with img_artefact=scenario.image_artefact %}
         <div class="ms-auto d-flex align-items-center gap-2">
             <a href="#" class="preview-btn"
                data-filepath="{{ scenario.image_url|slice:'7:' }}"
-               data-filename="{{ scenario.name }} — network preview">
+               data-filename="{{ scenario.name }} — network preview"
+               {% if img_artefact %}data-artefact-url="{% url 'artefact_detail' img_artefact.sha256 %}"{% endif %}>
                 <img src="{{ scenario.image_url }}" alt="{{ scenario.name }}" style="height:40px;width:auto;object-fit:contain;border-radius:4px;">
             </a>
             <a href="#" class="btn btn-sm btn-outline-primary preview-btn"
                data-filepath="{{ scenario.image_url|slice:'7:' }}"
-               data-filename="{{ scenario.name }} — network preview">
+               data-filename="{{ scenario.name }} — network preview"
+               {% if img_artefact %}data-artefact-url="{% url 'artefact_detail' img_artefact.sha256 %}"{% endif %}>
                 <i class="bi bi-search"></i>
             </a>
         </div>
+        {% endwith %}
         {% endif %}
     </div>
     <div class="card-body">
@@ -107,7 +111,10 @@
                             {{ latest_eg.graph.phases|length }} phase{{ latest_eg.graph.phases|length|pluralize }}
                         </div>
                         {% if latest_eg.experiment %}
-                        <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' latest_eg.experiment.artefact_id %}" class="font-monospace">{{ latest_eg.experiment.name }} v{{ latest_eg.experiment.version }}</a></div>
+                        <div class="small text-muted">Experiment: <a href="#" class="preview-btn font-monospace"
+                            data-filepath="{{ latest_eg.experiment.artefact.file.name }}"
+                            data-filename="{{ latest_eg.experiment.name }} v{{ latest_eg.experiment.version }}"
+                            data-artefact-url="{% url 'artefact_detail' latest_eg.experiment.artefact_id %}">{{ latest_eg.experiment.name }} v{{ latest_eg.experiment.version }}</a></div>
                         {% endif %}
                         <div class="small text-muted">Created {{ latest_eg.created_at|date:"Y-m-d H:i" }}</div>
                     </div>
@@ -124,7 +131,10 @@
                                 {{ old_eg.graph.phases|length }} phase{{ old_eg.graph.phases|length|pluralize }}
                             </div>
                             {% if old_eg.experiment %}
-                            <div class="small text-muted">Experiment: <a href="{% url 'artefact_detail' old_eg.experiment.artefact_id %}" class="font-monospace">{{ old_eg.experiment.name }} v{{ old_eg.experiment.version }}</a></div>
+                            <div class="small text-muted">Experiment: <a href="#" class="preview-btn font-monospace"
+                                data-filepath="{{ old_eg.experiment.artefact.file.name }}"
+                                data-filename="{{ old_eg.experiment.name }} v{{ old_eg.experiment.version }}"
+                                data-artefact-url="{% url 'artefact_detail' old_eg.experiment.artefact_id %}">{{ old_eg.experiment.name }} v{{ old_eg.experiment.version }}</a></div>
                             {% endif %}
                             <div class="small text-muted">Created {{ old_eg.created_at|date:"Y-m-d H:i" }}</div>
                         </div>
@@ -148,7 +158,7 @@
     <div class="col-6">
         <div class="card h-100">
             <div class="card-header fw-bold py-2 d-flex align-items-center gap-2">
-                <a href="{% url 'artefact_detail' latest.artefact_id %}" class="text-decoration-none text-reset text-truncate">{{ latest.name }}</a>
+                <span class="text-truncate">{{ latest.name }}</span>
                 <span class="badge bg-secondary fw-normal flex-shrink-0">v{{ latest.version }}</span>
                 {% if older %}
                 <button class="btn btn-sm btn-link text-muted p-0 ms-auto flex-shrink-0"
@@ -158,6 +168,14 @@
                 {% endif %}
             </div>
             <div class="card-body">
+                <div class="mb-2">
+                    <a href="#" class="preview-btn btn btn-sm btn-outline-secondary"
+                        data-filepath="{{ latest.artefact.file.name }}"
+                        data-filename="{{ latest.name }} v{{ latest.version }}"
+                        data-artefact-url="{% url 'artefact_detail' latest.artefact_id %}">
+                        <i class="bi bi-file-earmark-code me-1"></i>Preview source
+                    </a>
+                </div>
                 <ul class="list-unstyled mb-0">
                     <li><strong>Used in Run Requests (scenarios)</strong>:
                         <ul>
@@ -175,7 +193,10 @@
                 {% for old in older %}
                 <div class="card-body {% if not forloop.last %}border-bottom{% endif %}">
                     <div class="mb-2">
-                        <a href="{% url 'artefact_detail' old.artefact_id %}" class="fw-bold text-decoration-none">v{{ old.version }}</a>
+                        <a href="#" class="preview-btn fw-bold text-decoration-none"
+                            data-filepath="{{ old.artefact.file.name }}"
+                            data-filename="{{ old.name }} v{{ old.version }}"
+                            data-artefact-url="{% url 'artefact_detail' old.artefact_id %}">v{{ old.version }}</a>
                         <span class="text-muted ms-1" style="font-size:0.7em;font-family:monospace;">{{ old.sha256|slice:":20" }}…</span>
                     </div>
                     <ul class="list-unstyled mb-0">

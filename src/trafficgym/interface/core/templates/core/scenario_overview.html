@@ -62,21 +62,28 @@
 <div class="row gx-2 gy-3">
     {% for scenario in scenarios %}
     <div class="col-6">
-        <div class="card h-100">
+        <div class="card h-100 d-flex flex-column">
             <div class="card-header fs-4 fw-bold py-3 text-truncate">
                 {{ scenario.name }}
                 <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ scenario.id }}</span>
             </div>
             <div class="img-thumbnail d-flex align-items-center justify-content-center"
-            style="width:100%; aspect-ratio:1/1; background-color:#f0f0f0; overflow:hidden;">
-       
+            style="flex:1; min-height:60px; overflow:hidden; background-color:#f0f0f0;">
+
            {% with tr=scenario.image_transformation_request %}
-       
+
                {% if tr and tr.status == "COMPLETE" %}
-                   <img src="{{ scenario.image_url }}"
-                        alt="{{ scenario.name }} network preview"
-                        style="width:90%; height:90%; object-fit:contain;">
-       
+                   {% with img_artefact=scenario.image_artefact %}
+                   <a href="#" class="preview-btn d-block w-100 h-100"
+                      data-filepath="{{ scenario.image_url|slice:'7:' }}"
+                      data-filename="{{ scenario.name }} — network preview"
+                      {% if img_artefact %}data-artefact-url="{% url 'artefact_detail' img_artefact.sha256 %}"{% endif %}>
+                       <img src="{{ scenario.image_url }}"
+                            alt="{{ scenario.name }} network preview"
+                            style="width:100%; height:100%; object-fit:contain; display:block;">
+                   </a>
+                   {% endwith %}
+
                {% elif tr and tr.status in "PENDING PREPARING RUNNING" %}
                    <div class="text-center text-muted"
                         data-preview-tr-id="{{ tr.pk }}"
@@ -102,7 +109,21 @@
                {% endif %}
        
            {% endwith %}
-       </div>        </div>
+            </div>
+            <div class="card-footer p-2">
+                <div class="d-flex flex-wrap gap-1">
+                    {% for artefact in scenario.artefacts.all %}
+                    <a href="#" class="preview-btn btn btn-sm btn-outline-secondary text-truncate"
+                       style="max-width: 180px;"
+                       data-filepath="{{ artefact.file.name }}"
+                       data-filename="{{ artefact.original_name }}"
+                       data-artefact-url="{% url 'artefact_detail' artefact.sha256 %}">
+                        <i class="bi bi-file-earmark me-1"></i>{{ artefact.original_name }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </div>
     {% empty %}
         <div>No Scenarios to Display</div>

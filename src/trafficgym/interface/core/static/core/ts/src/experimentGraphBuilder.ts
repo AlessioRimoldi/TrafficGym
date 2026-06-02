@@ -492,6 +492,9 @@ function createPipelineRow(
                 conns.splice(i, 1);
             }
         }
+        // Ports on multi-input blocks shift after a sibling connection is removed.
+        // Wait for the DOM to re-layout before repositioning surviving lines.
+        requestAnimationFrame(() => { for (const c of conns) syncLine(c); });
         revalidate();
     }
 
@@ -1291,9 +1294,9 @@ function createPipelineRow(
                 const descEl = document.createElement("div");
                 descEl.className = "text-muted lh-sm";
                 descEl.style.fontSize = "0.72rem";
-                // Show only the first sentence to keep the item compact.
                 const dotIdx = b.description.indexOf(".");
                 descEl.textContent = dotIdx !== -1 ? b.description.slice(0, dotIdx + 1) : b.description;
+                descEl.title = b.description;
                 a.appendChild(descEl);
             }
 
