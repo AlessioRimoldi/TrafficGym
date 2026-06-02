@@ -64,6 +64,27 @@ function initStatusEvents(): void {
         const payload = JSON.parse(e.data) as { type: string; id: string; status?: string; current_step?: number; total_steps?: number };
         const { type, id } = payload;
 
+        if (type === "worker_status") {
+            const dot = document.getElementById("workerDot") as HTMLElement | null;
+            const count = (payload as unknown as { count: number }).count;
+            if (dot) {
+                if (count < 0) {
+                    dot.style.background = "#dc3545";
+                    dot.textContent = "!";
+                    dot.title = "Broker unreachable";
+                } else if (count === 0) {
+                    dot.style.background = "#ffc107";
+                    dot.textContent = "0";
+                    dot.title = "No workers running";
+                } else {
+                    dot.style.background = "#198754";
+                    dot.textContent = String(count);
+                    dot.title = `${count} concurrent worker slot${count !== 1 ? "s" : ""} available`;
+                }
+            }
+            return;
+        }
+
         if (type === "run_execution_progress") {
             const el = document.querySelector<HTMLElement>(`[data-progress-id="re_${id}"]`);
             if (el) applyProgressUpdate(el, payload.current_step ?? 0, payload.total_steps ?? -1);

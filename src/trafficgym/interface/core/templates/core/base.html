@@ -103,7 +103,13 @@
                         </li>
                     </ul>
                     {% comment %} <button id="openCreateRunModal" class="btn btn-success ms-auto" data-bs-toggle="modal" data-bs-target="#createRunModal">Create new Run Request</button> {% endcomment %}
-                    <button id="openCreateRunModal" class="btn btn-success ms-auto me-4" data-url="{% url 'create_run_modal' %}">Create new Run Request</button>
+                    <span class="ms-auto me-2 d-flex align-items-center gap-2">
+                        <span class="text-secondary small">Connection Status</span>
+                        <span id="workerDot"
+                              style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:4px;background:#6c757d;color:#fff;font-size:0.75rem;font-weight:600;cursor:default;"
+                              title="workers …">?</span>
+                    </span>
+                    <button id="openCreateRunModal" class="btn btn-success me-4" data-url="{% url 'create_run_modal' %}">Create new Run Request</button>
                 </div>
             </div>
         </nav>

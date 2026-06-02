@@ -1158,10 +1158,34 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
     type_by_prefix:  dict[str, str]       = {p: t for _, p, t in models_cfg}
 
     def event_stream() -> Generator[str, None, None]:
+        from .celery_setup import app as celery_app
+
         seen: dict[str, str] = {}
         watching: set[str] = set()
+        worker_candidate: int | None = None
+        worker_candidate_hits: int = 0
 
         while True:
+            try:
+                stats = celery_app.control.inspect(timeout=0.5).stats() or {}
+                worker_count = sum(
+                    w.get("pool", {}).get("max-concurrency", 1)
+                    for w in stats.values()
+                )
+            except Exception:
+                worker_count = -1
+
+            if worker_count == worker_candidate:
+                worker_candidate_hits += 1
+            else:
+                worker_candidate = worker_count
+                worker_candidate_hits = 1
+
+            if worker_candidate_hits >= 2:
+                key = str(worker_candidate)
+                if seen.get("worker_count") != key:
+                    seen["worker_count"] = key
+                    yield f"data: {json.dumps({'type': 'worker_status', 'count': worker_candidate})}\n\n"
             updates: list[dict[str, Any]] = []
             current_active: set[str] = set()
 
