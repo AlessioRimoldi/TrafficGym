@@ -154,11 +154,9 @@ class ALINEAProportionalDerivative:
 
 class ALINEAPIInput(TypedDict):
     occupancy: float
-    test: float
 
 class ALINEAPIOutput(TypedDict):
     meter_rate_veh_per_h: float
-    test: float
 
 
 @block("ALINEA-PI")
@@ -184,6 +182,6 @@ class ALINEAProportionalIntegral:
         new_meter_rate = max(self.r_min, min(self.r_max, self.last_meter_rate + p_term + i_term))
         self.last_meter_rate = new_meter_rate
         self.last_occupancy = occ
-        return {"meter_rate_veh_per_h": new_meter_rate, "test": inputs["test"]}
+        return {"meter_rate_veh_per_h": new_meter_rate}
 
 
