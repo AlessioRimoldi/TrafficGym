@@ -54,15 +54,15 @@ type ParamDef =
     | { type: "phase_list"; name: string; label: string }
     | { type: "select"; name: string; label: string; default: string; choices: string[] };
 
+interface PortDef { key: string; type: string }
+
 interface BlockEntry {
     key: string;
     label: string;
     module?: string;
     description?: string;
-    input_key?: string;
-    input_type?: string;
-    output_key?: string;
-    output_type?: string;
+    input_ports?: PortDef[];
+    output_ports?: PortDef[];
     params?: ParamDef[];
 }
 
@@ -115,8 +115,9 @@ interface BlockReg {
     id: string;
     key: string;
     params: Record<string, unknown>;
-    inPort: HTMLElement;
-    outPort: HTMLElement;
+    record: { output_key: string; name: string }[];
+    inPorts: HTMLElement[];
+    outPorts: HTMLElement[];
 }
 
 interface ObserverNodeRec {
@@ -135,12 +136,6 @@ interface ActuatorNodeRec {
     inPort: HTMLElement;
 }
 
-interface SinkReg {
-    id: string;
-    labelEl: HTMLInputElement;
-    inPort: HTMLElement;
-}
-
 // ─── Serialised graph spec ─────────────────────────────────────────────────────
 
 interface BlockSpec {
@@ -148,7 +143,9 @@ interface BlockSpec {
     key: string;
     params: Record<string, unknown>;
     inputs_from: string[];
+    input_wiring?: Record<string, string>;
     actuate_to: string | null;
+    record?: { output_key: string; name: string }[];
 }
 
 interface PipelineSpec {
@@ -157,8 +154,6 @@ interface PipelineSpec {
     observers: { id: string; domain: string; getter: string; object_id: string }[];
     blocks: BlockSpec[];
     actuators: { id: string; domain: string; setter: string; object_id: string }[];
-    sinks: { id: string; label: string; input_from: string | null }[];
-    stage_order?: { type: "block" | "sink"; index: number }[];
 }
 
 interface GraphSpec {
@@ -595,11 +590,9 @@ function createPipelineRow(
     const blockRegs: BlockReg[] = [];
     const obsNodes: ObserverNodeRec[] = [];
     const actNodes: ActuatorNodeRec[] = [];
-    const sinkRegs: SinkReg[] = [];
     let blkCounter = 0;
     let obsCounter = 0;
     let actCounter = 0;
-    let sinkCounter = 0;
     let stageSeq = 0;
 
     const markerId      = `arrow_${reg.id}`;
@@ -709,60 +702,55 @@ function createPipelineRow(
     }
 
     function revalidate(): void {
-        // Step 1: infer output types for blocks with no declared output_type.
+        // Step 1: infer output types for aggregator blocks (no declared output ports).
         for (const br of blockRegs) {
             const bDef = BLOCKS.find(b => b.key === br.key);
-            if (bDef?.output_type) continue;  // has a declared type — skip
+            if ((bDef?.output_ports?.length ?? 0) > 0) continue; // declared types — skip
 
-            const inConns = conns.filter(c => c.to === br.inPort);
+            const inConns = conns.filter(c => br.inPorts.includes(c.to));
+            const outPort = br.outPorts[0];
+            if (!outPort) continue;
 
-            // Constant: output type from params["value_type"], key from params["output_key"].
-            // Not input-driven — always set regardless of connections.
             if (br.key === "Constant") {
                 const outKey  = (br.params["output_key"] as string) || "";
                 const outType = (br.params["value_type"] as string) || "float";
-                br.outPort.dataset.portType  = outType;
-                br.outPort.dataset.portKey   = outKey;
-                br.outPort.dataset.portLabel = outKey ? `${outKey}: ${outType}` : outType;
+                outPort.dataset.portType  = outType;
+                outPort.dataset.portKey   = outKey;
+                outPort.dataset.portLabel = outKey ? `${outKey}: ${outType}` : outType;
                 continue;
             }
 
-            // Renamer: output key from params["output_key"], type passes through from single input.
             if (br.key === "Renamer") {
                 if (inConns.length === 0) {
-                    br.outPort.dataset.portType  = "";
-                    br.outPort.dataset.portKey   = "";
-                    br.outPort.dataset.portLabel = "";
+                    outPort.dataset.portType  = "";
+                    outPort.dataset.portKey   = "";
+                    outPort.dataset.portLabel = "";
                 } else {
                     const outKey  = (br.params["output_key"] as string) || "";
                     const outType = inConns[0].from.dataset.portType || "";
-                    br.outPort.dataset.portType  = outType;
-                    br.outPort.dataset.portKey   = outKey;
-                    br.outPort.dataset.portLabel = outKey && outType ? `${outKey}: ${outType}` : (outType || outKey);
+                    outPort.dataset.portType  = outType;
+                    outPort.dataset.portKey   = outKey;
+                    outPort.dataset.portLabel = outKey && outType ? `${outKey}: ${outType}` : (outType || outKey);
                 }
                 continue;
             }
 
-            // Aggregator inference: derive output from connected inputs.
             const hasDynOutputKey = Object.prototype.hasOwnProperty.call(br.params, "output_key");
             if (inConns.length === 0) {
-                // Show the param value so the port isn't invisibly empty.
                 const paramKey = hasDynOutputKey ? String(br.params["output_key"] || "") : "";
-                br.outPort.dataset.portType  = "";
-                br.outPort.dataset.portKey   = paramKey;
-                br.outPort.dataset.portLabel = paramKey;
+                outPort.dataset.portType  = "";
+                outPort.dataset.portKey   = paramKey;
+                outPort.dataset.portLabel = paramKey;
                 continue;
             }
             const keys  = [...new Set(inConns.map(c => c.from.dataset.portKey).filter(Boolean))];
             const types = [...new Set(inConns.map(c => c.from.dataset.portType).filter(Boolean))];
             const allNumeric = types.length > 0 && types.every(t => t === "float" || t === "int");
             const outKey  = keys.length === 1 ? keys[0] : "";
-            // Averaging always produces float; if types are incompatible leave blank.
             const outType = allNumeric ? "float" : (types.length === 1 ? types[0] : "");
-            br.outPort.dataset.portType  = outType;
-            br.outPort.dataset.portKey   = outKey;
-            br.outPort.dataset.portLabel = outKey && outType ? `${outKey}: ${outType}` : outType;
-            // Keep the output_key param in sync so codegen uses the inferred key.
+            outPort.dataset.portType  = outType;
+            outPort.dataset.portKey   = outKey;
+            outPort.dataset.portLabel = outKey && outType ? `${outKey}: ${outType}` : outType;
             if (outKey && hasDynOutputKey) br.params["output_key"] = outKey;
         }
 
@@ -778,8 +766,8 @@ function createPipelineRow(
         // Aggregator input uniformity errors (skip Renamer — single input by design).
         for (const br of blockRegs) {
             const bDef = BLOCKS.find(b => b.key === br.key);
-            if (bDef?.output_type || br.key === "Renamer") continue;
-            const inConns = conns.filter(c => c.to === br.inPort);
+            if ((bDef?.output_ports?.length ?? 0) > 0 || br.key === "Renamer") continue;
+            const inConns = conns.filter(c => br.inPorts.includes(c.to));
             if (inConns.length < 2) continue;
             const label = bDef?.label ?? br.key;
             const keys  = [...new Set(inConns.map(c => c.from.dataset.portKey).filter(Boolean))];
@@ -915,18 +903,27 @@ function createPipelineRow(
         paramValues: Record<string, unknown>,
         onRemoveCard: () => void,
         showRemoveBtn = true,
-        inputKey?: string,
-        inputType?: string,
-        outputKey?: string,
-        outputType?: string,
+        inputPorts: PortDef[] = [],
+        outputPorts: PortDef[] = [],
         onParamChange?: () => void,
         showInputPort = true,
-    ): { card: HTMLDivElement; inPort: HTMLElement; outPort: HTMLElement } {
-        const inpLabel  = inputKey  && inputType  ? `${inputKey}: ${inputType}`   : inputType  ?? inputKey;
-        const outLabel  = outputKey && outputType ? `${outputKey}: ${outputType}` : outputType ?? outputKey;
-        const inp = makePort("input",  inputType,  inpLabel,  inputKey);
-        const out = makePort("output", outputType, outLabel, outputKey);
-        const { card, body } = makeCard(showInputPort ? [inp, out] : [out], onRemoveCard, showRemoveBtn);
+    ): { card: HTMLDivElement; inPorts: HTMLElement[]; outPorts: HTMLElement[] } {
+        function makePorts(side: "input" | "output", defs: PortDef[]): HTMLElement[] {
+            if (defs.length === 0) {
+                const p = makePort(side);
+                p.style.top = "50%";
+                return [p];
+            }
+            return defs.map((d, i) => {
+                const label = `${d.key}: ${d.type}`;
+                const p = makePort(side, d.type, label, d.key);
+                p.style.top = `${(i + 1) / (defs.length + 1) * 100}%`;
+                return p;
+            });
+        }
+        const inPortEls  = showInputPort ? makePorts("input",  inputPorts)  : [];
+        const outPortEls = makePorts("output", outputPorts);
+        const { card, body } = makeCard([...inPortEls, ...outPortEls], onRemoveCard, showRemoveBtn);
 
         if (params.length > 0) {
             body.classList.remove("d-flex", "align-items-center");
@@ -1051,7 +1048,7 @@ function createPipelineRow(
             body.prepend(idLabel(key));
         }
 
-        return { card, inPort: inp, outPort: out };
+        return { card, inPorts: inPortEls, outPorts: outPortEls };
     }
 
     function makeActuatorNode(type: string, objectId: string, onRemoveCard: () => void): HTMLDivElement {
@@ -1102,23 +1099,13 @@ function createPipelineRow(
     }
 
     function serialize(): PipelineSpec {
-        const orderedBlocks = byDomOrder(blockRegs, br => br.outPort);
-        const orderedSinks  = byDomOrder(sinkRegs,  sr => sr.inPort);
-
+        const orderedBlocks = byDomOrder(blockRegs, br => br.outPorts[0] ?? br.inPorts[0]);
         const outPortToNodeId = new Map<HTMLElement, string>([
             ...obsNodes.map(o => [o.outPort, o.id] as [HTMLElement, string]),
-            ...orderedBlocks.map(b => [b.outPort, b.id] as [HTMLElement, string]),
+            // Map every output port of every block to its block id.
+            ...orderedBlocks.flatMap(b => b.outPorts.map(p => [p, b.id] as [HTMLElement, string])),
         ]);
         const inPortToActId = new Map<HTMLElement, string>(actNodes.map(a => [a.inPort, a.id]));
-
-        // Build interleaved stage order so hydration can restore the original layout.
-        const mixedStages: { type: "block" | "sink"; index: number; el: Element }[] = [
-            ...orderedBlocks.map((b, i) => ({ type: "block" as const, index: i, el: b.outPort.closest("[data-stage-id]")! })),
-            ...orderedSinks.map((s, i) => ({ type: "sink"  as const, index: i, el: s.inPort.closest("[data-stage-id]")! })),
-        ].filter(e => e.el != null);
-        mixedStages.sort((a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
-        const stage_order = mixedStages.map(({ type, index }) => ({ type, index }));
-
         return {
             id: reg.id,
             name: reg.name,
@@ -1129,14 +1116,36 @@ function createPipelineRow(
                 object_id: o.objectId,
             })),
             blocks: orderedBlocks.map(b => {
-                const inConns = conns.filter(cn => cn.to   === b.inPort);
-                const outConn = conns.find(cn  => cn.from  === b.outPort);
+                const bDef = BLOCKS.find(bd => bd.key === b.key);
+                const hasNamedInputs = (bDef?.input_ports?.length ?? 0) > 1;
+                // Named input wiring: one connection per declared input port key.
+                let input_wiring: Record<string, string> | undefined;
+                let inputs_from: string[];
+                if (hasNamedInputs) {
+                    input_wiring = {};
+                    for (const port of b.inPorts) {
+                        const key = port.dataset.portKey;
+                        const conn = conns.find(cn => cn.to === port);
+                        if (key && conn) input_wiring[key] = outPortToNodeId.get(conn.from) ?? "";
+                    }
+                    inputs_from = [];
+                } else {
+                    // Fan-in: all sources connect to the single unnamed input port.
+                    inputs_from = conns
+                        .filter(cn => b.inPorts.includes(cn.to))
+                        .map(cn => outPortToNodeId.get(cn.from) ?? null)
+                        .filter((id): id is string => id !== null);
+                }
+                // Actuator: driven from the first output port.
+                const outConn = conns.find(cn => b.outPorts.includes(cn.from));
                 return {
                     id: b.id,
                     key: b.key,
                     params: { ...b.params },
-                    inputs_from: inConns.map(cn => outPortToNodeId.get(cn.from) ?? null).filter((id): id is string => id !== null),
+                    inputs_from,
+                    ...(input_wiring && Object.keys(input_wiring).length > 0 ? { input_wiring } : {}),
                     actuate_to: outConn ? (inPortToActId.get(outConn.to) ?? null) : null,
+                    record: b.record.filter(r => r.name.trim()).length > 0 ? b.record.filter(r => r.name.trim()) : undefined,
                 };
             }),
             actuators: actNodes.map(a => ({
@@ -1145,15 +1154,6 @@ function createPipelineRow(
                 setter: a.setterEl.value,
                 object_id: a.objectId,
             })),
-            sinks: orderedSinks.map(s => {
-                const inConn = conns.find(cn => cn.to === s.inPort);
-                return {
-                    id: s.id,
-                    label: s.labelEl.value,
-                    input_from: inConn ? (outPortToNodeId.get(inConn.from) ?? null) : null,
-                };
-            }),
-            stage_order,
         };
     }
 
@@ -1314,9 +1314,9 @@ function createPipelineRow(
 
     // ── Per-node stage factories ──────────────────────────────────────────────
 
-    function makeBlockStage(key: string, paramValues: Record<string, unknown>): BlockReg {
+    function makeBlockStage(key: string, paramValues: Record<string, unknown>, initialRecord: { output_key: string; name: string }[] = []): BlockReg {
         const id = `blk_${blkCounter++}`;
-        const br: BlockReg = { id, key, params: paramValues, inPort: null!, outPort: null! };
+        const br: BlockReg = { id, key, params: paramValues, record: initialRecord.map(r => ({ ...r })), inPorts: [], outPorts: [] };
         blockRegs.push(br);
 
         const bDef = BLOCKS.find(b => b.key === key);
@@ -1326,52 +1326,69 @@ function createPipelineRow(
         });
         stage.stageEl.dataset.stageId = `stage_${stageSeq++}`;
 
-        const { card, inPort, outPort } = makeBlockNode(
+        const { card, inPorts, outPorts } = makeBlockNode(
             key, bDef?.params ?? [], paramValues, () => {}, false,
-            bDef?.input_key, bDef?.input_type, bDef?.output_key, bDef?.output_type,
+            bDef?.input_ports ?? [], bDef?.output_ports ?? [],
             revalidate,
             key !== "Constant",
         );
-        br.inPort = inPort;
-        br.outPort = outPort;
+        br.inPorts = inPorts;
+        br.outPorts = outPorts;
+
+        // ── Store result footer ──────────────────────────────────────────────────
+        // Collect output keys for this block. Most blocks have one; future multi-
+        // output blocks will have more.
+        const outputKeys: string[] = bDef?.output_ports?.length ? bDef.output_ports.map(p => p.key) : ["value"];
+        const footer = document.createElement("div");
+        footer.className = "card-footer py-1 px-3";
+
+        for (const okey of outputKeys) {
+            const existing = br.record.find(r => r.output_key === okey) ?? null;
+            const rowEl = document.createElement("div");
+            rowEl.className = "d-flex align-items-center gap-2";
+
+            const chk = document.createElement("input");
+            chk.type = "checkbox";
+            chk.className = "form-check-input mt-0";
+            chk.checked = !!existing;
+
+            const lbl = document.createElement("label");
+            lbl.className = "small text-muted mb-0";
+            lbl.textContent = outputKeys.length > 1 ? `Store ${okey}` : "Store result";
+
+            const nameIn = document.createElement("input");
+            nameIn.type = "text";
+            nameIn.className = "form-control form-control-sm ms-1";
+            nameIn.style.cssText = "width:110px;display:" + (existing ? "" : "none");
+            nameIn.placeholder = "subscription name…";
+            nameIn.value = existing?.name ?? "";
+
+            chk.addEventListener("change", () => {
+                nameIn.style.display = chk.checked ? "" : "none";
+                if (chk.checked) {
+                    nameIn.focus();
+                    if (!br.record.find(r => r.output_key === okey))
+                        br.record.push({ output_key: okey, name: nameIn.value });
+                } else {
+                    br.record = br.record.filter(r => r.output_key !== okey);
+                }
+                requestAnimationFrame(() => conns.forEach(syncLine));
+            });
+            nameIn.addEventListener("input", () => {
+                const rec = br.record.find(r => r.output_key === okey);
+                if (rec) rec.name = nameIn.value;
+            });
+
+            rowEl.append(chk, lbl, nameIn);
+            footer.appendChild(rowEl);
+        }
+        card.appendChild(footer);
+
         stage.body.appendChild(card);
 
         row.insertBefore(stage.stageEl, actStage.stageEl);
         conns.forEach(syncLine);
         return br;
-    }
-
-    function makeSinkStage(initialLabel = ""): SinkReg {
-        const id = `sink_${sinkCounter++}`;
-        const sr: SinkReg = { id, labelEl: null!, inPort: null! };
-        sinkRegs.push(sr);
-
-        const stage = buildStage("Sink", true, () => {
-            sinkRegs.splice(sinkRegs.indexOf(sr), 1);
-        });
-        stage.stageEl.dataset.stageId = `stage_${stageSeq++}`;
-
-        const inp = makePort("input", undefined, "recorded value");
-        const card = document.createElement("div");
-        card.className = "card mb-3";
-        Object.assign(card.style, { position: "relative", overflow: "visible" });
-        const body = document.createElement("div");
-        body.className = "card-body py-2 px-3";
-        const labelInput = document.createElement("input");
-        labelInput.type = "text";
-        labelInput.className = "form-control form-control-sm";
-        labelInput.placeholder = "label…";
-        labelInput.value = initialLabel;
-        body.appendChild(labelInput);
-        card.append(body, inp);
-
-        sr.labelEl = labelInput;
-        sr.inPort = inp;
-
-        stage.body.appendChild(card);
-        row.insertBefore(stage.stageEl, actStage.stageEl);
-        conns.forEach(syncLine);
-        return sr;
     }
 
     // ── Add-stage dropdown (moved to pipeline card header below) ─────────────
@@ -1451,22 +1468,6 @@ function createPipelineRow(
         }
     }
 
-    const stageSinkDivLi = document.createElement("li");
-    stageSinkDivLi.innerHTML = '<hr class="dropdown-divider">';
-    stageMenu.appendChild(stageSinkDivLi);
-
-    const stageSinkHdr = document.createElement("li");
-    stageSinkHdr.innerHTML = '<h6 class="dropdown-header">Sinks</h6>';
-    stageMenu.appendChild(stageSinkHdr);
-
-    const stageSinkLi = document.createElement("li");
-    const stageSinkA = document.createElement("a");
-    stageSinkA.className = "dropdown-item";
-    stageSinkA.href = "#";
-    stageSinkA.textContent = "Sink";
-    stageSinkA.addEventListener("click", (e) => { e.preventDefault(); makeSinkStage(); });
-    stageSinkLi.appendChild(stageSinkA);
-    stageMenu.appendChild(stageSinkLi);
 
     stageDropdown.append(stageToggle, stageMenu);
     stageDropdown.style.setProperty("--bs-dropdown-zindex", "2000");
@@ -1482,16 +1483,7 @@ function createPipelineRow(
 
     if (initialPipeline) {
         const blocks = initialPipeline.blocks ?? [];
-        const sinks  = initialPipeline.sinks  ?? [];
-        if (initialPipeline.stage_order) {
-            for (const { type, index } of initialPipeline.stage_order) {
-                if (type === "block" && blocks[index]) makeBlockStage(blocks[index].key, { ...blocks[index].params });
-                else if (type === "sink"  && sinks[index])  makeSinkStage(sinks[index].label);
-            }
-        } else {
-            for (const bs of blocks) makeBlockStage(bs.key, { ...bs.params });
-            for (const sk of sinks)  makeSinkStage(sk.label);
-        }
+        for (const bs of blocks) makeBlockStage(bs.key, { ...bs.params }, bs.record ?? []);
         for (const obs of initialPipeline.observers) {
             const type = OBSERVER_TYPE_FROM_DOMAIN[obs.domain] ?? obs.domain;
             const card = makeObserverNode(type, obs.object_id, () => {});
@@ -1527,9 +1519,10 @@ function createPipelineRow(
             ...initialPipeline.observers
                 .map((spec, i) => [spec.id, obsNodes[i]?.outPort] as [string, HTMLElement | undefined])
                 .filter((e): e is [string, HTMLElement] => !!e[1]),
-            ...(initialPipeline.blocks ?? [])
-                .map((spec, i) => [spec.id, blockRegs[i]?.outPort] as [string, HTMLElement | undefined])
-                .filter((e): e is [string, HTMLElement] => !!e[1]),
+            // Map every output port of every block so named wiring can find them.
+            ...(initialPipeline.blocks ?? []).flatMap((spec, i) =>
+                (blockRegs[i]?.outPorts ?? []).map(p => [spec.id, p] as [string, HTMLElement])
+            ),
         ]);
         const actPortById = new Map<string, HTMLElement>(
             initialPipeline.actuators
@@ -1539,25 +1532,31 @@ function createPipelineRow(
 
         (initialPipeline.blocks ?? []).forEach((spec, i) => {
             const br = blockRegs[i];
-            if (!br?.inPort || !br?.outPort) return;
-            for (const fromId of (spec.inputs_from ?? [])) {
-                const from = outPortById.get(fromId);
-                if (from) connectPorts(from, br.inPort);
+            if (!br) return;
+            if (spec.input_wiring) {
+                // Named inputs: connect each source to its specific named port.
+                for (const [portKey, fromId] of Object.entries(spec.input_wiring)) {
+                    const from = outPortById.get(fromId);
+                    const toPort = br.inPorts.find(p => p.dataset.portKey === portKey);
+                    if (from && toPort) connectPorts(from, toPort);
+                }
+            } else {
+                // Fan-in: all sources connect to the single unnamed input port.
+                const fanInPort = br.inPorts[0];
+                if (fanInPort) {
+                    for (const fromId of (spec.inputs_from ?? [])) {
+                        const from = outPortById.get(fromId);
+                        if (from) connectPorts(from, fanInPort);
+                    }
+                }
             }
             if (spec.actuate_to) {
                 const to = actPortById.get(spec.actuate_to);
-                if (to) connectPorts(br.outPort, to);
+                const outPort = br.outPorts[0];
+                if (to && outPort) connectPorts(outPort, to);
             }
         });
 
-        (initialPipeline.sinks ?? []).forEach((spec, i) => {
-            const sr = sinkRegs[i];
-            if (!sr?.inPort) return;
-            if (spec.input_from) {
-                const from = outPortById.get(spec.input_from);
-                if (from) connectPorts(from, sr.inPort);
-            }
-        });
     }
 
     // ── Outer pipeline card ───────────────────────────────────────────────────

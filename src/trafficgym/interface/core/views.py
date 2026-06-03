@@ -36,6 +36,8 @@ from typing import Any, DefaultDict, Set, TypedDict, cast, Literal
 from trafficgym.engine.transformations.registry import REGISTRY
 from trafficgym.engine.control.codegen import _GraphSpec
 
+from datetime import datetime
+
 import json
 import mimetypes
 import random
@@ -807,7 +809,7 @@ def experiments_overview(request: HttpRequest) -> HttpResponse:
                     for _, g in groupby(scenario_graphs, key=lambda eg: eg.name)
                     for versions in [list(g)]
                 ],
-                key=lambda t: t[0].created_at,
+                key=lambda t: cast(datetime, t[0].created_at),
                 reverse=True,
             ),
         )
@@ -1067,10 +1069,8 @@ def blocks_registry_view(_: HttpRequest) -> JsonResponse:
                 "label": b.label,
                 "module": b.module,
                 "description": b.description,
-                "input_key": b.input_key,
-                "input_type": b.input_type,
-                "output_key": b.output_key,
-                "output_type": b.output_type,
+                "input_ports": b.input_ports,
+                "output_ports": b.output_ports,
                 "params": [
                     {"name": p.name, "type": p.type, "label": p.label, "default": p.default,
                      **({"choices": p.choices} if p.choices is not None else {})}

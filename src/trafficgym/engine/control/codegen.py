@@ -28,14 +28,14 @@ class _BlockSpecBase(TypedDict):
     input_from: str | None
     actuate_to: str | None
 
+class _RecordEntry(TypedDict):
+    output_key: str
+    name: str
+
 class _BlockSpec(_BlockSpecBase, total=False):
     inputs_from: list[str]
-
-
-class _SinkSpec(TypedDict):
-    id: str
-    label: str
-    input_from: str | None
+    input_wiring: dict[str, str]   # {input_port_key: source_node_id}
+    record: list[_RecordEntry]
 
 
 class _PipelineSpec(TypedDict):
@@ -44,7 +44,6 @@ class _PipelineSpec(TypedDict):
     observers: list[_ObserverSpec]
     blocks: list[_BlockSpec]
     actuators: list[_ActuatorSpec]
-    sinks: list[_SinkSpec]
 
 
 class _OnEnterAction(TypedDict):
@@ -65,13 +64,6 @@ class _GraphSpec(TypedDict):
     phases: list[_PhaseSpec]
 
 
-_BLOCK_INPUT_KEY: dict[str, str] = {
-    k: v.input_key for k, v in BLOCK_REGISTRY.items() if v.input_key is not None
-}
-
-_BLOCK_OUTPUT_KEY: dict[str, str] = {
-    k: v.output_key for k, v in BLOCK_REGISTRY.items() if v.output_key is not None
-}
 
 from trafficgym.engine.ports.sumo_domains import GETTER_CAST as _GETTER_CAST, SETTER_PARAM_KEY as _SETTER_PARAM_KEY
 
@@ -100,8 +92,10 @@ def generate(graph: _GraphSpec, name: str) -> str:
         by_module[mod].append(key)
 
     def _controlled_count(pipe: _PipelineSpec) -> int:
-        sink_ids = {s["input_from"] for s in pipe.get("sinks", []) if s.get("input_from")}
-        return sum(1 for b in pipe.get("blocks", []) if b.get("actuate_to") or b["id"] in sink_ids)
+        return sum(
+            1 for b in pipe.get("blocks", [])
+            if b.get("actuate_to") or any(r.get("name") for r in (b.get("record") or []))
+        )
 
     needs_exit_stack = any(
         sum(_controlled_count(pipelines[pid]) for pid in ph["active_pipeline_ids"] if pid in pipelines) > 1
@@ -196,17 +190,10 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
             obs_by_id: dict[str, _ObserverSpec] = {o["id"]: o for o in pipe["observers"]}
             blk_by_id: dict[str, _BlockSpec] = {b["id"]: b for b in pipe.get("blocks", [])}
             act_by_id: dict[str, _ActuatorSpec] = {a["id"]: a for a in pipe["actuators"]}
-            sink_by_input_id: dict[str, str] = {
-                s["input_from"]: (s["label"] or s["id"])
-                for s in pipe.get("sinks", [])
-                if s["input_from"]
-            }
-
             for blk in pipe.get("blocks", []):
                 has_actuate = bool(blk.get("actuate_to"))
-                has_sink = blk["id"] in sink_by_input_id
-                # Blocks with neither an actuator nor a sink output need no controlled loop.
-                if not has_actuate and not has_sink:
+                blk_record: list[_RecordEntry] = [r for r in blk.get("record", []) if r.get("name")]
+                if not has_actuate and not blk_record:
                     continue
 
                 blk_key = blk["key"]
@@ -214,23 +201,37 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                 ctrl_var = f"_ctrl_{ctrl_counter}"
                 ctrl_counter += 1
 
+                blk_def = BLOCK_REGISTRY.get(blk_key)
+
                 # Observe function — builds the inputs dict passed to block.step().
                 obs_fn = f"_obs_{ctrl_var}"
                 out.append(f"def {obs_fn}(a: SimulationPort, t: float) -> dict[str, Any]:")
+                counter: list[int] = [0]
                 if blk_key == "StaticTLSController":
-                    input_key = _BLOCK_INPUT_KEY.get(blk_key, "value")
-                    out.append(f'{_I}return {{"{input_key}": t}}')
+                    tk = (blk_def.input_ports[0]["key"] if blk_def and blk_def.input_ports else "value")
+                    out.append(f'{_I}return {{"{tk}": t}}')
                 else:
+                    input_wiring: dict[str, str] = blk.get("input_wiring") or {}
                     source_id = blk.get("input_from") or ""
                     multi_sources: list[str] = list(blk.get("inputs_from") or [])
-                    counter: list[int] = [0]
-                    if len(multi_sources) > 1:
-                        # Fan-in at the top level: each source uses a unique key
+                    if input_wiring:
+                        # Named multi-input: each port key maps to its own source.
+                        named_vars: list[str] = []
+                        for port_key, src_id in input_wiring.items():
+                            _stmts, _var = _build_obs_stmts(
+                                src_id, obs_by_id, blk_by_id, blk_var, pid, port_key, counter,
+                            )
+                            for stmt in _stmts:
+                                out.append(f"{_I}{stmt}")
+                            named_vars.append(_var)
+                        merge = "{" + ", ".join(f"**{v}" for v in named_vars) + "}"
+                        out.append(f"{_I}return {merge}")
+                    elif len(multi_sources) > 1:
+                        # Fan-in: multiple sources to a single-input aggregator.
                         source_vars: list[str] = []
                         for _i, _src in enumerate(multi_sources):
                             _stmts, _var = _build_obs_stmts(
-                                _src, obs_by_id, blk_by_id, blk_var, pid,
-                                sink_by_input_id, f"_src{_i}", counter,
+                                _src, obs_by_id, blk_by_id, blk_var, pid, f"_src{_i}", counter,
                             )
                             for stmt in _stmts:
                                 out.append(f"{_I}{stmt}")
@@ -239,10 +240,9 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                         out.append(f"{_I}return {merge}")
                     elif source_id or (multi_sources and multi_sources[0]):
                         effective_src = source_id or multi_sources[0]
-                        input_key = _BLOCK_INPUT_KEY.get(blk_key, "value")
+                        input_key = (blk_def.input_ports[0]["key"] if blk_def and blk_def.input_ports else "value")
                         stmts, final_var = _build_obs_stmts(
-                            effective_src, obs_by_id, blk_by_id, blk_var, pid,
-                            sink_by_input_id, input_key, counter,
+                            effective_src, obs_by_id, blk_by_id, blk_var, pid, input_key, counter,
                         )
                         for stmt in stmts:
                             out.append(f"{_I}{stmt}")
@@ -253,7 +253,7 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                 # Actuate function — receives block.step() output; applies to SUMO and/or records.
                 # For blocks with dynamic output keys (e.g. Renamer) fall back to params.
                 output_key = (
-                    _BLOCK_OUTPUT_KEY.get(blk_key)
+                    (blk_def.output_ports[0]["key"] if blk_def and blk_def.output_ports else None)
                     or str(blk.get("params", {}).get("output_key", "value"))
                 )
                 act: _ActuatorSpec | None = act_by_id.get(blk.get("actuate_to") or "")
@@ -267,9 +267,10 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                         f'{_I}a.apply("{act["domain"]}", "{act["setter"]}", '
                         f'"{act["object_id"]}", {{"{param_key}": r["{output_key}"]}})'
                     )
-                if has_sink:
-                    sink_label = sink_by_input_id[blk["id"]]
-                    out.append(f'{_I}self._record("{sink_label}", r["{output_key}"])')
+                for rec in blk_record:
+                    rkey = rec["output_key"]
+                    rname = rec["name"]
+                    out.append(f'{_I}if "{rkey}" in r: self._record("{rname}", r["{rkey}"])')
 
                 controlled.append((instance_var, obs_fn, act_fn))
 
@@ -302,7 +303,6 @@ def _build_obs_stmts(
     blk_by_id: dict[str, _BlockSpec],
     blk_var: dict[tuple[str, str], str],
     pid: str,
-    sink_by_input_id: dict[str, str],
     obs_wrap_key: str,
     counter: list[int] | None = None,
 ) -> tuple[list[str], str]:
@@ -328,8 +328,6 @@ def _build_obs_stmts(
             var = f"_r{counter[0]}"
             counter[0] += 1
             stmts.append(f'{var} = {{"{key}": {raw}}}')
-            if sid in sink_by_input_id:
-                stmts.append(f'self._record("{sink_by_input_id[sid]}", {var}["{key}"])')
             return var
         if sid in blk_by_id:
             _b = blk_by_id[sid]
@@ -353,8 +351,6 @@ def _build_obs_stmts(
                 var = f"_r{counter[0]}"
                 counter[0] += 1
                 stmts.append(f"{var} = {_bv}.step(a, {prev_var})")
-            if sid in sink_by_input_id:
-                stmts.append(f'self._record("{sink_by_input_id[sid]}", next(iter({var}.values()), None))')
             return var
         return "{}"
 

@@ -3,7 +3,7 @@ import inspect
 import textwrap
 import typing
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 
 @dataclass
@@ -15,15 +15,18 @@ class BlockParam:
     choices: list[str] | None = None  # required when type == "select"
 
 
+class PortDef(TypedDict):
+    key: str
+    type: str
+
+
 @dataclass
 class BlockDef:
     key: str
     label: str
-    module: str          # last segment of cls.__module__ ("controllers" / "aggregators" / "utils")
-    input_key: str | None
-    output_key: str | None
-    input_type: str | None = None
-    output_type: str | None = None
+    module: str
+    input_ports: list[PortDef] = field(default_factory=list)
+    output_ports: list[PortDef] = field(default_factory=list)
     description: str | None = None
     params: list[BlockParam] = field(default_factory=list)
 
@@ -83,15 +86,22 @@ def _first_typed_dict_kv(td: Any) -> tuple[str | None, str | None]:
     return key, _type_to_str(typ)
 
 
-def _step_io(cls: type[Any]) -> tuple[str | None, str | None, str | None, str | None]:
-    """Introspect step() → (input_key, input_type, output_key, output_type)."""
+def _all_typed_dict_kv(td: Any) -> list[PortDef]:
+    """Return all non-private fields from a TypedDict as PortDef list."""
+    try:
+        ann: dict[str, Any] = typing.get_type_hints(td)
+    except Exception:
+        ann = getattr(td, "__annotations__", {}) or {}
+    return [{"key": k, "type": _type_to_str(v) or "Any"} for k, v in ann.items() if not k.startswith("_")]
+
+
+def _step_io(cls: type[Any]) -> tuple[list[PortDef], list[PortDef]]:
+    """Introspect step() → (input_ports, output_ports)."""
     try:
         hints = typing.get_type_hints(cls.step)
     except Exception:
-        return None, None, None, None
-    in_key, in_type = _first_typed_dict_kv(hints.get("inputs"))
-    out_key, out_type = _first_typed_dict_kv(hints.get("return"))
-    return in_key, in_type, out_key, out_type
+        return [], []
+    return _all_typed_dict_kv(hints.get("inputs")), _all_typed_dict_kv(hints.get("return"))
 
 
 def _init_params(cls: type[Any]) -> list[BlockParam]:
@@ -140,7 +150,7 @@ def block(
     UI param that has no matching __init__ argument.
     """
     def decorator(cls: type[Any]) -> type[Any]:
-        input_key, input_type, output_key, output_type = _step_io(cls)
+        input_ports, output_ports = _step_io(cls)
         params = _init_params(cls)
 
         if extra_params:
@@ -153,10 +163,8 @@ def block(
             key=cls.__name__,
             label=label,
             module=cls.__module__.split(".")[-1],
-            input_key=input_key,
-            output_key=output_key,
-            input_type=input_type,
-            output_type=output_type,
+            input_ports=input_ports,
+            output_ports=output_ports,
             description=_clean_docstring(cls),
             params=params,
         )
