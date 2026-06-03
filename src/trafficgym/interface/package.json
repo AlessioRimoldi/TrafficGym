@@ -1,7 +1,8 @@
 {
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "db:clear": "dropdb trafficgym && createdb trafficgym && python manage.py migrate"
   },
   "devDependencies": {
     "@types/bootstrap": "^5.2.10",
