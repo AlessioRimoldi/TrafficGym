@@ -55,6 +55,7 @@ interface InputSpec {
   name: string;
   type: InputType;
   required: boolean;
+  multiple?: boolean;
 }
 
 interface TransformationSpec {
@@ -77,23 +78,13 @@ function validateTransformReady(transformation: TransformationSpec | null) {
     );
 
     const selects = Array.from(
-        document.querySelectorAll("#transformModalBody select")
+        document.querySelectorAll("#transformModalBody select[data-artefact-id]")
     ) as HTMLSelectElement[];
 
-    // Map select values using the data attribute
-    const mapped: Record<string, string> = {};
-    selects.forEach(select => {
-        const inputName = select.dataset.inputName;
-        if (inputName) {
-            mapped[inputName] = select.value;
-        }
-    });
+    const assigned = new Set<string>();
+    selects.forEach(select => { if (select.value) assigned.add(select.value); });
 
-    const allRequiredFilled = requiredInputs.every(i => {
-        return mapped[i.name] && mapped[i.name] !== "";
-    });
-
-    transformButton.disabled = !allRequiredFilled;
+    transformButton.disabled = !requiredInputs.every(i => assigned.has(i.name));
 }
 
 function renderMappingUI(mappingContainer: HTMLDivElement, selectedArtefacts: { "id": string, "name": string, "role": string }[], transformation: TransformationSpec) {
@@ -103,51 +94,47 @@ function renderMappingUI(mappingContainer: HTMLDivElement, selectedArtefacts: { 
     title.textContent = "Input Mapping";
     mappingContainer.appendChild(title);
 
-    // --- FILE inputs (artefact binding) ---
+    // --- FILE inputs: one row per artefact, dropdown picks which binding it fills ---
     const fileInputs = transformation.inputs.filter(i => i.type === InputType.FILE);
 
     if (fileInputs.length > 0) {
         const fileSection = document.createElement("div");
 
-        fileInputs.forEach(input => {
+        selectedArtefacts.forEach(artefact => {
             const row = document.createElement("div");
             row.className = "d-flex align-items-center justify-content-between mb-2";
 
             const label = document.createElement("div");
-            label.className = "fw-bold";
-            label.textContent = `${input.name}${input.required ? " *" : ""}`;
+            label.className = "text-truncate me-2 small";
+            label.title = artefact.name;
+            label.textContent = artefact.name + (artefact.role ? ` (${artefact.role})` : "");
 
             const select = document.createElement("select");
-            select.className = "form-select form-select-sm w-auto";
-            select.dataset.inputName = input.name;
-            select.addEventListener("change", () => {
-                validateTransformReady(transformation);
-            });
+            select.className = "form-select form-select-sm w-auto flex-shrink-0";
+            select.dataset.artefactId = artefact.id;
+            select.addEventListener("change", () => validateTransformReady(transformation));
 
             const empty = document.createElement("option");
             empty.value = "";
-            empty.textContent = "-- select artefact --";
+            empty.textContent = "-- none --";
             select.appendChild(empty);
 
-            selectedArtefacts.forEach(a => {
+            fileInputs.forEach(input => {
                 const opt = document.createElement("option");
-                opt.value = a.id;
-                opt.textContent = `${a.name} ${a.role ? '(' + a.role + ')' : ""}`;
+                opt.value = input.name;
+                opt.textContent = input.name + (input.required ? " *" : "");
                 select.appendChild(opt);
             });
 
-            // auto-select artefact whose name ends with the expected extension
-            const expectedExt = "." + input.name.replace(/_/g, ".");
-            const autoMatch = selectedArtefacts.find(a =>
-                a.name.toLowerCase().endsWith(expectedExt.toLowerCase())
-            );
-            if (autoMatch) {
-                select.value = autoMatch.id;
-            }
+            // auto-match: find the input whose name pattern matches the artefact filename
+            const autoMatch = fileInputs.find(input => {
+                const expectedExt = "." + input.name.replace(/_/g, ".");
+                return artefact.name.toLowerCase().endsWith(expectedExt.toLowerCase());
+            });
+            if (autoMatch) select.value = autoMatch.name;
 
             row.appendChild(label);
             row.appendChild(select);
-
             fileSection.appendChild(row);
         });
 
@@ -376,13 +363,25 @@ document.addEventListener("DOMContentLoaded", () => {
             : null;
 
         const inputsMap: Record<string, string> = {};
-        const selects = document.querySelectorAll("#transformModalBody select") as NodeListOf<HTMLSelectElement>;
+        const selects = document.querySelectorAll("#transformModalBody select[data-artefact-id]") as NodeListOf<HTMLSelectElement>;
+
+        const grouped: Record<string, string[]> = {};
         selects.forEach(select => {
-            const inputName = select.dataset.inputName;
-            if (inputName && select.value) {
-                inputsMap[inputName] = select.value; // The SHA256
+            const artefactId = select.dataset.artefactId;
+            if (artefactId && select.value) {
+                if (!grouped[select.value]) grouped[select.value] = [];
+                grouped[select.value].push(artefactId);
             }
         });
+
+        for (const [bindingName, ids] of Object.entries(grouped)) {
+            const inputSpec = selectedTransformation?.inputs.find(i => i.name === bindingName);
+            if (inputSpec?.multiple) {
+                ids.forEach((id, i) => { inputsMap[`${bindingName}_${i}`] = id; });
+            } else {
+                inputsMap[bindingName] = ids[0];
+            }
+        }
     
         const textarea = document.querySelector("#transformModalBody textarea") as HTMLTextAreaElement;
         let parameters = "{}";

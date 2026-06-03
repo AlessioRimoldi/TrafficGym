@@ -1345,7 +1345,7 @@ function createPipelineRow(
         for (const okey of outputKeys) {
             const existing = br.record.find(r => r.output_key === okey) ?? null;
             const rowEl = document.createElement("div");
-            rowEl.className = "d-flex align-items-center gap-2";
+            rowEl.className = "mt-2 d-flex flex-column gap-1";
 
             const chk = document.createElement("input");
             chk.type = "checkbox";
@@ -1356,10 +1356,16 @@ function createPipelineRow(
             lbl.className = "small text-muted mb-0";
             lbl.textContent = outputKeys.length > 1 ? `Store ${okey}` : "Store result";
 
+            const checkRow = document.createElement("div");
+            checkRow.className = "d-flex align-items-center gap-2";
+            checkRow.appendChild(chk);
+            checkRow.appendChild(lbl);
+            rowEl.appendChild(checkRow);
+
             const nameIn = document.createElement("input");
             nameIn.type = "text";
-            nameIn.className = "form-control form-control-sm ms-1";
-            nameIn.style.cssText = "width:110px;display:" + (existing ? "" : "none");
+            nameIn.className = "form-control form-control-sm";
+            nameIn.style.display = existing ? "" : "none";
             nameIn.placeholder = "subscription name…";
             nameIn.value = existing?.name ?? "";
 
@@ -1379,7 +1385,7 @@ function createPipelineRow(
                 if (rec) rec.name = nameIn.value;
             });
 
-            rowEl.append(chk, lbl, nameIn);
+            rowEl.appendChild(nameIn);
             footer.appendChild(rowEl);
         }
         card.appendChild(footer);

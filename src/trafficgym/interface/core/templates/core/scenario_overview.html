@@ -43,11 +43,31 @@
                         {% endif %}
                     </div>
                     <div class="mb-3">
-                        <label for="{{ form.existing_artefacts.id_for_label }}">Select Existing Artefacts</label>
-                        {{ form.existing_artefacts }}
+                        <label class="form-label">Existing Artefacts</label>
                         {% if form.existing_artefacts.errors %}
-                            <div class="text-danger">{{ form.existing_artefacts.errors }}</div>
+                            <div class="text-danger mb-1">{{ form.existing_artefacts.errors }}</div>
                         {% endif %}
+                        <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                            {% if all_artefacts %}
+                                {% for artefact in all_artefacts %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           name="existing_artefacts"
+                                           value="{{ artefact.sha256 }}"
+                                           id="artefact_{{ artefact.sha256 }}">
+                                    <label class="form-check-label small d-block"
+                                           for="artefact_{{ artefact.sha256 }}"
+                                           title="{{ artefact.original_name }}">
+                                        <span class="text-muted ms-1">{{ artefact.created_at|date:"d M H:i" }}</span>
+                                        &nbsp;&nbsp;
+                                        <span class="font-monospace text-truncate">{{ artefact.original_name }}</span>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted small">No artefacts uploaded yet.</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
 

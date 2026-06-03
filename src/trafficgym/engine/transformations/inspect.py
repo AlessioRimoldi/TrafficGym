@@ -58,7 +58,7 @@ register(
         key="inspect",
         inputs=[
             InputSpec("net_xml", InputType.FILE, required=True),
-            InputSpec("add_xml", InputType.FILE, required=False),
+            InputSpec("add_xml", InputType.FILE, required=False, multiple=True),
         ],
         outputs=[OutputSpec("inspection")],
         handler=handler,

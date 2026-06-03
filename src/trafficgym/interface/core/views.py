@@ -53,6 +53,7 @@ class InputSpec(TypedDict):
     name: str
     type: Literal["FILE", "JSON"]
     required: bool
+    multiple: bool
 
 
 class TransformationSpec(TypedDict):
@@ -382,12 +383,12 @@ def artefacts_list_view(request: HttpRequest) -> HttpResponse:
 
             if created:
                 messages.success(
-                    request, f"Created {len(created)} new artefact(s)."
+                    request, f"Created {len(created)} new artefact{"s" if len(created) > 1 else ""}."
                 )
             if reused:
                 messages.info(
                     request,
-                    f"{len(reused)} artefact(s) already existed and were reused.",
+                    f"{len(reused)} artefact{"s" if len(created) > 1 else ""} already existed and {"were" if len(created) > 1 else "was"} reused.",
                 )
         else:
             messages.error(
@@ -714,12 +715,12 @@ def scenario_overview(request: HttpRequest) -> HttpResponse:
 
             if created:
                 messages.success(
-                    request, f"Created {len(created)} new artefact(s)."
+                    request, f"Created {len(created)} new artefact{"s" if len(created) > 1 else ""}."
                 )
             if reused:
                 messages.info(
                     request,
-                    f"{len(reused)} artefact(s) already existed and were reused.",
+                    f"{len(reused)} artefact{"s" if len(created) > 1 else ""} already existed and {"were" if len(created) > 1 else "was"} reused.",
                 )
         else:
             messages.error(
@@ -738,7 +739,8 @@ def scenario_overview(request: HttpRequest) -> HttpResponse:
         .order_by("-created_at")
     )
 
-    context = {"scenarios": scenarios, "form": form}
+    all_artefacts = Artefact.objects.order_by("-created_at").all()
+    context = {"scenarios": scenarios, "form": form, "all_artefacts": all_artefacts}
 
     return render(request, "core/scenario_overview.html", context)
 
@@ -1009,7 +1011,7 @@ def scenario_inspection_view(request: HttpRequest, scenario_id: str) -> JsonResp
         if spec:
             payload["inspect_schema"] = TransformationSpec(
                 key=spec.key,
-                inputs=[InputSpec(name=i.name, type=i.type.value, required=i.required) for i in spec.inputs],
+                inputs=[InputSpec(name=i.name, type=i.type.value, required=i.required, multiple=i.multiple) for i in spec.inputs],
                 outputs=[o.name for o in spec.outputs],
                 docstring=spec.docstring,
             )
@@ -1104,6 +1106,7 @@ def list_transformations_view(_: HttpRequest) -> JsonResponse:
                             "name": i.name,
                             "type": i.type.value,
                             "required": i.required,
+                            "multiple": i.multiple,
                         }
                         for i in t.inputs
                     ],

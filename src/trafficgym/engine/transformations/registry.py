@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Coroutine, Any, Callable, List, TypedDict
 from pathlib import Path
@@ -14,7 +15,7 @@ class InputSpec:
     name: str
     type: InputType
     required: bool = True
-    # multiple: bool = False
+    multiple: bool = False
 
 
 @dataclass
@@ -46,6 +47,10 @@ def register(spec: TransformationSpec) -> None:
     REGISTRY[spec.key] = spec
 
 
+def _matches_multiple(key: str, prefix: str) -> bool:
+    return key == prefix or bool(re.fullmatch(rf"{re.escape(prefix)}_\d+", key))
+
+
 def resolve_inputs(
     spec: TransformationSpec,
     parameters: dict[str, str],
@@ -55,22 +60,32 @@ def resolve_inputs(
     resolved: dict[str, str] = {}
     base_path = runtime.base_path
 
-    allowed_keys = {i.name for i in spec.inputs}
+    single_keys = {i.name for i in spec.inputs if not i.multiple}
+    multiple_specs = [i for i in spec.inputs if i.multiple]
 
     for key in input_name_to_path:
-        if key not in allowed_keys:
-            raise ValueError(f"Unexpected input: {key}")
+        if key in single_keys:
+            continue
+        if any(_matches_multiple(key, ms.name) for ms in multiple_specs):
+            continue
+        raise ValueError(f"Unexpected input: {key}")
 
     for input_spec in spec.inputs:
         key = input_spec.name
 
         if input_spec.type == InputType.FILE:
-            if key not in input_name_to_path:
-                if input_spec.required:
+            if input_spec.multiple:
+                matched = {k: v for k, v in input_name_to_path.items() if _matches_multiple(k, key)}
+                if not matched and input_spec.required:
                     raise ValueError(f"Missing required input: {key}")
-                continue
-
-            resolved[key] = str(base_path / input_name_to_path[key])
+                for k, path in matched.items():
+                    resolved[k] = str(base_path / path)
+            else:
+                if key not in input_name_to_path:
+                    if input_spec.required:
+                        raise ValueError(f"Missing required input: {key}")
+                    continue
+                resolved[key] = str(base_path / input_name_to_path[key])
 
         elif input_spec.type == InputType.JSON:
             if key in parameters:
