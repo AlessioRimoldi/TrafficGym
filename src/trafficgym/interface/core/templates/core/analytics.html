@@ -5,6 +5,7 @@
 
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2/dist/chartjs-plugin-zoom.min.js"></script>
 <script type="module" src="{% static "core/js/build/analytics.js" %}" defer></script>
 <div class="container mt-3" id="messageBox">
@@ -87,10 +88,14 @@
 
         <div class="col-md-9 d-flex flex-column">
             <div class="card h-40 mb-3">
-                <div class="card-header fw-bold">Chart</div>
-                <div class="card-body d-flex justify-content-center align-items-center">
-                    <!-- Insert chart canvas or chart component -->
-                    <canvas id="analyticsChart" style="display: none;"></canvas>
+                <div class="card-header fw-bold d-flex justify-content-between align-items-center position-relative">
+                    Chart
+                    <span class="text-muted fw-normal small position-absolute start-50 translate-middle-x">Alt + drag to zoom &nbsp;·&nbsp; drag to pan &nbsp;·&nbsp; scroll to zoom</span>
+                    <button id="resetZoomBtn" class="btn btn-sm btn-outline-secondary">Reset Zoom</button>
+                </div>
+                <div class="card-body d-flex flex-column justify-content-center align-items-center">
+                    <canvas id="analyticsChart" style="display: none; width: 100%;"></canvas>
+                    <div id="stateTimelines" style="display: none; width: 100%;"></div>
                     <div id="chartPlaceholder" class="text-center text-muted">
                         <i class="bi bi-info-circle me-2"></i>
                         Awaiting subscription selection and aggregation mode

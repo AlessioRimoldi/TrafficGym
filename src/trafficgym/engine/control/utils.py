@@ -25,19 +25,17 @@ class RampMeterCycleActuator:
         green_time_s: float = 1.0,
         r_min: float = 180.0,
         r_max: float = 1800.0,
-        step_length_s: float = 1.0,
     ):
         self.green_time_s = green_time_s
         self.r_min = r_min
         self.r_max = r_max
-        self.step_length_s = step_length_s
         self._phase_elapsed_s: float = 0.0
         self._in_green: bool = False
         self._current_red_s: float = max(1.0, 3600.0 / r_max - green_time_s)
 
     def step(self, adapter: SimulationPort, inputs: RampMeterCycleActuatorInputs) -> RampMeterCycleActuatorOutputs:
         rate = max(self.r_min, min(self.r_max, inputs["meter_rate_veh_per_h"]))
-        self._phase_elapsed_s += self.step_length_s
+        self._phase_elapsed_s += adapter.seconds_per_step
 
         if self._in_green:
             if self._phase_elapsed_s >= self.green_time_s:

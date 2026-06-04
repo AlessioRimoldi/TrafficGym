@@ -144,7 +144,7 @@ class ALINEAProportionalDerivative:
 
     def step(self, adapter: SimulationPort, inputs: ALINEAPDInput) -> ALINEAPDOutput:
         occ = inputs["occupancy"]
-        p_term = self.Kr * min((self.o_hat - occ), self.up_saturation)
+        p_term = min(self.Kr * (self.o_hat - occ), self.up_saturation)
         d_term = self.Kd * (self.last_occupancy - occ) if self.last_occupancy is not None else 0.0
         new_meter_rate = max(self.r_min, min(self.r_max, self.last_meter_rate + p_term + d_term))
         self.last_meter_rate = new_meter_rate

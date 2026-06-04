@@ -228,10 +228,13 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                         out.append(f"{_I}return {merge}")
                     elif len(multi_sources) > 1:
                         # Fan-in: multiple sources to a single-input aggregator.
+                        # First source uses input_key so aggregators propagate the semantic key downstream.
+                        input_key = (blk_def.input_ports[0]["key"] if blk_def and blk_def.input_ports else "value")
                         source_vars: list[str] = []
                         for _i, _src in enumerate(multi_sources):
+                            fan_key = input_key if _i == 0 else f"_src{_i}"
                             _stmts, _var = _build_obs_stmts(
-                                _src, obs_by_id, blk_by_id, blk_var, pid, f"_src{_i}", counter,
+                                _src, obs_by_id, blk_by_id, blk_var, pid, fan_key, counter,
                             )
                             for stmt in _stmts:
                                 out.append(f"{_I}{stmt}")
@@ -332,12 +335,15 @@ def _build_obs_stmts(
         if sid in blk_by_id:
             _b = blk_by_id[sid]
             _bv = blk_var.get((pid, _b["id"]), "_missing_blk")
+            _bdef = BLOCK_REGISTRY.get(_b["key"])
+            # Typed blocks declare the key their upstream must produce; generic blocks propagate key.
+            upstream_key = _bdef.input_ports[0]["key"] if (_bdef and _bdef.input_ports) else key
             multi: list[str] = list(_b.get("inputs_from") or [])
             if len(multi) > 1:
-                # Fan-in: walk each source with a unique key, then merge
+                # Fan-in: first source uses upstream_key so aggregator output carries the right key.
                 src_vars: list[str] = []
                 for _i, _src in enumerate(multi):
-                    sv = walk(_src, wrap_key=f"_src{_i}")
+                    sv = walk(_src, wrap_key=upstream_key if _i == 0 else f"_src{_i}")
                     src_vars.append(sv)
                 merge_var = f"_r{counter[0]}"
                 counter[0] += 1
@@ -347,7 +353,7 @@ def _build_obs_stmts(
                 stmts.append(f"{var} = {_bv}.step(a, {merge_var})")
             else:
                 single = (multi[0] if multi else None) or (_b.get("input_from") or "")
-                prev_var = walk(single)
+                prev_var = walk(single, wrap_key=upstream_key)
                 var = f"_r{counter[0]}"
                 counter[0] += 1
                 stmts.append(f"{var} = {_bv}.step(a, {prev_var})")

@@ -772,10 +772,18 @@ function createPipelineRow(
             const label = bDef?.label ?? br.key;
             const keys  = [...new Set(inConns.map(c => c.from.dataset.portKey).filter(Boolean))];
             const types = [...new Set(inConns.map(c => c.from.dataset.portType).filter(Boolean))];
+            const hasUniformityError = keys.length > 1 ||
+                (types.length > 1 && !types.every(t => t === "float" || t === "int"));
             if (keys.length > 1)
                 errors.push(`${label}: inputs have different variable names (${keys.join(", ")})`);
             if (types.length > 1 && !types.every(t => t === "float" || t === "int"))
                 errors.push(`${label}: incompatible input types (${types.join(", ")})`);
+            if (hasUniformityError) {
+                for (const conn of inConns) {
+                    conn.compatible = false;
+                    applyConnStyle(conn);
+                }
+            }
         }
 
         // Connection type/key mismatch errors.
@@ -1342,10 +1350,10 @@ function createPipelineRow(
         const footer = document.createElement("div");
         footer.className = "card-footer py-1 px-3";
 
-        for (const okey of outputKeys) {
+        for (const [okeyIdx, okey] of outputKeys.entries()) {
             const existing = br.record.find(r => r.output_key === okey) ?? null;
             const rowEl = document.createElement("div");
-            rowEl.className = "mt-2 d-flex flex-column gap-1";
+            rowEl.className = (okeyIdx > 0 ? "mt-2 " : "") + "d-flex flex-column gap-1";
 
             const chk = document.createElement("input");
             chk.type = "checkbox";
@@ -1417,6 +1425,8 @@ function createPipelineRow(
     const stageMenu = document.createElement("ul");
     stageMenu.className = "dropdown-menu";
     stageMenu.style.minWidth = "280px";
+    stageMenu.style.maxHeight = "60vh";
+    stageMenu.style.overflowY = "auto";
 
     // Group blocks by module, preserving registry order within each group.
     const blocksByModule = new Map<string, BlockEntry[]>();
@@ -1975,6 +1985,13 @@ function renderPipeline(
             saveStatus.className = "text-danger small";
             saveStatus.textContent = result.error;
             return;
+        }
+        const typeErrors = Array.from(pipelineErrors.values()).flat();
+        if (typeErrors.length > 0) {
+            const proceed = confirm(
+                `There are type errors:\n\n${typeErrors.join("\n")}\n\nSave anyway?`
+            );
+            if (!proceed) return;
         }
 
         saveBtn.disabled = true;

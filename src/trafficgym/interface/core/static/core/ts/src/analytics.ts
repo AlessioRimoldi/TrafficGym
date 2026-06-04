@@ -5,6 +5,18 @@ declare const Chart: typeof ChartType;
 
 const chartCanvas = document.getElementById("analyticsChart") as HTMLCanvasElement;
 const chartPlaceholder = document.getElementById("chartPlaceholder") as HTMLDivElement;
+const stateTimelinesEl = document.getElementById("stateTimelines") as HTMLDivElement;
+
+const SUMO_COLORS: Record<string, string> = {
+    "G": "#00b300",
+    "g": "#007700",
+    "r": "#cc0000",
+    "y": "#ffcc00",
+    "o": "#ff8800",
+    "O": "#333333",
+    "u": "#888888",
+    "s": "#996699",
+};
 const dataTable = document.getElementById("analyticsTable") as HTMLDivElement;
 const tablePlaceholder = document.getElementById("tablePlaceholder") as HTMLDivElement;
 
@@ -356,10 +368,22 @@ document.addEventListener("DOMContentLoaded", () => {
         return uuid.split("+").map(subPart => subPart.slice(0, 4)).join("+")
     }
 
+    function allDataTimeRange(): { min: number; max: number } | null {
+        const times = datasets.flatMap(ds => (ds.rawData as DataPoint[]).map(p => p.x));
+        if (!times.length) return null;
+        return { min: Math.min(...times), max: Math.max(...times) + 1 };
+    }
+
     function updateChart() {
-        const chartData = datasets.filter(ds => ds.data.length > 0)
+        const chartData = datasets.filter(ds => ds.data.length > 0);
+        const range = allDataTimeRange();
+
         if (chart) {
-            chart.data.datasets = chartData
+            chart.data.datasets = chartData;
+            if (range) {
+                (chart.options.scales!["x"] as any).suggestedMin = range.min;
+                (chart.options.scales!["x"] as any).suggestedMax = range.max;
+            }
             chart.resize();
             chart.update();
         } else {
@@ -369,12 +393,21 @@ document.addEventListener("DOMContentLoaded", () => {
                     datasets: chartData
                 },
                 options: {
+                    transitions: {
+                        zoom: {
+                            animation: {
+                            duration: 0
+                            }
+                        }
+                    },
                     responsive: true,
                     parsing: false,
                     scales: {
                         x: {
                             type: "linear",
-                            title: { display: true, text: "Simulation Time" }
+                            title: { display: true, text: "Simulation Time" },
+                            suggestedMin: range?.min,
+                            suggestedMax: range?.max,
                         },
                         y: {
                             title: { display: true, text: "Value" }
@@ -392,47 +425,213 @@ document.addEventListener("DOMContentLoaded", () => {
                                 },
                                 wheel: { enabled: true },
                                 mode: "xy",
+                                onZoom: () => renderStateTimelines(),
                             },
-                            pan: { enabled: false },
+                            pan: {
+                                enabled: true,
+                                onPan: () => renderStateTimelines(),
+                            },
                         }
                     }
                 } as any
             });
 
-            // Pan wired manually because the plugin's built-in mousedown handler
-            // doesn't start pan reliably when drag-zoom is also active.
-            let panOrigin: { x: number; y: number } | null = null;
-
-            chartCanvas.addEventListener("mousedown", (e) => {
-                if (e.altKey || e.button !== 0) return;
-                panOrigin = { x: e.clientX, y: e.clientY };
-                chartCanvas.style.cursor = "grabbing";
-            });
-
-            window.addEventListener("mousemove", (e) => {
-                if (!panOrigin || !chart) return;
-                (chart as any).pan({ x: e.clientX - panOrigin.x, y: e.clientY - panOrigin.y });
-                panOrigin = { x: e.clientX, y: e.clientY };
-            });
-
-            window.addEventListener("mouseup", () => {
-                if (!panOrigin) return;
-                panOrigin = null;
-                chartCanvas.style.cursor = "default";
-            });
-
             document.getElementById("resetZoomBtn")?.addEventListener("click", () => {
+                tlView = null;
                 (chart as any)?.resetZoom();
+                renderStateTimelines();
             });
+
+            new ResizeObserver(() => renderStateTimelines()).observe(chartCanvas);
         }
 
+        const hasTls = datasets.some(ds => /^trafficlight\./.test(ds.fullLabel));
         if (chart.data.datasets.length === 0) {
-            chartPlaceholder.style.display = "block";
+            chartPlaceholder.style.display = hasTls ? "none" : "block";
             chartCanvas.style.display = "none";
         } else {
             chartPlaceholder.style.display = "none";
             chartCanvas.style.display = "block";
         }
+
+        renderStateTimelines();
+    }
+
+    const TL_LABEL_W = 60;
+    let tlView: { min: number; max: number } | null = null;
+
+    function renderStateTimelines() {
+        if (!chart) { stateTimelinesEl.style.display = "none"; return; }
+        const re = /(.*)\..*\.(.*) /
+
+        const tlsDatasets = datasets.filter(ds =>
+            ds.fullLabel.match(re)?.[1] === "trafficlight"
+        );
+
+        if (tlsDatasets.length === 0) { stateTimelinesEl.style.display = "none"; return; }
+
+        stateTimelinesEl.style.display = "block";
+        stateTimelinesEl.innerHTML = "";
+
+        const ROW_H = 24;
+        const hasNumeric = chart.data.datasets.length > 0;
+        let areaLeft: number, areaWidth: number, viewMin: number, viewMax: number;
+
+        if (hasNumeric) {
+            const area = chart.chartArea;
+            areaLeft = area.left;
+            areaWidth = area.right - area.left;
+            viewMin = chart.scales["x"].min;
+            viewMax = chart.scales["x"].max;
+        } else {
+            const allT = tlsDatasets.flatMap(ds => (ds.rawData as DataPoint[]).map(p => p.x));
+            if (!tlView) tlView = { min: Math.min(...allT), max: Math.max(...allT) + 1 };
+            areaLeft = TL_LABEL_W;
+            areaWidth = Math.max(1, stateTimelinesEl.clientWidth - TL_LABEL_W);
+            viewMin = tlView.min;
+            viewMax = tlView.max;
+        }
+
+        const timeToPixel = (t: number) => ((t - viewMin) / (viewMax - viewMin)) * areaWidth;
+
+        for (const ds of tlsDatasets) {
+            const row = document.createElement("div");
+            row.className = "d-flex align-items-center mb-1";
+
+            const labelEl = document.createElement("div");
+            labelEl.className = "small text-muted text-end pe-2 text-truncate";
+            labelEl.style.cssText = `width:${areaLeft}px;min-width:${areaLeft}px;`;
+            labelEl.textContent = ds.fullLabel.match(re)?.[2] ?? "";
+            labelEl.title = ds.fullLabel ?? "";
+
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(areaWidth);
+            canvas.height = ROW_H;
+            canvas.style.cssText = `width:${areaWidth}px;height:${ROW_H}px;`;
+
+            const ctx = canvas.getContext("2d")!;
+            const raw = (ds.rawData as DataPoint[])
+                .filter(p => typeof p.y === "string")
+                .sort((a, b) => a.x - b.x);
+
+            for (let i = 0; i < raw.length; i++) {
+                const t0 = raw[i].x;
+                const t1 = i + 1 < raw.length ? raw[i + 1].x : t0 + 1;
+                const x0 = timeToPixel(t0);
+                const x1 = timeToPixel(t1);
+                if (x1 <= 0 || x0 >= areaWidth) continue;
+
+                const state = String(raw[i].y);
+                const chars = state.split("");
+                const laneW = (Math.min(x1, areaWidth) - Math.max(x0, 0)) / chars.length;
+                const drawX0 = Math.max(x0, 0);
+                chars.forEach((ch, ci) => {
+                    ctx.fillStyle = SUMO_COLORS[ch] ?? "#aaaaaa";
+                    ctx.fillRect(drawX0 + ci * laneW, 0, laneW, ROW_H);
+                });
+            }
+
+            row.append(labelEl, canvas);
+            stateTimelinesEl.appendChild(row);
+        }
+
+        if (!hasNumeric) {
+            const NICE = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 10800];
+            const range = viewMax - viewMin;
+            const targetTicks = 8;
+            const rawStep = range / targetTicks;
+            const step = NICE.find(n => n >= rawStep) ?? NICE[NICE.length - 1];
+            const firstTick = Math.ceil(viewMin / step) * step;
+
+            const axisCanvas = document.createElement("canvas");
+            axisCanvas.width = Math.round(areaWidth);
+            axisCanvas.height = 20;
+            axisCanvas.style.cssText = `width:${areaWidth}px;height:20px;margin-left:${areaLeft}px;`;
+            const ax = axisCanvas.getContext("2d")!;
+            ax.font = "10px sans-serif";
+            ax.fillStyle = "#6c757d";
+            ax.textAlign = "center";
+
+            for (let t = firstTick; t <= viewMax; t += step) {
+                const x = ((t - viewMin) / range) * areaWidth;
+                ax.fillRect(x, 0, 1, 4);
+                // const label = step >= 3600 ? `${t / 3600}h`
+                //     : step >= 60 ? `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`
+                //     : `${t}s`;
+                const label = `${t}s`;
+                ax.fillText(label, x, 14);
+            }
+
+            stateTimelinesEl.appendChild(axisCanvas);
+        }
+    }
+
+    // ── Timeline pan / zoom interactions ──────────────────────────────────────
+
+    stateTimelinesEl.style.cursor = "grab";
+
+    function tlDoZoom(clientX: number, factor: number) {
+        if (!chart) return;
+        const rect = stateTimelinesEl.getBoundingClientRect();
+        if (chart.data.datasets.length > 0) {
+            const area = chart.chartArea;
+            const focalX = area.left + Math.max(0, Math.min(1, (clientX - rect.left - area.left) / (area.right - area.left))) * (area.right - area.left);
+            (chart as any).zoom({ x: factor, focalPoint: { x: focalX, y: (area.top + area.bottom) / 2 } });
+        } else {
+            if (!tlView) return;
+            const aw = stateTimelinesEl.clientWidth - TL_LABEL_W;
+            const frac = Math.max(0, Math.min(1, (clientX - rect.left - TL_LABEL_W) / aw));
+            const t = tlView.min + frac * (tlView.max - tlView.min);
+            const span = (tlView.max - tlView.min) / factor;
+            tlView = { min: t - frac * span, max: t - frac * span + span };
+        }
+        renderStateTimelines();
+    }
+
+    function tlDoPan(deltaX: number) {
+        if (!chart) return;
+        if (chart.data.datasets.length > 0) {
+            (chart as any).pan({ x: deltaX });
+        } else {
+            if (!tlView) return;
+            const aw = stateTimelinesEl.clientWidth - TL_LABEL_W;
+            const dt = -(deltaX / aw) * (tlView.max - tlView.min);
+            tlView = { min: tlView.min + dt, max: tlView.max + dt };
+        }
+        renderStateTimelines();
+    }
+
+    stateTimelinesEl.addEventListener("wheel", e => {
+        if (!chart) return;
+        e.preventDefault();
+        tlDoZoom(e.clientX, e.deltaY < 0 ? 1.1 : 0.9);
+    }, { passive: false });
+
+    let dragX: number | null = null;
+    stateTimelinesEl.addEventListener("mousedown", e => {
+        if (!chart) return;
+        dragX = e.clientX;
+        stateTimelinesEl.style.cursor = "grabbing";
+    });
+    window.addEventListener("mousemove", e => {
+        if (dragX === null) return;
+        tlDoPan(e.clientX - dragX);
+        dragX = e.clientX;
+    });
+    window.addEventListener("mouseup", () => {
+        dragX = null;
+        stateTimelinesEl.style.cursor = "grab";
+    });
+
+    if (typeof (window as any).Hammer !== "undefined") {
+        const hammer = new (window as any).Hammer(stateTimelinesEl);
+        hammer.get("pinch").set({ enable: true });
+        let lastScale = 1;
+        hammer.on("pinchstart", () => { lastScale = 1; });
+        hammer.on("pinch", (e: any) => {
+            tlDoZoom(e.center.x, e.scale / lastScale);
+            lastScale = e.scale;
+        });
     }
 
     function updateDatasetControls() {
@@ -576,7 +775,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 const allData = ds.rawData as DataPoint[];
                 for (let i = allData.length - 1; i >= 0; i--) {
                     if (allData[i].x <= cutoff && allData[i].y != null) {
-                        lastSeen.set(di, truncateLabel(parseFloat(Number(allData[i].y).toFixed(6)).toString()));
+                        const yv = allData[i].y;
+                        const yNum = Number(yv);
+                        lastSeen.set(di, truncateLabel(isNaN(yNum) ? String(yv) : parseFloat(yNum.toFixed(6)).toString()));
                         break;
                     }
                 }
@@ -594,7 +795,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 const point = (ds.rawData as DataPoint[]).find(p => p.x === t);
                 const td = document.createElement("td");
                 if (point?.y != null) {
-                    const formatted = truncateLabel(parseFloat(Number(point.y).toFixed(6)).toString());
+                    const yNum = Number(point.y);
+                    const formatted = truncateLabel(isNaN(yNum) ? String(point.y) : parseFloat(yNum.toFixed(6)).toString());
                     lastSeen.set(di, formatted);
                     td.textContent = formatted;
                 } else {
