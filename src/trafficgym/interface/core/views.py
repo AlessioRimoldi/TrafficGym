@@ -129,7 +129,15 @@ def create_run_modal(request: HttpRequest) -> HttpResponse:
 
 
 def select_run_modal(request: HttpRequest) -> HttpResponse:
-    existing_run_ids = request.GET.get("existing_run_ids", "").split(",")
+    existing_run_ids = [i for i in request.GET.get("existing_run_ids", "").split(",") if i]
+    first_experiment = None
+    first_scenario = None
+    if existing_run_ids:
+        first = RunRequest.objects.filter(id=existing_run_ids[0]).values("experiment__name", "scenario__name").first()
+        if first:
+            first_experiment = first["experiment__name"]
+            first_scenario = first["scenario__name"]
+
     other_runs = (
         RunRequest.objects.exclude(id__in=existing_run_ids)
         .order_by("-created_at")
@@ -141,7 +149,7 @@ def select_run_modal(request: HttpRequest) -> HttpResponse:
         )
     )
 
-    context = {"available_runs": list(other_runs)}
+    context = {"available_runs": list(other_runs), "first_experiment": first_experiment, "first_scenario": first_scenario}
 
     return render(request, "core/select_run_modal.html", context)
 
@@ -512,9 +520,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
 
         if not agg_temp:
             warnings.append(
-                f"Aggregation '{aggregation_function}' returned no data. "
-                f"No numeric values found for the selected fingerprints ({', '.join(fingerprints) or 'all'}) "
-                f"and run request {pk}, run executions ({', '.join(run_executions) or 'all'})."
+                f"Aggregation '{aggregation_function}' skipped — no numeric values found for this subscription."
             )
 
         for (sim_time, fp), entry in agg_temp.items():
@@ -582,11 +588,14 @@ def analytics_run_execution_view(_: HttpRequest, pk: str) -> HttpResponse:
 
 
 def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
-    run_request_id_params = list(set(request.GET.getlist("run_request")))
+    # Deduplicate while preserving URL param order — first param is the primary run request.
+    run_request_id_params = list(dict.fromkeys(request.GET.getlist("run_request")))
 
-    run_requests = RunRequest.objects.filter(
+    rr_qs = RunRequest.objects.filter(
         id__in=run_request_id_params
     ).prefetch_related("executions")
+    order = {str(pk): i for i, pk in enumerate(run_request_id_params)}
+    run_requests = sorted(rr_qs, key=lambda rr: order.get(str(rr.id), 999))
 
     logs = SubscriptionLogEntry.objects.filter(
         run_execution__run_request__id__in=run_request_id_params

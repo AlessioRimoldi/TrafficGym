@@ -78,7 +78,10 @@
                             </select>
                         </div>
                         <a href="{% url "run_request_detail" run_request.id %}" class="btn btn-outline-secondary w-100 mb-2">Back to Run Request</a>
-                        <button type="submit" class="btn btn-primary w-100" data-run-id="{{ run_request.id }}">Add Data</button>
+                        <button type="submit" class="btn btn-primary w-100"
+                                data-run-id="{{ run_request.id }}"
+                                data-scenario="{{ run_request.scenario.name }}"
+                                data-experiment="{{ run_request.experiment.name }} v{{ run_request.experiment.version }}">Add Data</button>
                     </form>
                 </div>
             </div>

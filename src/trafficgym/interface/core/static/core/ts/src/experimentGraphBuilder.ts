@@ -1499,7 +1499,14 @@ function createPipelineRow(
 
     if (initialPipeline) {
         const blocks = initialPipeline.blocks ?? [];
-        for (const bs of blocks) makeBlockStage(bs.key, { ...bs.params }, bs.record ?? []);
+        for (const bs of blocks) {
+            const bDef = BLOCKS.find(b => b.key === bs.key);
+            const valid = new Set((bDef?.params ?? []).map(p => p.name));
+            const params = bDef
+                ? Object.fromEntries(Object.entries(bs.params ?? {}).filter(([k]) => valid.has(k)))
+                : { ...bs.params };
+            makeBlockStage(bs.key, params, bs.record ?? []);
+        }
         for (const obs of initialPipeline.observers) {
             const type = OBSERVER_TYPE_FROM_DOMAIN[obs.domain] ?? obs.domain;
             const card = makeObserverNode(type, obs.object_id, () => {});

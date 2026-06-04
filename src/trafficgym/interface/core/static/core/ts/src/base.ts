@@ -136,7 +136,7 @@ function initStatusEvents(): void {
             const progressPrefix = type === "run_request" ? "rr" : type === "run_execution" ? "re" : null;
             if (progressPrefix) {
                 const progressEl = document.querySelector<HTMLElement>(`[data-progress-id="${progressPrefix}_${id}"]`);
-                if (progressEl) progressEl.innerHTML = renderProgressDone(payload.status);
+                if (progressEl && progressEl.querySelector(".progress")) progressEl.innerHTML = renderProgressDone(payload.status);
             }
         }
 

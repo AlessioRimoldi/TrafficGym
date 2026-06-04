@@ -27,6 +27,7 @@ interface DataPoint {
 
 type ExtendedDataset = ChartDataset<"line", Point[]> & {
     fullLabel: string;
+    displayLabel: string;
     rawData: DataPoint[];
     runId: string;
     dataIndex: number;
@@ -194,6 +195,21 @@ document.addEventListener("DOMContentLoaded", () => {
                     const json = await response.json();
 
                     if (json.warnings) {
+                        const aggSkipped = (json.warnings as string[]).some((w: string) =>
+                            w.includes("no numeric values found")
+                        );
+                        if (aggSkipped) {
+                            // Patch URL so reload doesn't re-attempt numeric aggregation
+                            const patchURL = new URL(window.location.href);
+                            try {
+                                const patchData = JSON.parse(patchURL.searchParams.get("data") ?? "{}") as URLGraphData;
+                                if (patchData.runs[rid]?.[dataIndex]) {
+                                    patchData.runs[rid][dataIndex].aggMode = "";
+                                    patchURL.searchParams.set("data", JSON.stringify(patchData));
+                                    window.history.replaceState({}, "", patchURL);
+                                }
+                            } catch { /* ignore */ }
+                        }
                         const warningBox = document.getElementById("messageBox");
                         (json.warnings as string[]).forEach(w => {
                             const div = document.createElement("div") as HTMLDivElement;
@@ -231,9 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         data = json.aggregated_data as DataItem[];
                         isAggregated = true;
                     } else {
-                        chartPlaceholder.style.display = "block";
-                        chartCanvas.style.display = "none";
-                        return;
+                        continue;
                     }
 
                     const grouped: Record<string, Record<string, DataPoint[]> > = {};
@@ -257,7 +271,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     for (const [run_execs, fingerprints] of Object.entries(grouped)) {
                         for (const [fp, points] of Object.entries(fingerprints)) {
-                            const color = palette[(datasets.length) % palette.length]
+                            const usedColors = new Set(datasets.map(d => d.borderColor));
+                            const color = palette.find(c => !usedColors.has(c)) ?? palette[datasets.length % palette.length];
                             datasets.push({
                                 label: isAggregated
                                     ? `${dataEntry.aggMode}:${shortenFingerprint(fp)} (${shortenUUIDs(run_execs)})`
@@ -265,6 +280,9 @@ document.addEventListener("DOMContentLoaded", () => {
                                 fullLabel: isAggregated
                                     ? `${dataEntry.aggMode}:${fp} (${run_execs})`
                                     : `${fp} (${run_execs})`,
+                                displayLabel: isAggregated
+                                    ? `${dataEntry.aggMode}:${fp} (${shortenUUIDs(run_execs)})`
+                                    : `${fp} (${shortenUUIDs(run_execs)})`,
                                 data: points
                                         .filter(p => !isNaN(Number(p.y)))
                                         .map(p => ({x: p.x, y: Number(p.y)}))
@@ -277,11 +295,10 @@ document.addEventListener("DOMContentLoaded", () => {
                             });
                         }
                     }
+                    updateChart();
+                    updateDataTable();
+                    updateDatasetControls();
                 }
-
-                updateChart();
-                updateDataTable();
-                updateDatasetControls();
             }
         } finally {
             document.body.classList.remove("loading");
@@ -339,20 +356,36 @@ document.addEventListener("DOMContentLoaded", () => {
             
             modalContent.innerHTML = html;
 
+            // Independent filters for experiment and scenario
+            function applyRunFilter() {
+                const filters = Array.from(
+                    document.querySelectorAll<HTMLInputElement>("[data-filter-key]:checked")
+                );
+                let visibleCount = 0;
+                document.querySelectorAll<HTMLElement>(".run-option").forEach(el => {
+                    const visible = filters.every(f =>
+                        el.dataset[f.dataset.filterKey!] === f.dataset.filterValue
+                    );
+                    el.style.display = visible ? "" : "none";
+                    if (visible) visibleCount++;
+                });
+                const emptyMsg = document.getElementById("runListEmpty");
+                if (emptyMsg) emptyMsg.style.display = visibleCount === 0 ? "" : "none";
+            }
+            document.querySelectorAll<HTMLInputElement>("[data-filter-key]").forEach(cb =>
+                cb.addEventListener("change", applyRunFilter)
+            );
+            applyRunFilter();
+
             document.getElementById("selectRunForm")?.addEventListener("submit", (e) => {
                 e.preventDefault();
-            
-                const select = document.getElementById("runSelect") as HTMLSelectElement;
-                if (!select) throw new Error("Could not find run selector");
-                const selected = Array.from(select.selectedOptions).map(opt => opt.value);
-            
-                if (!selected.length) return;
-            
+                const checked = Array.from(
+                    document.querySelectorAll<HTMLInputElement>("#runList input[type=checkbox]:checked")
+                ).map(cb => cb.value);
+                if (!checked.length) return;
                 const url = new URL(window.location.href);
-            
-                selected.forEach(id => url.searchParams.append("run_request", id));
-
-                window.location.href = url.toString()
+                checked.forEach(id => url.searchParams.append("run_request", id));
+                window.location.href = url.toString();
             });
 
             const modal = new window.bootstrap.Modal(modalElem);
@@ -410,10 +443,19 @@ document.addEventListener("DOMContentLoaded", () => {
                             suggestedMax: range?.max,
                         },
                         y: {
-                            title: { display: true, text: "Value" }
+                            title: { display: true, text: "Value" },
+                            afterFit(scale: any) { scale.width = 80; }
                         }
                     },
                     plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (item: any) => {
+                                    const full = (item.dataset as ExtendedDataset).displayLabel ?? item.dataset.label;
+                                    return `${full}: ${item.formattedValue}`;
+                                }
+                            }
+                        },
                         zoom: {
                             zoom: {
                                 drag: {
@@ -457,7 +499,7 @@ document.addEventListener("DOMContentLoaded", () => {
         renderStateTimelines();
     }
 
-    const TL_LABEL_W = 60;
+    const TL_LABEL_W = 80;
     let tlView: { min: number; max: number } | null = null;
 
     function renderStateTimelines() {
@@ -501,7 +543,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const labelEl = document.createElement("div");
             labelEl.className = "small text-muted text-end pe-2 text-truncate";
             labelEl.style.cssText = `width:${areaLeft}px;min-width:${areaLeft}px;`;
-            labelEl.textContent = ds.fullLabel.match(re)?.[2] ?? "";
+            const tlName = document.createElement("span");
+            tlName.textContent = ds.fullLabel.match(re)?.[2] ?? "";
+            const uuidTag = document.createElement("span");
+            uuidTag.textContent = ` ${ds.runId.slice(0, 4)}`;
+            uuidTag.style.cssText = "font-size:0.75em;opacity:0.55;";
+            labelEl.appendChild(tlName);
+            labelEl.appendChild(uuidTag);
             labelEl.title = ds.fullLabel ?? "";
 
             const canvas = document.createElement("canvas");
@@ -636,23 +684,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateDatasetControls() {
         if (!chart) throw Error("No chart loaded");
-    
+
+        // Build run request metadata from the submit buttons in the sidebar
+        const runMeta = new Map<string, { scenario: string; experiment: string }>();
+        document.querySelectorAll<HTMLButtonElement>("button[data-run-id][data-scenario]").forEach(btn => {
+            runMeta.set(btn.dataset.runId!, {
+                scenario: btn.dataset.scenario ?? "",
+                experiment: btn.dataset.experiment ?? "",
+            });
+        });
+
         const container = document.getElementById("dataset_controls") as HTMLDivElement;
         container.innerHTML = "";
-    
+
         if (datasets.length === 0) {
             container.innerHTML = '<span class="text-muted">No chart data present</span>';
             return;
         }
-    
-        datasets.forEach((ds) => {
+
+        // Group datasets by runId, preserving insertion order
+        const groups = new Map<string, ExtendedDataset[]>();
+        datasets.forEach(ds => {
+            if (!groups.has(ds.runId)) groups.set(ds.runId, []);
+            groups.get(ds.runId)!.push(ds);
+        });
+
+        groups.forEach((groupDs, runId) => {
+            const meta = runMeta.get(runId);
+            const header = document.createElement("div");
+            header.className = "mb-1 mt-2";
+            header.innerHTML = `
+                <div class="small fw-semibold text-truncate" title="${meta?.experiment ?? runId}">
+                    ${meta?.experiment ?? ""}
+                </div>
+                <span class="text-muted" style="font-size:0.6em;font-family:monospace;">${runId.slice(0, 8)}</span>`;
+            container.appendChild(header);
+
+            const swatchRow = document.createElement("div");
+            swatchRow.className = "d-flex flex-wrap gap-1 mb-1";
+            container.appendChild(swatchRow);
+
+        groupDs.forEach((ds) => {
             const btn = document.createElement("button");
-            btn.className = "btn btn-sm btn-outline-danger me-1 mb-1 p-0"; // small button, no padding
+            btn.className = "btn btn-sm btn-outline-danger p-0";
             btn.style.width = "20px";
             btn.style.height = "20px";
-            btn.style.borderRadius = "50%"; // circular swatch
+            btn.style.borderRadius = "50%";
             btn.style.backgroundColor = ds.borderColor as string || "#000";
-            btn.title = ds.label ?? "unknown";
+            btn.title = ds.displayLabel ?? ds.label ?? "unknown";
             btn.style.cursor = "pointer";
             btn.dataset.runId = ds.runId;
             btn.dataset.dataIndex = ds.dataIndex.toString();
@@ -693,8 +772,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 btn.remove();
             };
     
-            container.appendChild(btn);
+            swatchRow.appendChild(btn);
         });
+        }); // end groups.forEach
 
         const deleteAllDataButton = document.createElement("button");
         deleteAllDataButton.className = "btn btn-outline-danger w-100 mt-2";
