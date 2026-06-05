@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: trafficgym
+      POSTGRES_USER: trafficgym
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-trafficgym}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trafficgym"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  web:
+    build: .
+    command: >
+      sh -c "python src/trafficgym/interface/manage.py migrate &&
+             python src/trafficgym/interface/manage.py runserver 0.0.0.0:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: trafficgym.interface.config.settings
+      DB_HOST: db
+      DB_NAME: trafficgym
+      DB_USER: trafficgym
+      DB_PASSWORD: ${DB_PASSWORD:-trafficgym}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0"
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-change-me-in-production}
+    ports:
+      - "8000:8000"
+    volumes:
+      - media_files:/app/src/trafficgym/interface/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: celery -A trafficgym.interface.core worker -l INFO
+    environment:
+      DJANGO_SETTINGS_MODULE: trafficgym.interface.config.settings
+      DB_HOST: db
+      DB_NAME: trafficgym
+      DB_USER: trafficgym
+      DB_PASSWORD: ${DB_PASSWORD:-trafficgym}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-change-me-in-production}
+      # X11 forwarding for sumo-gui (Linux hosts only — see .env.example)
+      DISPLAY: ${DISPLAY:-:0}
+    volumes:
+      - media_files:/app/src/trafficgym/interface/media
+      # X11 socket for sumo-gui (Linux hosts only)
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_files:

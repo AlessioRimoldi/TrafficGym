@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,14 +21,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = (
-    "django-insecure-v@3^zc*_)1-waa_4q*dtie56&&903(nkmacmwl9o0ur^0vh+v#"
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-v@3^zc*_)1-waa_4q*dtie56&&903(nkmacmwl9o0ur^0vh+v#",
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS: list[str] = []
+_allowed_hosts = os.environ.get("ALLOWED_HOSTS")
+ALLOWED_HOSTS: list[str] = _allowed_hosts.split(",") if _allowed_hosts else ["localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -78,11 +81,11 @@ WSGI_APPLICATION = "trafficgym.interface.config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "trafficgym",
-        "USER": "diego",
-        "PASSWORD": "",
-        "HOST": "localhost",
-        "PORT": 5432
+        "NAME": os.environ.get("DB_NAME", "trafficgym"),
+        "USER": os.environ.get("DB_USER", "diego"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": int(os.environ.get("DB_PORT", "5432")),
     }
     # "default": {
     #     "ENGINE": "django.db.backends.sqlite3",
@@ -139,7 +142,7 @@ STATIC_URL = "/static/"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 
 LOGGING = {
     "version": 1,

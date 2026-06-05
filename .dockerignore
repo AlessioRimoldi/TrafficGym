@@ -1,0 +1,17 @@
+venv/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.coverage
+htmlcov/
+docs/_build/
+dump.rdb
+node_modules/
+src/trafficgym/interface/node_modules/
+*.egg-info/
+.env
+.mypy_cache/
+.pytest_cache/
+.vscode/
+.claude/
