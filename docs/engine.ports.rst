@@ -1,29 +1,24 @@
-engine.ports package
-====================
+Simulation Port
+===============
 
-Submodules
-----------
+:class:`~trafficgym.engine.ports.simulation.SimulationPort` is the abstract
+interface between an experiment and the underlying SUMO simulator.  Every step
+method, query, and apply call goes through this port.
 
-engine.ports.adapter\_factory module
-------------------------------------
-
-.. automodule:: engine.ports.adapter_factory
+.. automodule:: trafficgym.engine.ports.simulation
    :members:
-   :show-inheritance:
    :undoc-members:
+   :show-inheritance:
+   :special-members: __init__
 
-engine.ports.simulation module
-------------------------------
+SUMO Domains
+------------
 
-.. automodule:: engine.ports.simulation
+Constants mapping SUMO getter names to their Python cast functions and setter
+parameter keys.
+
+.. automodule:: trafficgym.engine.ports.sumo_domains
    :members:
-   :show-inheritance:
    :undoc-members:
-
-Module contents
----------------
-
-.. automodule:: engine.ports
-   :members:
    :show-inheritance:
-   :undoc-members:
+

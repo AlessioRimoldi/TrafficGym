@@ -1,18 +1,26 @@
-.. sumo_workbench_engine documentation master file, created by
-   sphinx-quickstart on Fri Feb 13 13:43:08 2026.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+TrafficGym
+==========
 
-sumo_workbench_engine documentation
-===================================
+TrafficGym is a Django + Celery + SUMO platform for defining, running, and
+analysing traffic simulation experiments.
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+Experiments are Python classes that subclass :class:`~trafficgym.engine.experiment.Experiment`
+and implement a single ``run()`` method. The platform handles scheduling,
+seeding, subscription logging, and analytics.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Contents
 
-   modules
+   getting_started
+   engine.experiment
+   engine.ports
+   engine.control
+   engine.adapters
+   engine.transformations
+
+Indices
+-------
+
+* :ref:`genindex`
+* :ref:`modindex`

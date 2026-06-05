@@ -10,8 +10,8 @@ class LibsumoAdapterFactory(AdapterFactory):
 
 
 class FakeAdapterFactory(AdapterFactory):
-    def __init__(self, intial_config: FakeStateDict | None):
-        self._initial_config = intial_config
+    def __init__(self, initial_config: FakeStateDict | None):
+        self._initial_config = initial_config
 
     def create(self, _: RunConfig, step_length_ms: int) -> SimulationPort:
         return FakeAdapter(step_length_ms, self._initial_config)

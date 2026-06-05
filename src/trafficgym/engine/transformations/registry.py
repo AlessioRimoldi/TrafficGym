@@ -94,7 +94,7 @@ def resolve_inputs(
                 raise ValueError(f"Missing required parameter: {key}")
 
         else:
-            raise ValueError(f"Unknown Input Spec Tye: {input_spec.type}")
+            raise ValueError(f"Unknown Input Spec Type: {input_spec.type}")
 
     return resolved
 

@@ -118,10 +118,7 @@ class Scenario(models.Model):
         if not self._state.adding:
             raise ValueError("Scenarios are immutable")
 
-        try:
-            super().save(*args, **kwargs)
-        except IntegrityError:
-            raise
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.name} ({self.id})"
@@ -199,7 +196,7 @@ class RunRequest(models.Model):
         blank=True,
         editable=False,
     )
-    rerun_count = models.IntegerField()
+    rerun_count = models.IntegerField(default=1)
     open_gui = models.BooleanField(default=False)
     step_length_ms = models.IntegerField(default=1000)
     created_at = models.DateTimeField(auto_now_add=True, editable=False)

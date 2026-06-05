@@ -1,6 +1,11 @@
-from django.urls import path
+from pathlib import Path
+from django.urls import path, re_path
 from django.http import HttpResponse
+from django.shortcuts import redirect
+from django.views.static import serve
 from . import views
+
+_DOCS_ROOT = Path(__file__).parents[4] / "docs" / "_build" / "html"
 
 urlpatterns = [
     path("favicon.ico", lambda r: HttpResponse(status=204)),
@@ -66,7 +71,7 @@ urlpatterns = [
         name="scenario_overview",
     ),
     path(
-        "experiement_overview",
+        "experiment_overview",
         views.experiments_overview,
         name="experiment_overview",
     ),
@@ -130,4 +135,6 @@ urlpatterns = [
         views.status_events,
         name="status_events",
     ),
+    path("docs/", lambda r: redirect("docs_files", path="index.html"), name="docs"),
+    re_path(r"^docs/(?P<path>.+)$", serve, {"document_root": _DOCS_ROOT}, name="docs_files"),
 ]

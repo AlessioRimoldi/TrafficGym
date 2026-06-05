@@ -38,7 +38,6 @@ class LibsumoAdapter(SimulationPort):
         libsumo.start(cmd)
         self.edge_ids = list(libsumo.edge.getIDList())
         self.started = True
-        # self.max_steps = max_steps # will fix later
         self.step = 0
 
     def close(self) -> None:
@@ -104,12 +103,3 @@ class LibsumoAdapter(SimulationPort):
         )
 
         return got
-
-        # try:
-        #     return getterHandle()
-        # except:
-        #     try:
-        #         return getterHandle(objectId, additionalParam)
-        #     except Exception as e:
-        #         raise e
-        # return None

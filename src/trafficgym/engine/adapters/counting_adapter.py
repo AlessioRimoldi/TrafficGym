@@ -30,7 +30,7 @@ class CountingAdapter(SimulationPort):
 def count_experiment_steps(artefact: Any) -> int:
     """Execute an experiment artefact against a CountingAdapter and return the step count.
     Returns -1 if any phase is open-ended (run_until_empty) or the file cannot be loaded."""
-    from trafficgym.experiment_sdk.experiments.base import Experiment as BaseExperiment
+    from trafficgym.engine.experiment import Experiment as BaseExperiment
     try:
         artefact.file.seek(0)
         source = artefact.file.read()

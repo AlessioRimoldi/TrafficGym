@@ -54,7 +54,7 @@
                             <label for="subscription_select" class="form-label">Subscription</label>
                             <select id="subscription_select" name="fingerprint" class="form-select" required>
                                 <option value="">Select a subscription</option>
-                                {% for sub in aggregated_susbcriptions_per_run|dict_get:run_request.id %}
+                                {% for sub in aggregated_subscriptions_per_run|dict_get:run_request.id %}
                                 <option value="{{ sub.subscription_fingerprint }}">{{ sub.subscription_fingerprint }}</option>
                                 {% endfor %}
                             </select>

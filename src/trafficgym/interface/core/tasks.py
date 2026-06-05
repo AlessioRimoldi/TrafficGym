@@ -16,7 +16,7 @@ from typing import Any, ParamSpec, cast
 from trafficgym.engine.adapters.libsumo_adapter import LibsumoAdapter
 from trafficgym.engine.ports.simulation import RunConfig
 from trafficgym.engine.transformations.registry import REGISTRY, resolve_inputs, Runtime
-from trafficgym.experiment_sdk.experiments.base import Experiment
+from trafficgym.engine.experiment import Experiment
 from trafficgym.interface.core.models import (
     RunRequest,
     RunExecution,
@@ -268,7 +268,7 @@ def process_run_execution(
                 if step % 10 == 0:
                     RunExecution.objects.filter(pk=execution_pk).update(current_step=step)
 
-            adapter.after_tick = log_step
+            adapter._after_tick = log_step
             adapter.start()
             experiment_instance.run(adapter=adapter)
 

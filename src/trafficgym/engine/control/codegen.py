@@ -104,7 +104,7 @@ def generate(graph: _GraphSpec, name: str) -> str:
 
     lines: list[str] = []
     lines.append("from typing import Any")
-    lines.append("from trafficgym.experiment_sdk.experiments.base import Experiment")
+    lines.append("from trafficgym.engine.experiment import Experiment")
     lines.append("from trafficgym.engine.ports.simulation import SimulationPort")
     for mod, class_names in sorted(by_module.items()):
         lines.append(
@@ -138,7 +138,8 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
             if obs_key not in seen:
                 seen.add(obs_key)
                 fp = f"{_o['domain']}.{_o['getter']}.{_o['object_id']}"
-                out.append(f'self.subscribe("{fp}", "{_o["domain"]}", "{_o["getter"]}", "{_o["object_id"]}")')
+                oid_repr = f'"{_o["object_id"]}"' if _o["object_id"] else "None"
+                out.append(f'self.subscribe("{fp}", "{_o["domain"]}", "{_o["getter"]}", {oid_repr})')
     if seen:
         out.append("")
 
@@ -273,7 +274,7 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                 for rec in blk_record:
                     rkey = rec["output_key"]
                     rname = rec["name"]
-                    out.append(f'{_I}if "{rkey}" in r: self._record("{rname}", r["{rkey}"])')
+                    out.append(f'{_I}if "{rkey}" in r: self.record("{rname}", r["{rkey}"])')
 
                 controlled.append((instance_var, obs_fn, act_fn))
 
@@ -324,9 +325,10 @@ def _build_obs_stmts(
         if sid in obs_by_id:
             _o = obs_by_id[sid]
             _c = _GETTER_CAST.get(_o["getter"], "str")
+            oid_repr = f'"{_o["object_id"]}"' if _o["object_id"] else "None"
             raw = (
                 f'{_c}(a.query("{_o["domain"]}", "{_o["getter"]}", '
-                f'"{_o["object_id"]}", {{}}))'
+                f'{oid_repr}, {{}}))'
             )
             var = f"_r{counter[0]}"
             counter[0] += 1

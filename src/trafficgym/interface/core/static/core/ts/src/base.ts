@@ -156,7 +156,7 @@ function initCreateRunModal(): void {
     async function refreshExperiments(scenarioId: string): Promise<void> {
         if (!experimentSelect) return;
         const res = await fetch(`/api/scenarios/${scenarioId}/experiments`);
-        if (!res.ok) return;
+        if (!res.ok) { console.warn(`Failed to load experiments for scenario ${scenarioId}: ${res.status}`); return; }
         const experiments = await res.json() as { sha256: string; name: string; version: number; source: string }[];
         const current = experimentSelect.value;
         experimentSelect.innerHTML = "";
@@ -277,7 +277,7 @@ function initScenarioPreviews(): void {
                 img.style.cssText = "width:90%; height:90%; object-fit:contain;";
                 container.replaceChildren(img);
             })
-            .catch(() => {});
+            .catch((err) => console.warn("Failed to load scenario preview:", err));
     });
 }
 

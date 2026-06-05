@@ -473,7 +473,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
     if fingerprints:
         base_qs = base_qs.filter(subscription_fingerprint__in=fingerprints)
 
-    class AggreagatedRow(TypedDict):
+    class AggregatedRow(TypedDict):
         sum: float
         min: float
         max: float
@@ -486,7 +486,7 @@ def subscription_data(request: HttpRequest, pk: str) -> HttpResponse:
 
     if aggregation_function in ["sum", "avg", "max", "min"]:
         # Initialise aggregation per fingerprint
-        agg_temp: dict[tuple[float, str], AggreagatedRow] = {}
+        agg_temp: dict[tuple[float, str], AggregatedRow] = {}
         for e in base_qs.values(
             "simulation_time",
             "subscription_fingerprint",
@@ -661,7 +661,7 @@ def analytics_run_request_view(request: HttpRequest) -> HttpResponse:
 
     context = {
         "run_requests": run_requests,
-        "aggregated_susbcriptions_per_run": aggregated_subscriptions_per_run,
+        "aggregated_subscriptions_per_run": aggregated_subscriptions_per_run,
         "aggregation_functions": aggregation_map.keys(),
     }
 
@@ -752,13 +752,6 @@ def scenario_overview(request: HttpRequest) -> HttpResponse:
     context = {"scenarios": scenarios, "form": form, "all_artefacts": all_artefacts}
 
     return render(request, "core/scenario_overview.html", context)
-
-
-def scenario_detail(request: HttpRequest, pk: str) -> HttpResponse:
-    scenario = get_object_or_404(Scenario, pk)
-
-    context = {"scneario": scenario}
-    return render(request, "core/scenario_detail.html", context)
 
 
 def experiments_overview(request: HttpRequest) -> HttpResponse:

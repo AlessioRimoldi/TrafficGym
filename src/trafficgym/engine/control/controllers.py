@@ -74,6 +74,13 @@ class StaticTLSController:
     holding each for its configured duration in seconds."""
 
     def __init__(self, phases: list[str], durations: list[int]) -> None:
+        if len(phases) != len(durations):
+            raise ValueError(
+                f"phases and durations must have the same length "
+                f"({len(phases)} phases vs {len(durations)} durations)"
+            )
+        if any(d < 0 for d in durations):
+            raise ValueError("phase durations must be non-negative")
         self.phases = phases
         self.durations = durations
         self._phase_index = 0

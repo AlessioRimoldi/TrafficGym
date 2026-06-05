@@ -141,7 +141,6 @@ class LogPersistenceHandlerTransformRequest(BaseLogPersistenceHandler):
                         traceback=tb,
                     )
                 )
-                continue
 
             except Exception as e:
                 self._internal_logger.error(
@@ -179,7 +178,6 @@ class LogPersistenceHandlerRunRequest(BaseLogPersistenceHandler):
                         traceback=tb,
                     )
                 )
-                continue
 
             except Exception as e:
                 self._internal_logger.error(

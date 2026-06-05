@@ -2,7 +2,9 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "db:clear": "dropdb trafficgym && createdb trafficgym && python manage.py migrate"
+    "db:clear": "dropdb trafficgym && createdb trafficgym && python manage.py migrate",
+    "docs:build": "python -m sphinx -b html ../../../docs ../../../docs/_build/html -E",
+    "docs:watch": "python -m sphinx-autobuild ../../../docs ../../../docs/_build/html"
   },
   "devDependencies": {
     "@types/bootstrap": "^5.2.10",

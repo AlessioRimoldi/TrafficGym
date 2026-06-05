@@ -3,6 +3,7 @@ from trafficgym.engine.ports.simulation import (
     MappingValue,
     Observation,
     Params,
+    InvalidGetterError,
 )
 from dataclasses import dataclass
 from libsumo import TraCIException  # type: ignore[import-untyped]
@@ -112,10 +113,11 @@ class FakeAdapter(SimulationPort):
             domain=domain, attribute=guess_name, object_id=object_id
         )
 
+        if state_key not in self.state:
+            raise InvalidGetterError(
+                f"Attribute not found in fake state: {domain}.{object_id}.{getter_name}"
+            )
         attribute_value = self.state[state_key]
-        # if attribute_value is None:
-        #     # attribute_value = Value(null_value=Value.null_value)
-        #     raise InvalidGetterError("Attribute not found in fake state")
 
         logging.debug(
             f"Invoked fake getter: {domain}.{object_id}.{getter_name}_{args}"
