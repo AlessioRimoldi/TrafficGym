@@ -1,4 +1,6 @@
 from django.db import models, IntegrityError
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
 from django.conf import settings
 from pathlib import Path
 from typing import Any, cast, TYPE_CHECKING
@@ -231,15 +233,20 @@ class RunRequest(models.Model):
 
         return hasher.hexdigest()
 
-    # def save(self, *args: Any, **kwargs: Any) -> None:
-    #     if self._state.adding:
-    #         if not self.run_signature and self.scenario and self.experiment:
-    #             self.run_signature = self.compute_sha256()
+    _MUTABLE_FIELDS = {"status", "started_at", "finished_at", "worker_id"}
 
-    #     else:
-    #         raise ValueError("RunRequests are immutable")
-
-    #     super().save(*args, **kwargs)
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self._state.adding:
+            if not self.run_signature and self.scenario_id and self.experiment_id:
+                self.run_signature = self.compute_sha256()
+        else:
+            update_fields = set(kwargs.get("update_fields") or [])
+            if not update_fields:
+                raise ValueError("RunRequests are immutable — pass update_fields to update status tracking fields")
+            disallowed = update_fields - self._MUTABLE_FIELDS
+            if disallowed:
+                raise ValueError(f"RunRequest fields are immutable: {disallowed}")
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return str(self.id)
@@ -475,3 +482,13 @@ class WorkerLogEntryTransformRequest(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["transform_request", "created_at"])]
+
+
+@receiver(m2m_changed, sender=Scenario.artefacts.through)
+def prevent_scenario_artefact_mutation(
+    sender: Any, instance: Any, action: str, **kwargs: Any
+) -> None:
+    if action in ("pre_remove", "pre_clear"):
+        raise ValueError("Scenario artefacts are immutable — artefacts cannot be removed")
+    if action == "pre_add" and instance.run_requests.exists():
+        raise ValueError("Cannot add artefacts to a scenario that already has run requests")

@@ -46,6 +46,7 @@
                     <div class="mt-1" style="font-size: 0.75em; font-weight: normal;">
                         <span class="badge bg-secondary me-1">{{ run_request.experiment.name }} v{{ run_request.experiment.version }}</span>
                         <span class="badge bg-light text-dark border">{{ run_request.scenario.name }}</span>
+                        {% if run_request.open_gui %}<span class="badge bg-warning text-dark ms-1" title="GUI run — results may reflect manual interventions and are not reproducible"><i class="bi bi-display me-1"></i>GUI</span>{% endif %}
                     </div>
                 </div>
                 <div class="card-body">
@@ -73,9 +74,12 @@
                             <select name="run_execution" id="run_executions_select" class="form-select" multiple>
                                 <option value="">All Run Executions</option>
                                 {% for execution in run_request.executions.all %}
-                                <option value="{{ execution.id }}" >{{ execution.id }}</option>
+                                <option value="{{ execution.id }}">{{ execution.id }}{% if run_request.open_gui %} (GUI){% endif %}</option>
                                 {% endfor %}
                             </select>
+                            {% if run_request.open_gui %}
+                            <div class="form-text text-warning"><i class="bi bi-exclamation-triangle me-1"></i>GUI run — not reproducible</div>
+                            {% endif %}
                         </div>
                         <a href="{% url "run_request_detail" run_request.id %}" class="btn btn-outline-secondary w-100 mb-2">Back to Run Request</a>
                         <button type="submit" class="btn btn-primary w-100"

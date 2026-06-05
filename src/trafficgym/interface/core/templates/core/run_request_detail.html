@@ -12,6 +12,12 @@
     <div class="card m-4">
         <div class="card-header fs-4 fw-bold py-3">Properties</div>
         <div class="card-body">
+        {% if run_request.open_gui %}
+        <div class="alert alert-warning">
+            <i class="bi bi-display me-2"></i>
+            This run was executed with the GUI open. Results may reflect manual interventions and are <strong>not reproducible</strong>.
+        </div>
+        {% endif %}
         <p><strong>Run Request ID:</strong> {{ run_request.id }}</p>
         <p><strong>Rerun Count:</strong> {{ run_request.rerun_count }}</p>
         <p><strong>Status:</strong>
