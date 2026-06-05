@@ -17,7 +17,7 @@ class GetterDef(TypedDict):
 
 class SetterDef(TypedDict):
     setter: str
-    sumo_param: str   # SUMO API parameter name (used by codegen)
+    sumo_param: str   # SUMO TraCI API parameter name (used by codegen)
     type: str
     input_key: str    # semantic variable name for port compatibility
 

@@ -18,7 +18,7 @@ class RampMeterCycleActuatorOutputs(TypedDict, total=False):
 class RampMeterCycleActuator:
     """Converts a continuous metering rate (veh/h) into a two-phase TLS state string
     ("G" / "r"). Only emits on phase transitions. Red duration is recalculated at
-    each green→red boundary from the current rate, sof changes take effect next cycle."""
+    each green→red boundary from the current rate, so changes take effect next cycle."""
 
     def __init__(
         self,

@@ -74,6 +74,8 @@ matching ``__init__`` argument can be added via ``extra_params``:
    :undoc-members:
    :show-inheritance:
 
+.. _code-generation:
+
 Code Generation
 ---------------
 

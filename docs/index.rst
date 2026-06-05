@@ -13,6 +13,8 @@ seeding, subscription logging, and analytics.
    :caption: Contents
 
    getting_started
+   case_study_ramp_meter
+   extending
    engine.experiment
    engine.ports
    engine.control

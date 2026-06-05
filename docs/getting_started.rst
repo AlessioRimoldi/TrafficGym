@@ -2,7 +2,9 @@ Getting Started
 ===============
 
 This page walks through the full workflow: uploading a scenario, defining an
-experiment, running the simulation, and analysing the results.
+experiment, running the simulation, and analysing the results.  For a
+worked example applying this workflow to a real ramp metering problem, see
+:doc:`case_study_ramp_meter`.
 
 Step 1 — Upload a scenario
 --------------------------
@@ -77,6 +79,17 @@ The graph builder lets you visually wire together observer nodes, blocks
 7. Click **Save** — the platform generates a Python
    :class:`~trafficgym.engine.experiment.Experiment` subclass from the graph
    and registers it as an experiment.
+
+Switching scenario on an existing graph
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When editing or duplicating an existing graph you can change the scenario using
+the scenario selector in the graph builder header.  The graph builder checks
+all observer and actuator node IDs against the new scenario's inspection
+results.  Any node whose object ID does not exist in the new scenario is
+highlighted in **red**, indicating it needs to be updated before saving.  This
+makes it easy to adapt a working pipeline to a new road network without
+rebuilding the graph from scratch.
 
 Writing controllers in code
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -205,8 +218,9 @@ not directly queryable from SUMO — for example a controller's internal state:
 Step 3 — Create a run request
 ------------------------------
 
-From the **Scenarios** page click **Run**.  Select a scenario and an
-experiment, then configure:
+Click **Create new run request** from the **Scenarios** page or the
+**Experiment overview** to open the **Create Run Request** modal.  Select a
+scenario and an experiment, then configure:
 
 * **Step length** — simulation step size in milliseconds (default 1000 ms).
 * **Number of reruns** — how many independent executions to launch, each with
