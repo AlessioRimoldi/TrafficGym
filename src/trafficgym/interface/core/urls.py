@@ -9,8 +9,7 @@ _DOCS_ROOT = Path(__file__).parents[4] / "docs" / "_build" / "html"
 
 urlpatterns = [
     path("favicon.ico", lambda r: HttpResponse(status=204)),
-    # path("", views.index, name="index"),
-    path("", views.run_requests_list_view, name="run_requests_list"),
+    path("", views.index, name="index"),
     path(
         "run_requests_list/",
         views.run_requests_list_view,

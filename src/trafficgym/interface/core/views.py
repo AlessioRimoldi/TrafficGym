@@ -69,8 +69,8 @@ class InspectionNotFoundPayload(TypedDict, total=False):
     inspect_schema: TransformationSpec
 
 
-def index(_: HttpRequest) -> HttpResponse:
-    return HttpResponse("Help world")
+def index(request: HttpRequest) -> HttpResponse:
+    return render(request, "core/landing.html")
 
 
 def run_requests_list_view(request: HttpRequest) -> HttpResponse:
