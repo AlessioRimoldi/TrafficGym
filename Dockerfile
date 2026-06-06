@@ -15,6 +15,7 @@ FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libx11-6 libxext6 libsm6 libxrender1 libgl1 libglib2.0-0 \
         libxi6 libxrandr2 libxdamage1 libxfixes3 libxcursor1 libxcomposite1 \
+        fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -31,6 +32,16 @@ RUN pip install --no-cache-dir -r requirements-docs.txt
 COPY pyproject.toml .
 COPY src/ src/
 RUN pip install --no-cache-dir -e .
+
+# Patch sumonetvis for shapely >=2 compatibility (.geoms required on MultiPolygon)
+RUN python -c "\
+import SumoNetVis, os; \
+p = os.path.join(os.path.dirname(SumoNetVis.__file__), 'Net.py'); \
+src = open(p).read(); \
+open(p, 'w').write(src.replace( \
+    'sorted(self.shape, key=lambda x: x.area)', \
+    'sorted(self.shape.geoms, key=lambda x: x.area)' \
+))"
 
 # Build Sphinx HTML (autodoc mocks libsumo/django/celery — see docs/conf.py)
 COPY docs/ docs/

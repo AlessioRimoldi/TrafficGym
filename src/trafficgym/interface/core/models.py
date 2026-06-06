@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from django.db import models, IntegrityError
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
@@ -23,8 +25,8 @@ class Artefact(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(blank=True, default=dict)
 
-    derivatives: "models.Manager[TransformationInput]"
-    provenance: "models.Manager[TransformationOutput]"
+    derivatives: models.Manager[TransformationInput]
+    provenance: models.Manager[TransformationOutput]
 
     def __str__(self) -> str:
         return Path(self.file.name).name

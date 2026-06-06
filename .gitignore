@@ -4,5 +4,6 @@ __pycache__/
 src/sumo_workbench_engine.egg-info
 docs/_build
 dump.rdb
+.env
 **/**/build/
 **/**/node_modules/

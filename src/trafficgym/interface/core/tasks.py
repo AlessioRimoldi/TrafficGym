@@ -332,9 +332,6 @@ def derive_from_artefact(artefact_transformation_request_id: str, scenario_id: s
                 update_fields=["status", "worker_id", "started_at"]
             )
 
-        # input_artefacts: list[Artefact] = [
-        #     *transformation_request.input_artefacts.all()
-        # ]
         bindings = transformation_request.input_bindings.select_related(
             "artefact"
         )
