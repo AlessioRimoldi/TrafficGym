@@ -25,17 +25,17 @@ class OutputSpec:
 
 
 @dataclass
+class Runtime:
+    base_path: Path
+
+
+@dataclass
 class TransformationSpec:
     key: str
     inputs: List[InputSpec]
     outputs: List[OutputSpec]
     handler: Callable[[dict[str, str], Runtime], Coroutine[Any, Any, dict[str, str]]]
     docstring: str
-
-
-@dataclass
-class Runtime:
-    base_path: Path
 
 
 REGISTRY: dict[str, TransformationSpec] = {}

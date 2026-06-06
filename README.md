@@ -18,6 +18,15 @@ Experiments are Python classes (or visual pipelines built in the graph builder) 
 
 **Requirements:** Docker with the Compose plugin (`docker compose version`).
 
+If `docker compose` is not found, install the plugin for your OS:
+
+| OS | Command |
+|---|---|
+| Arch Linux | `sudo pacman -S docker-compose` |
+| Ubuntu / Debian | `sudo apt install docker-compose-plugin` |
+| macOS (Homebrew) | `brew install docker-compose` |
+| Other | [docs.docker.com/compose/install](https://docs.docker.com/compose/install/) |
+
 ```bash
 git clone https://github.com/AlessioRimoldi/TrafficGym.git
 cd TrafficGym
