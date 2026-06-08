@@ -23,6 +23,7 @@ async def netconvert_handler(
 
     cmd = [
         "netconvert",
+        "--no-turnarounds.except-deadend",
         "--osm",
         osm_xml,
         "-o",
