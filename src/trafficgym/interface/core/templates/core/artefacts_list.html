@@ -1,6 +1,9 @@
 {% extends "core/base.html" %}
 {% block title %}Artefacts List{% endblock %}
 {% load static %}
+
+{% block content_class %}{% if artefacts %}container my-4 page-content{% endif %}d-flex{% endblock %}
+
 {% block content %}
 <script type="module" src="{% static "core/js/build/artefacts_list.js" %}" defer></script>
 {% if messages %}
@@ -13,9 +16,6 @@
     {% endfor %}
 </div>
 {% endif %}
-<div class="mb-4">
-    <h1 class="mb-0">Artefacts Overview</h1>
-</div>
 <div class="modal fade" id="createArtefactModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content" id="createArtefactModalContent">
@@ -63,15 +63,15 @@
 </div>
 
 {% if artefacts %}
-<div class="container mt-4">
-    {% comment %} <form method="post" action="{% url 'transform_multiple_artefacts' %}"> {% endcomment %}
+    <div class="mb-4">
+        <h1 class="mb-0">Artefacts Overview</h1>
+    </div>
     <form method="post" action="{% url 'create_transformation_request' %}">
         {% csrf_token %}
 
         <div class="mb-2 d-flex gap-2 align-items-center">
             <button type="button" class="btn btn-primary transform-modal-btn" disabled>Transform&nbsp;&nbsp;<i class="bi bi-tools"></i></button>
             <a class="btn btn-outline-secondary" href="{% url 'transformation_requests_list' %}">Transform Requests</a>
-            {% comment %} <button type="submit" class="btn btn-primary" id="transformModalButton" disabled>Transform&nbsp;&nbsp;<i class="bi bi-tools"></i></button> {% endcomment %}
             <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createArtefactModal" id="openCreateArtefactModal">Add Artefact</button>
         </div>
 
@@ -137,8 +137,49 @@
             </div>
         </div>
     </form>
-</div>
 {% else %}
-<div>No Artefacts to Display</div>
+    <div class="col-12">
+        <div class="position-relative overflow-hidden" style="height: 100%; display: flex; flex-direction: column;">
+            <img src="{% static 'core/network.png' %}" alt="zurich map"
+                style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;">
+            <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.35);"></div>
+            <div class="position-relative d-flex align-items-center justify-content-center" style="flex: 1;">
+                <div class="text-center p-5 rounded-4"
+                    style="background: rgba(255,255,255,0.15);
+                            backdrop-filter: blur(12px);
+                            -webkit-backdrop-filter: blur(12px);
+                            border: 1px solid rgba(255,255,255,0.3);
+                            animation: fadeIn 0.6s ease-in;
+                            max-width: 600px;">
+                    <h2 class="text-white mb-3">No Artefacts yet</h2>
+                    <p class="text-white mb-2">Artefacts are building blocks for Scenarios and Experiments.</p>
+                    <p class="mb-4" style="color: rgba(255,255,255,0.7); font-size: 0.9em;">
+                        After uploading one, you will be able to create Artefact Transformations.
+                    </p>
+                    <div class="d-flex justify-content-center gap-3">
+                        <button type="button" class="btn btn-primary btn-lg"
+                                data-bs-toggle="modal" data-bs-target="#createArtefactModal">
+                            Add Artefacts(s)
+                        </button>
+                        <a href="/docs/generating_a_network.html" target="_blank"
+                        class="btn btn-lg" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5);">
+                            Documentation
+                        </a>
+                    </div>
+                    <p class="mt-4 mb-0" style="font-size: 0.7em; color: rgba(255,255,255,0.5);">
+                        Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank"
+                                    style="color: rgba(255,255,255,0.5);">OpenStreetMap</a> contributors
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    </style>
 {% endif %}
 {% endblock %}

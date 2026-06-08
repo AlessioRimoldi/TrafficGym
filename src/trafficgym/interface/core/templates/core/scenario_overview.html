@@ -1,5 +1,8 @@
 {% extends "core/base.html" %}
+{% load static %}
 {% block title %}Scenario Overview{% endblock %}
+
+{% block content_class %}{% if scenarios %}container my-4 page-content{% endif %}d-flex{% endblock %}
 
 {% block content %}
 {% if messages %}
@@ -12,10 +15,6 @@
     {% endfor %}
 </div>
 {% endif %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">Scenario Overview</h1>
-    <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createScenarioModal" id="openAddScenarioModal">Add Scenario</button>
-</div>
 <div class="modal fade" id="createScenarioModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content" id="createScenarioModalContent">
@@ -79,74 +78,124 @@
         </div>
     </div>
 </div>
-<div class="row gx-2 gy-3">
-    {% for scenario in scenarios %}
-    <div class="col-6">
-        <div class="card h-100 d-flex flex-column">
-            <div class="card-header fs-4 fw-bold py-3 text-truncate">
-                {{ scenario.name }}
-                <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ scenario.id }}</span>
+{% if scenarios %}
+    <div class="row gx-2 gy-3">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0">Scenario Overview</h1>
+            <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createScenarioModal" id="openAddScenarioModal">Add Scenario</button>
+        </div>
+        {% for scenario in scenarios %}
+            <div class="col-6">
+                <div class="card h-100 d-flex flex-column">
+                    <div class="card-header fs-4 fw-bold py-3 text-truncate">
+                        {{ scenario.name }}
+                        <span class="text-muted" style="font-size: 0.45em; font-family: monospace;">{{ scenario.id }}</span>
+                    </div>
+                    <div class="img-thumbnail d-flex align-items-center justify-content-center"
+                    style="flex:1; min-height:60px; overflow:hidden; background-color:#f0f0f0;">
+
+                {% with tr=scenario.image_transformation_request %}
+
+                    {% if tr and tr.status == "COMPLETE" %}
+                        {% with img_artefact=scenario.image_artefact %}
+                        <a href="#" class="preview-btn d-block w-100 h-100"
+                            data-filepath="{{ scenario.image_url|slice:'7:' }}"
+                            data-filename="{{ scenario.name }} — network preview"
+                            {% if img_artefact %}data-artefact-url="{% url 'artefact_detail' img_artefact.sha256 %}"{% endif %}>
+                            <img src="{{ scenario.image_url }}"
+                                    alt="{{ scenario.name }} network preview"
+                                    style="width:100%; height:100%; object-fit:contain; display:block;">
+                        </a>
+                        {% endwith %}
+
+                    {% elif tr and tr.status in "PENDING PREPARING RUNNING" %}
+                        <div class="text-center text-muted"
+                                data-preview-tr-id="{{ tr.pk }}"
+                                data-scenario-id="{{ scenario.id }}">
+                            <div class="spinner-border spinner-border-sm mb-2"></div>
+                            <div>Generating preview…</div>
+                        </div>
+            
+                    {% else %}
+                        <span class="text-muted small text-center">
+                            Network Preview Unavailable
+                            <br>
+            
+                            {% if tr %}
+                                <a href="{% url 'transformation_request_detail' tr.pk %}">
+                                    <i class="bi bi-image"></i>
+                                    View <span style="font-family: monospace;">netpreview</span> request
+                                </a>
+                            {% else %}
+                                <span style="font-family: monospace;">netpreview</span> request not found
+                            {% endif %}
+                        </span>
+                    {% endif %}
+            
+                {% endwith %}
+                    </div>
+                    <div class="card-footer p-2">
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for artefact in scenario.artefacts.all %}
+                            <a href="#" class="preview-btn btn btn-sm btn-outline-secondary text-truncate"
+                            style="max-width: 180px;"
+                            data-filepath="{{ artefact.file.name }}"
+                            data-filename="{{ artefact.original_name }}"
+                            data-artefact-url="{% url 'artefact_detail' artefact.sha256 %}">
+                                <i class="bi bi-file-earmark me-1"></i>{{ artefact.original_name }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="img-thumbnail d-flex align-items-center justify-content-center"
-            style="flex:1; min-height:60px; overflow:hidden; background-color:#f0f0f0;">
-
-           {% with tr=scenario.image_transformation_request %}
-
-               {% if tr and tr.status == "COMPLETE" %}
-                   {% with img_artefact=scenario.image_artefact %}
-                   <a href="#" class="preview-btn d-block w-100 h-100"
-                      data-filepath="{{ scenario.image_url|slice:'7:' }}"
-                      data-filename="{{ scenario.name }} — network preview"
-                      {% if img_artefact %}data-artefact-url="{% url 'artefact_detail' img_artefact.sha256 %}"{% endif %}>
-                       <img src="{{ scenario.image_url }}"
-                            alt="{{ scenario.name }} network preview"
-                            style="width:100%; height:100%; object-fit:contain; display:block;">
-                   </a>
-                   {% endwith %}
-
-               {% elif tr and tr.status in "PENDING PREPARING RUNNING" %}
-                   <div class="text-center text-muted"
-                        data-preview-tr-id="{{ tr.pk }}"
-                        data-scenario-id="{{ scenario.id }}">
-                       <div class="spinner-border spinner-border-sm mb-2"></div>
-                       <div>Generating preview…</div>
-                   </div>
-       
-               {% else %}
-                   <span class="text-muted small text-center">
-                       Network Preview Unavailable
-                       <br>
-       
-                       {% if tr %}
-                           <a href="{% url 'transformation_request_detail' tr.pk %}">
-                               <i class="bi bi-image"></i>
-                               View <span style="font-family: monospace;">netpreview</span> request
-                           </a>
-                       {% else %}
-                           <span style="font-family: monospace;">netpreview</span> request not found
-                       {% endif %}
-                   </span>
-               {% endif %}
-       
-           {% endwith %}
-            </div>
-            <div class="card-footer p-2">
-                <div class="d-flex flex-wrap gap-1">
-                    {% for artefact in scenario.artefacts.all %}
-                    <a href="#" class="preview-btn btn btn-sm btn-outline-secondary text-truncate"
-                       style="max-width: 180px;"
-                       data-filepath="{{ artefact.file.name }}"
-                       data-filename="{{ artefact.original_name }}"
-                       data-artefact-url="{% url 'artefact_detail' artefact.sha256 %}">
-                        <i class="bi bi-file-earmark me-1"></i>{{ artefact.original_name }}
-                    </a>
-                    {% endfor %}
+        {% endfor %}
+        </div>
+    </div>
+{% else %}
+    <div class="col-12">
+        <div class="position-relative overflow-hidden" style="height: 100%; display: flex; flex-direction: column;">
+            <img src="{% static 'core/network.png' %}" alt="zurich map"
+                style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;">
+            <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.35);"></div>
+            <div class="position-relative d-flex align-items-center justify-content-center" style="flex: 1;">
+                <div class="text-center p-5 rounded-4"
+                    style="background: rgba(255,255,255,0.15);
+                            backdrop-filter: blur(12px);
+                            -webkit-backdrop-filter: blur(12px);
+                            border: 1px solid rgba(255,255,255,0.3);
+                            animation: fadeIn 0.6s ease-in;
+                            max-width: 480px;">
+                    <h2 class="text-white mb-3">No Scenarios yet</h2>
+                    <p class="text-white mb-2">A scenario defines the road network your experiments will run on.</p>
+                    <p class="mb-4" style="color: rgba(255,255,255,0.7); font-size: 0.9em;">
+                        Upload your SUMO network files to get started.
+                    </p>
+                    <div class="d-flex justify-content-center gap-3">
+                        <button type="button" class="btn btn-primary btn-lg"
+                                data-bs-toggle="modal" data-bs-target="#createScenarioModal">
+                            Add Scenario
+                        </button>
+                        {% comment %} <a href="/docs/models.html#scenarios" target="_blank" {% endcomment %}
+                        <a href="docs/getting_started.html#step-1-upload-a-scenario" target="_blank"
+                        class="btn btn-lg" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5);">
+                            Documentation
+                        </a>
+                    </div>
+                    <p class="mt-4 mb-0" style="font-size: 0.7em; color: rgba(255,255,255,0.5);">
+                        Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank"
+                                    style="color: rgba(255,255,255,0.5);">OpenStreetMap</a> contributors
+                    </p>
                 </div>
             </div>
         </div>
     </div>
-    {% empty %}
-        <div>No Scenarios to Display</div>
-    {% endfor %}
-</div>
+
+    <style>
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    </style>
+{% endif %}
 {% endblock %}
