@@ -3,6 +3,9 @@
 {% load static %}
 {% load dict_filters %}
 
+{% block content_class %}{% if run_requests %}container my-4 page-content{% endif %}d-flex{% endblock %}
+
+
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -16,8 +19,8 @@
     </div>
     {% endfor %}
 </div>
-<div class="container mt-4">
 {% if run_requests %}
+<div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="mb-0">Analytics</h1>
         <button class="btn btn-primary ms-auto" id="downloadButton">Download Data</button>
@@ -121,7 +124,7 @@
             </div>
         </div>
     </div>
-
+</div>
 {% else %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">Analytics — No Run Request Selected</h1>
@@ -129,5 +132,4 @@
 </div>
 No data to show for this run request
 {% endif %}
-</div>
 {% endblock %}

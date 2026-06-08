@@ -1,8 +1,9 @@
 {% extends "core/base.html" %}
 {% block title %}Analytics{% endblock %}
+{% load static %}
+
+{% block content_class %}d-flex{% endblock %}
 
 {% block content %}
-
-<h1>No Analytics to Show, create a Run Request first and ensure it sucessfully completes.</h1>
-
+   {% include "core/components/empty_state.html" with run_request_button=True background_image="core/london.png" title="No Analytics yet" description="To view analytics, create a run request." subtitle="" modal_id="createScenarioModal" cta_label="Create New Run Request" docs_url="/docs/getting_started.html#step-3-create-a-run-request" %}
 {% endblock %}

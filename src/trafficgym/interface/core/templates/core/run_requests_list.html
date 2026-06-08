@@ -1,10 +1,13 @@
 {% extends "core/base.html" %}
 {% block title %}Run Requests{% endblock %}
+{% load static %}
+
+{% block content_class %}{% if run_request_list %}container my-4 page-content{% endif %}d-flex{% endblock %}
 
 {% block content %}
+{% if run_requests_list %}
 <div class="container mt-4">
 <h1> Run Requests List </h1>
-{% if run_requests_list %}
     <table class="table table-striped table-hover">
         <thead>
             <tr>
@@ -29,8 +32,8 @@
             {% endfor %}
         </tbody>
     </table>
-{% else %}
-    <p> No Run Requests to Display </p>
-{% endif %}
 </div>
+{% else %}
+    {% include "core/components/empty_state.html" with run_request_button=True background_image="core/london.png" title="No Run Requests yet" description="Run requests combine scenarios and experiments to run simulations." subtitle="Create a new run request to get started." modal_id="createRunModal" cta_label="Create New Run Request" docs_url="/docs/getting_started.html#step-3-create-a-run-request" %}
+{% endif %}
 {% endblock %}

@@ -2,6 +2,8 @@
 {% block title %}Experiment Overview{% endblock %}
 {% load static %}
 
+{% block content_class %}{% if experiment_groups or experiment_graph_scenario_groups %}container my-4 page-content{% endif %}d-flex{% endblock %}
+
 {% block content %}
 <script type="module" src="{% static "core/js/build/experimentGraphBuilder.js" %}" defer></script>
 {% if messages %}
@@ -14,23 +16,7 @@
     {% endfor %}
 </div>
 {% endif %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">Experiment Overview</h1>
-    {% comment %} <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Add Experiment</button> {% endcomment %}
-    <div class="dropdown">
-        <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-            Add Experiment
-          </button>
-          <ul class="dropdown-menu">
-            <li>
-                <a href="#" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Import from File</a>
-            </li>
-            <li><a href="#" class="dropdown-item open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}">
-                Create from Scenario
-            </a></li>
-        </ul>
-    </div>
-</div>
+
 <div class="modal fade" id="createExperimentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content" id="createExperimentModalContent">
@@ -63,6 +49,29 @@
         </div>
     </div>
 </div>
+
+{% if not experiment_graph_scenario_groups and not experiment_groups %}
+    {% include "core/components/empty_state.html" with experiment_dropdown=True background_image="core/muenchen.png" title="No Experiments yet" description="Experiments describe what should happend during the execution of a simulation run." subtitle="Upload a file, or create an experiment graph based off a scenario to get&nbsp;started." modal_id="createArtefactModal" cta_label="Add Experiment" docs_url="/docs/getting_started.html#step-2-define-an-experiment" %}
+{% else %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Experiment Overview</h1>
+        {% comment %} <button type="button" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Add Experiment</button> {% endcomment %}
+        <div class="dropdown">
+            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Add Experiment
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a href="#" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Import from File</a>
+                </li>
+                <li><a href="#" class="dropdown-item open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}">
+                    Create from Scenario
+                </a></li>
+            </ul>
+        </div>
+    </div>
+{% endif %}
+
 {% if experiment_graph_scenario_groups %}
 <h5 class="text-muted mb-2 mt-1">Graph-based</h5>
 {% for scenario, name_groups in experiment_graph_scenario_groups %}
@@ -168,7 +177,6 @@
 
 {% if experiment_groups %}
 <h5 class="text-muted mb-2">File-based</h5>
-{% endif %}
 <div class="row gx-2 gy-3">
     {% for latest, older in experiment_groups %}
     <div class="col-6">
@@ -240,6 +248,8 @@
     </div>
     {% endfor %}
 </div>
+{% endif %}
+
 
 <div class="modal fade" id="graphBuilderModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">

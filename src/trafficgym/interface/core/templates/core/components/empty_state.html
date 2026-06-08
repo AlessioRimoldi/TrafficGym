@@ -15,10 +15,34 @@
             <p class="text-white mb-2">{{ description }}</p>
             <p class="mb-4" style="color: rgba(255,255,255,0.7); font-size: 0.9em;">{{ subtitle }}</p>
             <div class="d-flex justify-content-center gap-3">
-                <button type="button" class="btn btn-primary btn-lg"
-                        data-bs-toggle="modal" data-bs-target="#{{ modal_id }}">
-                    {{ cta_label }}
-                </button>
+                {% if experiment_dropdown %}
+                    <div class="dropdown">
+                        <button class="btn btn-primary btn-lg dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            {{ cta_label }}
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a href="#" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createExperimentModal" id="openAddExperimentModal">Import from File</a></li>
+                            <li><a href="#" class="dropdown-item open-graph-builder" data-url="{% url 'experiment_graph_builder_modal' %}">Create from Scenario</a></li>
+                        </ul>
+                    </div>
+                {% else %}
+                    {% if run_request_button %}
+                        <button
+                            type="button"
+                            class="btn btn-primary btn-lg open-run-modal"
+                            data-url="{% url 'create_run_modal' %}">
+                            {{ cta_label }}
+                        </button>
+                    {% else %}
+                        <button
+                            type="button"
+                            class="btn btn-primary btn-lg"
+                            data-bs-toggle="modal"
+                            data-bs-target="#{{ modal_id }}">
+                            {{ cta_label }}
+                        </button>
+                    {% endif %}
+                {% endif %}
                 <a href="{{ docs_url }}" target="_blank"
                    class="btn btn-lg" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5);">
                     Documentation
