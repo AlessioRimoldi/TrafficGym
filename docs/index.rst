@@ -14,12 +14,14 @@ seeding, subscription logging, and analytics.
 
    getting_started
    case_study_ramp_meter
+   generating_a_network
    extending
    engine.experiment
    engine.ports
    engine.control
    engine.adapters
    engine.transformations
+   models
 
 Indices
 -------
