@@ -163,7 +163,7 @@ function renderMappingUI(mappingContainer: HTMLDivElement, selectedArtefacts: { 
         transformation.inputs
             .filter(i => i.type === InputType.JSON)
             .forEach(i => {
-                defaultParams[i.name] = {};
+                defaultParams[i.name] = "";
             });
     
         textarea.value = JSON.stringify(defaultParams, null, 2);
