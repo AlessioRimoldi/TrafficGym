@@ -420,11 +420,12 @@ def derive_from_artefact(artefact_transformation_request_id: str, scenario_id: s
         raise
 
     finally:
-        with transaction.atomic():
-            if transformation_request.status in ["PENDING", "PREPARING", "RUNNING"]:
-                transformation_request.status = "FAILED"
-                transformation_request.finished_at = timezone.now()
-                transformation_request.save(update_fields=["status", "finished_at"])
+        # breakpoint()
+        # with transaction.atomic():
+        #     if transformation_request.status in ["PENDING", "PREPARING", "RUNNING"]:
+        #         transformation_request.status = "FAILED"
+        #         transformation_request.finished_at = timezone.now()
+        #         transformation_request.save(update_fields=["status", "finished_at"])
 
         if handler is not None:
             handler.flush_queue()
