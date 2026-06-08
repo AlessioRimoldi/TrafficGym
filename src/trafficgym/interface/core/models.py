@@ -239,7 +239,7 @@ class RunRequest(models.Model):
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         if self._state.adding:
-            if not self.run_signature and self.scenario_id and self.experiment_id:
+            if not self.run_signature and self.scenario.id and self.experiment.sha256:
                 self.run_signature = self.compute_sha256()
         else:
             update_fields = set(kwargs.get("update_fields") or [])
