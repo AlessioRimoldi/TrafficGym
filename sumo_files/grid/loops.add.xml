@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-06-09T13:31:07.465657+01:00 by Eclipse SUMO netedit 1.25.0
+-->
+
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    <!-- Detectors -->
+    <inductionLoop id="C3E" lane="C3D3_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="C3N" lane="C3C4_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="C3S" lane="C3C2_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="D3E" lane="D3E3_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="D3N" lane="D3D4_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="D3S" lane="D3D2_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="E3E" lane="E3F3_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="E3N" lane="E3E4_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="E3S" lane="E3E2_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="F3E" lane="F3G3_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="F3N" lane="F3F4_0" pos="100.00" period="300.00" file="NUL"/>
+    <inductionLoop id="F3S" lane="F3F2_0" pos="100.00" period="300.00" file="NUL"/>
+</additional>

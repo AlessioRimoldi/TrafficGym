@@ -6,13 +6,110 @@ from trafficgym.engine.ports.simulation import SimulationPort
 from trafficgym.engine.control.registry import block, BlockParam
 
 
+class RatioActuatorInputs(TypedDict):
+    duty_setpoint: float
+
+class RatioActuatorOutputs(TypedDict, total=False):
+    phase: int
+
+@block("Green Time Ratio Actuator", extra_params=[BlockParam("duty_phase", "select", "Duty Phase", "0", ["0", "2"])])
+class RatioActuator:
+    """Actuates a four legged intersection traffic light such that phase i is active `duty`% of the time.
+    This actuator expects four phases. Phases 0 and 2 are traffic phases, whilst phases 1 and 3 are clearing phases (yellow aspects)."""
+
+    def __init__(
+        self,
+        duty_phase: str = "0",
+        max_duty: float = 0.8,
+        min_duty: float = 0.2,
+        cycle_duration_s: float = 30.0,
+    ):
+        self.duty_phase = int(duty_phase)
+        self.complement_phase = (self.duty_phase + 2) % 4
+        self.max_duty = max_duty
+        self.min_duty = min_duty
+        self.cycle_duration_s = cycle_duration_s
+
+        self._current_phase: int = self.duty_phase
+        self._phase_elapsed_s: float = 0.0
+        self._duty_elapsed_s: float = 0.0
+        self._cycle_elapsed_s: float = 0.0
+
+    def step(self, adapter: SimulationPort, inputs: RatioActuatorInputs) -> RatioActuatorOutputs:
+        dt = adapter.seconds_per_step
+        duty = max(self.min_duty, min(self.max_duty, inputs["duty_setpoint"]))
+
+        self._phase_elapsed_s += dt
+        self._cycle_elapsed_s += dt
+
+        # Reset cycle tracking
+        if self._cycle_elapsed_s >= self.cycle_duration_s:
+            self._cycle_elapsed_s = 0.0
+            self._duty_elapsed_s = 0.0
+
+        # Track time spent in duty phase this cycle
+        if self._current_phase == self.duty_phase:
+            self._duty_elapsed_s += dt
+
+        next_phase = self._current_phase
+
+        if self._current_phase == self.duty_phase:
+            # Switch to clearing phase if duty quota is met
+            duty_quota = duty * self.cycle_duration_s
+            if self._duty_elapsed_s >= duty_quota:
+                next_phase = (self._current_phase + 1) % 4
+                self._phase_elapsed_s = 0.0
+
+        elif self._current_phase == self.complement_phase:
+            # Switch to complement clearing phase when remaining time is right
+            remaining = self.cycle_duration_s - self._cycle_elapsed_s
+            complement_quota = (1.0 - duty) * self.cycle_duration_s
+            if self._phase_elapsed_s >= complement_quota:
+                next_phase = (self._current_phase + 1) % 4
+                self._phase_elapsed_s = 0.0
+
+        elif self._current_phase in (1, 3):
+            # Yellow clearing phase — fixed 2s
+            if self._phase_elapsed_s >= 2.0:
+                next_phase = (self._current_phase + 1) % 4
+                self._phase_elapsed_s = 0.0
+
+        if next_phase != self._current_phase:
+            self._current_phase = next_phase
+            return {"phase": self._current_phase}
+
+        return {}
+
+class MeterRateToDutyInputs(TypedDict):
+    meter_rate_veh_per_h: float
+
+class MeterRateToDutyOutputs(TypedDict):
+    duty_setpoint: float
+
+@block("Meter Rate to Duty Converter")
+class MeterRateToDuty:
+    """Converts a metering rate (veh/h) to a green time duty fraction
+    for the RatioActuator, given a saturation flow and cycle duration."""
+
+    def __init__(
+        self,
+        saturation_flow_veh_per_h: float = 1800.0,
+        cycle_duration_s: float = 30.0,
+    ):
+        self.saturation_flow = saturation_flow_veh_per_h
+        self.cycle_duration_h = cycle_duration_s / 3600.0
+
+    def step(self, adapter: SimulationPort, inputs: MeterRateToDutyInputs) -> MeterRateToDutyOutputs:
+        duty = inputs["meter_rate_veh_per_h"] / (self.saturation_flow * (1 / self.cycle_duration_h))
+        duty = max(0.0, min(1.0, duty))
+        return {"duty_setpoint": duty}
+
 class RampMeterCycleActuatorInputs(TypedDict):
     meter_rate_veh_per_h: float
 
 
 class RampMeterCycleActuatorOutputs(TypedDict, total=False):
     state: str
-
 
 @block("Cycle Actuator")
 class RampMeterCycleActuator:

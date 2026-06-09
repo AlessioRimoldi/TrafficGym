@@ -120,7 +120,7 @@ class ALINEAProportional:
         self.saturation = saturation
 
     def step(self, adapter: SimulationPort, inputs: ALINEAProportionalInput) -> ALINEAProportionalOutput:
-        new_meter_rate = self.last_meter_rate + self.Kr * min((self.o_hat - inputs["occupancy"]), self.saturation)
+        new_meter_rate = min(self.last_meter_rate + self.Kr * (self.o_hat - inputs["occupancy"]), self.saturation)
         new_meter_rate = max(self.r_min, min(self.r_max, new_meter_rate))
         self.last_meter_rate = new_meter_rate
         return {"meter_rate_veh_per_h": new_meter_rate}
@@ -191,4 +191,50 @@ class ALINEAProportionalIntegral:
         self.last_occupancy = occ
         return {"meter_rate_veh_per_h": new_meter_rate}
 
+class SixSigGreenWaveInput(TypedDict):
+    pass
 
+class SixSigGreenWaveOutput(TypedDict, total=False):
+    phase_0: int
+    phase_1: int
+    phase_2: int
+    phase_3: int
+    phase_4: int
+    phase_5: int
+
+@block("6 Signal Green Wave")
+class SixSigGreenWave:
+    """Set the phase for six identical TLS programmes such that phase 0 (first green)
+    propagates downstream. initial_offset_s staggers rows for a north-south wave."""
+
+    def __init__(
+        self,
+        prop_delay_s: float = 12.0,
+        initial_offset_s: float = 0.0,
+    ):
+        self.prop_delay_s = prop_delay_s
+        self.phase_durations: list[int] = [4, 3, 4, 3, 4, 3, 4, 3]
+        self._cycle_length: float = sum(self.phase_durations)
+        self._clock: float = -initial_offset_s
+
+    def _phase_at_time(self, t: float) -> int:
+        t = t % self._cycle_length
+        if t < 0:
+            t += self._cycle_length
+        accumulated = 0.0
+        for i, duration in enumerate(self.phase_durations):
+            accumulated += duration
+            if t < accumulated:
+                return i
+        return len(self.phase_durations) - 1
+
+    def step(self, adapter: SimulationPort, inputs: SixSigGreenWaveInput) -> SixSigGreenWaveOutput:
+        self._clock += adapter.seconds_per_step
+        return SixSigGreenWaveOutput(
+            phase_0=self._phase_at_time(self._clock - 0 * self.prop_delay_s),
+            phase_1=self._phase_at_time(self._clock - 1 * self.prop_delay_s),
+            phase_2=self._phase_at_time(self._clock - 2 * self.prop_delay_s),
+            phase_3=self._phase_at_time(self._clock - 3 * self.prop_delay_s),
+            phase_4=self._phase_at_time(self._clock - 4 * self.prop_delay_s),
+            phase_5=self._phase_at_time(self._clock - 5 * self.prop_delay_s),
+        )
