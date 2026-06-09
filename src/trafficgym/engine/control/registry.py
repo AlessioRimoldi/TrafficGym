@@ -9,7 +9,7 @@ from typing import Any, TypedDict
 @dataclass
 class BlockParam:
     name: str
-    type: str   # "number" | "string" | "phase_list" | "select"
+    type: str   # "number" | "string" | "phase_list" | "select" | "list[int]"
     label: str
     default: Any = None
     choices: list[str] | None = None  # required when type == "select"
@@ -35,6 +35,8 @@ BLOCK_REGISTRY: dict[str, BlockDef] = {}
 
 
 def _annotation_to_param_type(annotation: Any) -> str:
+    if annotation == "list[int]":
+        return "array[int]"
     if annotation is str:
         return "string"
     return "number"
@@ -59,7 +61,7 @@ def _type_to_str(t: Any) -> str | None:
     origin = getattr(t, "__origin__", None)
     if origin is list:
         args = getattr(t, "__args__", ())
-        inner = _type_to_str(args[0]) or "Any" if args else "Any"
+        inner = (_type_to_str(args[0]) or "Any") if args else "Any"
         return f"list[{inner}]"
     if origin is tuple:
         args = getattr(t, "__args__", ())
@@ -118,7 +120,7 @@ def _init_params(cls: type[Any]) -> list[BlockParam]:
             continue
         params.append(BlockParam(
             name=name,
-            type=_annotation_to_param_type(hints.get(name)),
+            type=_type_to_str(hints.get(name)) or "None",
             label=_label_from_name(name),
             default=param.default,
         ))

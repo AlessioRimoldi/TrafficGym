@@ -202,6 +202,9 @@ class SixSigGreenWaveOutput(TypedDict, total=False):
     phase_4: int
     phase_5: int
 
+default_program = [10, 3, 10, 3, 10, 3, 10, 3]
+
+# @block("6 Signal Green Wave", extra_params=[BlockParam("dur_rows", "dur_list", "Durations")])
 @block("6 Signal Green Wave")
 class SixSigGreenWave:
     """Set the phase for six identical TLS programmes such that phase 0 (first green)
@@ -211,9 +214,24 @@ class SixSigGreenWave:
         self,
         prop_delay_s: float = 12.0,
         initial_offset_s: float = 0.0,
+        eight_durations: list[int] = default_program
     ):
+        self.phase_durations: list[int]
+
+        len_durations = len(eight_durations)
+        if len_durations == 0:
+            self.phase_durations = default_program
+        elif len(eight_durations) != 8:
+            raise ValueError(
+                f"There must be 8 durations"
+            )
+        else:
+            if any(d < 0 for d in eight_durations):
+                raise ValueError("phase durations must be non-negative")
+
+            self.phase_durations = eight_durations
+            
         self.prop_delay_s = prop_delay_s
-        self.phase_durations: list[int] = [4, 3, 4, 3, 4, 3, 4, 3]
         self._cycle_length: float = sum(self.phase_durations)
         self._clock: float = -initial_offset_s
 

@@ -52,6 +52,7 @@ type ParamDef =
     | { type?: "number"; name: string; label: string; default: number }
     | { type: "string";  name: string; label: string; default: string }
     | { type: "phase_list"; name: string; label: string }
+    | { type: "list[int]"; name: string, label: string, default: string[] }
     | { type: "select"; name: string; label: string; default: string; choices: string[] };
 
 interface PortDef { key: string; type: string }
@@ -144,7 +145,7 @@ interface BlockSpec {
     params: Record<string, unknown>;
     inputs_from: string[];
     input_wiring?: Record<string, string>;
-    actuate_to: string | null;
+    actuate_to: string[];
     record?: { output_key: string; name: string }[];
 }
 
@@ -678,7 +679,16 @@ function createPipelineRow(
         if (!typesCompatible(ft, tt)) return false;   // type mismatch
         const fk = from.dataset.portKey;
         const tk = to.dataset.portKey;
-        if (fk && tk && fk !== tk) return false;      // explicit key mismatch
+        if (fk && tk) {
+            const fkBase = fk.replace(/_\d+$/, "");
+            const tkBase = tk.replace(/_\d+$/, "");
+
+            const compatible =
+                fk === tk ||              // exact match
+                fkBase === tkBase;        // phase_0 -> phase
+
+            return compatible;
+        }
         if (!fk && tk) return false;                  // destination requires a key but source has none
         return true;
     }
@@ -947,7 +957,7 @@ function createPipelineRow(
             grid.className = "row g-1";
 
             // Keyed references used for inter-param linking after the loop.
-            const inputEls = new Map<string, HTMLInputElement>();
+            const inputEls = new Map<string, HTMLInputElement[]>();
             const selectEls = new Map<string, HTMLSelectElement>();
 
             for (const p of params) {
@@ -1013,7 +1023,70 @@ function createPipelineRow(
                     input.className = "form-control form-control-sm";
                     input.value = String(paramValues[p.name] ?? p.default);
                     input.addEventListener("input", () => { paramValues[p.name] = input.value; onParamChange?.(); });
-                    inputEls.set(p.name, input);
+                    inputEls.set(p.name, [input]);
+                    col.append(lbl, input);
+                    grid.appendChild(col);
+                } else if (p.type === "list[int]") {
+                    const col = document.createElement("div");
+                    col.className = "col-6";
+
+                    const lbl = document.createElement("label");
+                    lbl.className = "form-label mb-0 small text-muted";
+                    lbl.textContent = p.label;
+
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.className = "form-control form-control-sm";
+                    input.defaultValue = input.placeholder = p.default.join(",");
+
+                    function parseValues(raw: string): number[] | null {
+                        const parts = raw
+                            .split(",")
+                            .map(v => v.trim())
+                            .filter(v => v.length > 0);
+
+                        if (parts.length !== 8) return null;
+
+                        const nums: number[] = [];
+
+                        for (const part of parts) {
+                            const n = Number(part);
+
+                            if (!Number.isInteger(n) || n <= 0) {
+                                return null;
+                            }
+
+                            nums.push(n);
+                        }
+
+                        return nums;
+                    }
+
+                    function update(): void {
+                        const raw = input.value;
+                        const parsed = parseValues(raw);
+
+                        if (!parsed) {
+                            input.classList.add("is-invalid");
+                            paramValues[p.name] = null;
+                            onParamChange?.();
+                            return;
+                        }
+
+                        input.classList.remove("is-invalid");
+                        paramValues[p.name] = parsed;
+                        onParamChange?.();
+                    }
+
+                    input.addEventListener("input", () => {
+                        update();
+                    });
+
+                    const raw = paramValues[p.name];
+                    if (Array.isArray(raw)) {
+                        input.value = raw.join(",");
+                    }
+
                     col.append(lbl, input);
                     grid.appendChild(col);
                 } else {
@@ -1030,7 +1103,7 @@ function createPipelineRow(
                         paramValues[p.name] = input.value !== "" ? Number(input.value) : p.default;
                         onParamChange?.();
                     });
-                    inputEls.set(p.name, input);
+                    inputEls.set(p.name, [input]);
                     col.append(lbl, input);
                     grid.appendChild(col);
                 }
@@ -1042,9 +1115,9 @@ function createPipelineRow(
             if (typeSelEl && valueInputEl) {
                 const syncValueInput = () => {
                     const isNumeric = typeSelEl.value === "float" || typeSelEl.value === "int";
-                    valueInputEl.type = isNumeric ? "number" : "text";
+                    valueInputEl[0].type = isNumeric ? "number" : "text";
                     if (isNumeric) {
-                        valueInputEl.step = typeSelEl.value === "int" ? "1" : "any";
+                        valueInputEl[0].step = typeSelEl.value === "int" ? "1" : "any";
                     }
                 };
                 typeSelEl.addEventListener("change", syncValueInput);
@@ -1145,14 +1218,14 @@ function createPipelineRow(
                         .filter((id): id is string => id !== null);
                 }
                 // Actuator: driven from the first output port.
-                const outConn = conns.find(cn => b.outPorts.includes(cn.from));
+                const outConns = conns.filter(cn => b.outPorts.includes(cn.from));
                 return {
                     id: b.id,
                     key: b.key,
                     params: { ...b.params },
                     inputs_from,
                     ...(input_wiring && Object.keys(input_wiring).length > 0 ? { input_wiring } : {}),
-                    actuate_to: outConn ? (inPortToActId.get(outConn.to) ?? null) : null,
+                    actuate_to: outConns.map(oc => inPortToActId.get(oc.to) ?? null).filter(oc => oc !== null),
                     record: b.record.filter(r => r.name.trim()).length > 0 ? b.record.filter(r => r.name.trim()) : undefined,
                 };
             }),
@@ -1338,7 +1411,7 @@ function createPipelineRow(
             key, bDef?.params ?? [], paramValues, () => {}, false,
             bDef?.input_ports ?? [], bDef?.output_ports ?? [],
             revalidate,
-            key !== "Constant",
+            bDef?.input_ports?.length !== 0,
         );
         br.inPorts = inPorts;
         br.outPorts = outPorts;
@@ -1573,11 +1646,11 @@ function createPipelineRow(
                     }
                 }
             }
-            if (spec.actuate_to) {
-                const to = actPortById.get(spec.actuate_to);
-                const outPort = br.outPorts[0];
+            spec.actuate_to.forEach((act_id, i) => {
+                const to = actPortById.get(act_id);
+                const outPort = br.outPorts[i];
                 if (to && outPort) connectPorts(outPort, to);
-            }
+            })
         });
 
     }

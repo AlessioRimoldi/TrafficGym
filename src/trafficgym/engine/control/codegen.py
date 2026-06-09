@@ -26,7 +26,7 @@ class _BlockSpecBase(TypedDict):
     key: str
     params: dict[str, Any]
     input_from: str | None
-    actuate_to: str | None
+    actuate_to: dict[str, str]
 
 class _RecordEntry(TypedDict):
     output_key: str
@@ -156,6 +156,13 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
                 phase_strs = [r["state"] for r in rows]
                 durations = [r["duration"] for r in rows]
                 out.append(f"{var} = StaticTLSController({phase_strs!r}, {durations!r})")
+            # elif blk["key"] == "SixSigGreenWave":
+            #     rows = blk.get("params", {}).get("phase_rows") or []
+            #     phase_strs = [r["state"] for r in rows]
+            #     durations = [r["duration"] for r in rows]
+
+            #     kwargs = ", ".join(f"{k}={repr(v)}" for k, v in blk.get("params", {}).items())
+            #     out.append(f"{var} = SixSigGreenWave(durations={durations!r}), {kwargs}")
             else:
                 kwargs = ", ".join(f"{k}={repr(v)}" for k, v in blk.get("params", {}).items())
                 out.append(f"{var} = {blk['key']}({kwargs})")
@@ -256,21 +263,35 @@ def _generate_body(pipelines: dict[str, _PipelineSpec], phases: list[_PhaseSpec]
 
                 # Actuate function — receives block.step() output; applies to SUMO and/or records.
                 # For blocks with dynamic output keys (e.g. Renamer) fall back to params.
-                output_key = (
-                    (blk_def.output_ports[0]["key"] if blk_def and blk_def.output_ports else None)
-                    or str(blk.get("params", {}).get("output_key", "value"))
+                output_keys = (
+                    ([port["key"] for port in blk_def.output_ports] if blk_def and blk_def.output_ports else None)
+                    or [str(blk.get("params", {}).get("output_key", "value"))]
                 )
-                act: _ActuatorSpec | None = act_by_id.get(blk.get("actuate_to") or "")
+
+                actuate_to = blk.get("actuate_to", [])
+
+                if actuate_to and len(actuate_to) != len(output_keys):
+                    raise ValueError(
+                        f"Block {blk['id']} has {len(output_keys)} output(s) "
+                        f"but {len(actuate_to)} actuator target(s)"
+                    )
+
+                act_pairs: list[tuple[_ActuatorSpec, str]] = []
+                for act_id, output_key in zip(actuate_to, output_keys):
+                    act_pairs.append((act_by_id[act_id], output_key))
+
                 act_fn = f"_act_{ctrl_var}"
                 out.append(f"def {act_fn}(a: SimulationPort, r: dict[str, Any]) -> None:")
-                out.append(f'{_I}if "{output_key}" not in r:')
-                out.append(f"{_I * 2}return")
-                if has_actuate and act:
-                    param_key = _SETTER_PARAM_KEY.get(act["setter"], "value")
-                    out.append(
-                        f'{_I}a.apply("{act["domain"]}", "{act["setter"]}", '
-                        f'"{act["object_id"]}", {{"{param_key}": r["{output_key}"]}})'
-                    )
+
+                for act, output_key in act_pairs:
+                    out.append(f'{_I}if "{output_key}" in r:')
+                    if has_actuate and act:
+                        param_key = _SETTER_PARAM_KEY.get(act["setter"], "value")
+                        out.append(
+                            f'{_I * 2}a.apply("{act["domain"]}", "{act["setter"]}", '
+                            f'"{act["object_id"]}", {{"{param_key}": r["{output_key}"]}})'
+                        )
+
                 for rec in blk_record:
                     rkey = rec["output_key"]
                     rname = rec["name"]
