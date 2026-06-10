@@ -111,16 +111,16 @@ class ALINEAProportional:
     Computes r(k) = r(k-1) + Kr * (rho_star - rho(k)), where rho is downstream
     occupancy (%) and Kr is the proportional gain (veh/h per %)."""
 
-    def __init__(self, target_occupancy: float = 20.0, Kr: float = 70.0, saturation: float = 5.0):
+    def __init__(self, target_occupancy: float = 20.0, Kr: float = 70.0, up_saturation_per_s: float = 5.0):
         self.r_min = 180.0
         self.r_max = 1800.0
         self.o_hat = target_occupancy
         self.Kr = Kr
         self.last_meter_rate = self.r_max
-        self.saturation = saturation
+        self.saturation = up_saturation_per_s
 
     def step(self, adapter: SimulationPort, inputs: ALINEAProportionalInput) -> ALINEAProportionalOutput:
-        new_meter_rate = min(self.last_meter_rate + self.Kr * (self.o_hat - inputs["occupancy"]), self.saturation)
+        new_meter_rate = min(self.last_meter_rate + self.Kr * (self.o_hat - inputs["occupancy"]), self.saturation * adapter.seconds_per_step)
         new_meter_rate = max(self.r_min, min(self.r_max, new_meter_rate))
         self.last_meter_rate = new_meter_rate
         return {"meter_rate_veh_per_h": new_meter_rate}
@@ -139,19 +139,19 @@ class ALINEAProportionalDerivative:
     r(k) = r(k-1) + Kr*(rho_star - rho(k)) + Kd*(rho(k-1) - rho(k))
     Kr drives occupancy to the setpoint; Kd anticipates trends via the rate of change."""
 
-    def __init__(self, target_occupancy: float = 20.0, Kr: float = 70.0, Kd: float = 35.0, up_saturation: float = 5.0):
+    def __init__(self, target_occupancy: float = 20.0, Kr: float = 70.0, Kd: float = 35.0, up_saturation_per_s: float = 5.0):
         self.r_min = 180.0
         self.r_max = 1800.0
         self.o_hat = target_occupancy
         self.Kr = Kr
         self.Kd = Kd
-        self.up_saturation = up_saturation
+        self.up_saturation = up_saturation_per_s
         self.last_meter_rate = self.r_max
         self.last_occupancy: float | None = None
 
     def step(self, adapter: SimulationPort, inputs: ALINEAPDInput) -> ALINEAPDOutput:
         occ = inputs["occupancy"]
-        p_term = min(self.Kr * (self.o_hat - occ), self.up_saturation)
+        p_term = min(self.Kr * (self.o_hat - occ), self.up_saturation * adapter.seconds_per_step)
         d_term = self.Kd * (self.last_occupancy - occ) if self.last_occupancy is not None else 0.0
         new_meter_rate = max(self.r_min, min(self.r_max, self.last_meter_rate + p_term + d_term))
         self.last_meter_rate = new_meter_rate
@@ -173,7 +173,7 @@ class ALINEAProportionalIntegral:
     Ki drives occupancy to the setpoint (same role as Kr in ALINEA-P).
     Kp damps oscillations by reacting to the rate of occupancy change."""
 
-    def __init__(self, target_occupancy: float = 20.0, Kp: float = 35.0, Ki: float = 70.0):
+    def __init__(self, target_occupancy: float = 20.0, Kp: float = 35.0, Ki: float = 70.0, up_saturation_per_s: float = 5.0):
         self.r_min = 180.0
         self.r_max = 1800.0
         self.o_hat = target_occupancy
@@ -181,10 +181,11 @@ class ALINEAProportionalIntegral:
         self.Ki = Ki
         self.last_meter_rate = self.r_max
         self.last_occupancy: float | None = None
+        self.saturation = up_saturation_per_s
 
     def step(self, adapter: SimulationPort, inputs: ALINEAPIInput) -> ALINEAPIOutput:
         occ = inputs["occupancy"]
-        p_term = self.Kp * (self.last_occupancy - occ) if self.last_occupancy is not None else 0.0
+        p_term = min(self.Kp * (self.last_occupancy - occ) if self.last_occupancy is not None else 0.0, self.saturation * adapter.seconds_per_step)
         i_term = self.Ki * (self.o_hat - occ)
         new_meter_rate = max(self.r_min, min(self.r_max, self.last_meter_rate + p_term + i_term))
         self.last_meter_rate = new_meter_rate

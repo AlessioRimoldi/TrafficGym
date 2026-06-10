@@ -1411,7 +1411,7 @@ function createPipelineRow(
             key, bDef?.params ?? [], paramValues, () => {}, false,
             bDef?.input_ports ?? [], bDef?.output_ports ?? [],
             revalidate,
-            bDef?.input_ports?.length !== 0,
+            key !== "Constant",
         );
         br.inPorts = inPorts;
         br.outPorts = outPorts;

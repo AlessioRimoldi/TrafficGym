@@ -36,19 +36,19 @@ class RollingAverage:
     """Smooths each input key independently with a rolling average
     over a fixed window of recent values."""
 
-    def __init__(self, window: int = 10) -> None:
-        self._window = window
+    def __init__(self, window_s: int = 10) -> None:
+        self._window = window_s
         self._bufs: dict[str, deque[float]] = {}
 
-    def _buf(self, key: str) -> deque[float]:
+    def _buf(self, key: str, steps_per_s: int) -> deque[float]:
         if key not in self._bufs:
-            self._bufs[key] = deque(maxlen=self._window)
+            self._bufs[key] = deque(maxlen=self._window * steps_per_s)
         return self._bufs[key]
 
     def step(self, adapter: SimulationPort, inputs: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for k, v in inputs.items():
-            buf = self._buf(k)
+            buf = self._buf(k, int(adapter.steps_per_second))
             buf.append(float(v))
             result[k] = sum(buf) / len(buf)
         return result

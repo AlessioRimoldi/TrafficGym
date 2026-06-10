@@ -1234,7 +1234,7 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
                         updates.append({"type": type_name, "id": str(obj["id"]), "status": obj["status"]})
 
             for obj in RunExecution.objects.filter(status="RUNNING").values(
-                "id", "current_step", "run_request__experiment__total_steps"
+                "id", "current_step", "run_request__experiment__total_steps", "run_request__step_length_ms"
             ):
                 key = f"re_progress_{obj['id']}"
                 step_str = str(obj["current_step"])
@@ -1244,15 +1244,15 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
                         "type": "run_execution_progress",
                         "id": str(obj["id"]),
                         "current_step": obj["current_step"],
-                        "total_steps": obj["run_request__experiment__total_steps"],
+                        "total_steps": obj["run_request__experiment__total_steps"] * 1000 / obj["run_request__step_length_ms"],
                     })
 
             for obj in RunRequest.objects.filter(status="RUNNING").annotate(
                 current_steps_sum=Sum("executions__current_step"),
-            ).values("id", "current_steps_sum", "rerun_count", "experiment__total_steps"):
+            ).values("id", "current_steps_sum", "rerun_count", "experiment__total_steps", "step_length_ms"):
                 current = obj["current_steps_sum"] or 0
                 exp_total = obj["experiment__total_steps"] or -1
-                total = exp_total * obj["rerun_count"] if exp_total > 0 else -1
+                total = exp_total * obj["rerun_count"] * 1000 / obj["step_length_ms"] if exp_total > 0 else -1
                 key = f"rr_progress_{obj['id']}"
                 step_str = str(current)
                 if seen.get(key) != step_str:

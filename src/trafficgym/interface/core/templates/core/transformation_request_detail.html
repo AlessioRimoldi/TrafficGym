@@ -14,7 +14,7 @@
         <p><strong>Transformation Request ID:</strong> {{ transformation_request.id }}</p>
         <p><strong>Method:</strong> <span style="font-family: monospace;">{{ transformation_request.method }}</span></p>
         <p><strong>Status:</strong>
-            {% include "core/components/status_badge.html" with status=transformation_request.status %}
+            <span data-status-id="tr_{{ transformation_request.id }}">{% include "core/components/status_badge.html" with status=transformation_request.status %}</span>
         </p>
         </div>
     </div>
