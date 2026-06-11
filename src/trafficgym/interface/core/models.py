@@ -257,7 +257,7 @@ class RunRequest(models.Model):
 
 class RunExecution(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    run_request = models.ForeignKey(
+    run_request: models.ForeignKey[RunRequest] = models.ForeignKey(
         RunRequest, on_delete=models.CASCADE, related_name="executions"
     )
     engine_run_id = models.UUIDField(
@@ -278,7 +278,6 @@ class RunExecution(models.Model):
 
     subscription_logs: models.Manager[SubscriptionLogEntry]
     worker_logs: models.Manager[WorkerLogEntryRunExecution]
-
 
 class WorkerLogEntryRunRequest(models.Model):
     run_request: models.ForeignKey[RunRequest | None] = models.ForeignKey(

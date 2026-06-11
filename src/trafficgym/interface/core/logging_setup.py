@@ -190,10 +190,10 @@ class LogPersistenceHandlerRunRequest(BaseLogPersistenceHandler):
 
 
 class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
-    def __init__(self, run_execution: RunExecution, engine_run_id: UUID):
+    def __init__(self, run_execution: RunExecution, engine_run_id: str | UUID | None):
         super().__init__()
         self.run_execution = run_execution
-        self.engine_run_id = engine_run_id
+        self.engine_run_id = UUID(str(engine_run_id)) if engine_run_id is not None else None
 
     # def set_engine_run_id(self, engine_run_id: UUID) -> None:
     #     self.engine_run_id = engine_run_id
@@ -223,7 +223,7 @@ class LogPersistenceHandlerRunExecution(BaseLogPersistenceHandler):
                     if record.levelno >= logging.ERROR and exception_type:
                         rr_error_objs.append(
                             WorkerLogEntryRunRequest(
-                                run_request_id=self.run_execution.run_request_id,
+                                run_request_id=self.run_execution.run_request.id,
                                 event_time=event_time,
                                 level=record.levelname,
                                 message=f"[seed {self.run_execution.seed}] {record.getMessage()}",

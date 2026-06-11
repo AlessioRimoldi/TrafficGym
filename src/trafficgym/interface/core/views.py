@@ -351,7 +351,7 @@ def run_execution_detail_view(request: HttpRequest, pk: str) -> HttpResponse:
         row["subscription_fingerprint"]: json.dumps(
             {
                 "runs": {
-                    str(cast(RunRequest, run_execution.run_request).id): [
+                    str(run_execution.run_request.id): [
                         {
                             "subscription": row["subscription_fingerprint"],
                             "aggMode": "",

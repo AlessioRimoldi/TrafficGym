@@ -112,6 +112,20 @@ def on_task_failure(
     run_request_id: str | uuid.UUID = args[0]
     execution_id: str | uuid.UUID = args[1]
 
+    try:
+        execution = RunExecution.objects.get(id=execution_id)
+        handler = LogPersistenceHandlerRunExecution(execution, execution.engine_run_id)
+        logging.getLogger(__name__).error(
+            "Worker process exited prematurely (WorkerLostError). "
+            "This is likely caused by sumo-gui attempting to open a display "
+            "in a headless environment. Use sumo instead of sumo-gui, or "
+            "provision a virtual display (Xvfb) in the worker container.",
+        )
+        handler.flush_queue()
+        handler.deregister()
+    except Exception:
+        pass
+
     RunExecution.objects.filter(
         id=execution_id, status="RUNNING"
     ).update(status="FAILED", finished_at=timezone.now())
