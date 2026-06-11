@@ -10,8 +10,7 @@ import json
 import uuid
 import hashlib
 
-# Create your models here.
-
+TERMINAL_STATES = frozenset({"COMPLETE", "FAILED"})
 
 class Artefact(models.Model):
     sha256 = models.CharField(

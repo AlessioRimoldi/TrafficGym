@@ -6,12 +6,14 @@ import hashlib
 import logging
 
 from celery import shared_task, Task
+from celery.signals import task_failure
 from django.db import transaction
 from django.utils import timezone
 from django.core.files import File
 from pathlib import Path
 from django.core.files.storage import default_storage
 from typing import Any, ParamSpec, cast
+from billiard.exceptions import WorkerLostError
 
 from trafficgym.engine.adapters.libsumo_adapter import LibsumoAdapter
 from trafficgym.engine.ports.simulation import RunConfig
@@ -24,6 +26,7 @@ from trafficgym.interface.core.models import (
     Scenario,
     TransformationRequest,
     TransformationOutput,
+    TERMINAL_STATES,
 )
 from trafficgym.interface.core.logging_setup import (
     BaseLogPersistenceHandler,
@@ -90,6 +93,31 @@ def _maybe_complete_run_request(run_request_id: str | uuid.UUID) -> None:
         run_request.finished_at = timezone.now()
         run_request.save(update_fields=["status", "finished_at"])
 
+@task_failure.connect
+def on_task_failure(
+    task_id: str,
+    exception: BaseException,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    sender: Task[Any, Any] | None = None,
+    **kw: Any,
+) -> None:
+    if not isinstance(exception, WorkerLostError):
+        return
+    if getattr(sender, "name", "") != "trafficgym.interface.core.tasks.process_run_execution":
+        return
+    if len(args) < 2:
+        return
+
+    run_request_id: str | uuid.UUID = args[0]
+    execution_id: str | uuid.UUID = args[1]
+
+    RunExecution.objects.filter(
+        id=execution_id, status="RUNNING"
+    ).update(status="FAILED", finished_at=timezone.now())
+
+    _maybe_complete_run_request(run_request_id)
+
 
 class RunRequestTask(Task[P, None]):
     abstract = True
@@ -135,7 +163,7 @@ class RunExecutionTask(Task[P, None]):
         with transaction.atomic():
             RunExecution.objects.filter(
                 id=execution_id,
-                status__in=["PENDING", "RUNNING"],
+                status__not__in=TERMINAL_STATES,
             ).update(status="FAILED", finished_at=timezone.now())
 
         _maybe_complete_run_request(run_request_id)
@@ -420,12 +448,11 @@ def derive_from_artefact(artefact_transformation_request_id: str, scenario_id: s
         raise
 
     finally:
-        # breakpoint()
-        # with transaction.atomic():
-        #     if transformation_request.status in ["PENDING", "PREPARING", "RUNNING"]:
-        #         transformation_request.status = "FAILED"
-        #         transformation_request.finished_at = timezone.now()
-        #         transformation_request.save(update_fields=["status", "finished_at"])
+        if transformation_request.status not in TERMINAL_STATES:
+            with transaction.atomic():
+                transformation_request.status = "FAILED"
+                transformation_request.finished_at = timezone.now()
+                transformation_request.save(update_fields=["status", "finished_at"])
 
         if handler is not None:
             handler.flush_queue()

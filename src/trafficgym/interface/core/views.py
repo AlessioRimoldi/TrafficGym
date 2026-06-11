@@ -21,6 +21,7 @@ from .models import (
     TransformationRequest,
     TransformationInput,
     TransformationOutput,
+    TERMINAL_STATES,
 )
 from .forms import ScenarioForm, ExperimentForm, ArtefactForm
 from django.urls import reverse
@@ -1162,7 +1163,6 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
     import time
     from typing import Generator
 
-    terminal = frozenset({"COMPLETE", "FAILED"})
     models_cfg: list[tuple[type[Any], str, str]] = [
         (RunRequest,            "rr", "run_request"),
         (RunExecution,          "re", "run_execution"),
@@ -1206,7 +1206,7 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
             current_active: set[str] = set()
 
             for model, prefix, type_name in models_cfg:
-                for obj in model.objects.exclude(status__in=terminal).values("id", "status"):
+                for obj in model.objects.exclude(status__in=TERMINAL_STATES).values("id", "status"):
                     key = f"{prefix}_{obj['id']}"
                     current_active.add(key)
                     watching.add(key)
@@ -1226,7 +1226,7 @@ def status_events(_: HttpRequest) -> StreamingHttpResponse:
             recent_cutoff = tz.now() - timedelta(seconds=10)
             for model, prefix, type_name in models_cfg:
                 for obj in model.objects.filter(
-                    status__in=terminal, finished_at__gte=recent_cutoff
+                    status__in=TERMINAL_STATES, finished_at__gte=recent_cutoff
                 ).values("id", "status"):
                     key = f"{prefix}_{obj['id']}"
                     if seen.get(key) != obj["status"]:
