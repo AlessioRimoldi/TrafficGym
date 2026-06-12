@@ -10,11 +10,13 @@ seeding, subscription logging, and analytics.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents
+   :caption: Contents:
 
    getting_started
+   db_reset
    case_study_ramp_meter
-   generating_a_network
+   case_study_generating_a_network
+   case_study_file_based_experiment
    extending
    engine.experiment
    engine.ports

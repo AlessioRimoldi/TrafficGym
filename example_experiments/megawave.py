@@ -15,7 +15,7 @@ class grid(Experiment):
         _blk_4 = SixSigGreenWave(prop_delay_s=17, eight_durations=program, initial_offset_s=17 * 4)
         _blk_5 = SixSigGreenWave(prop_delay_s=17, eight_durations=program, initial_offset_s=17 * 5)
 
-# -------------------------
+        # -------------------------
         # ctrl 0
         # -------------------------
         def _obs__ctrl_0(a: SimulationPort, t: float) -> dict[str, Any]:

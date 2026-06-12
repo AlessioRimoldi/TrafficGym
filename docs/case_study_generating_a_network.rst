@@ -1,7 +1,7 @@
-Generating a SUMO Network from OpenStreetMap
-============================================
+Case Study 2 — Generating a SUMO Network from OpenStreetMap
+============================================================
 
-This guide walks through converting an OpenStreetMap export into a full SUMO
+This case study walks through converting an OpenStreetMap export into a full SUMO
 simulation setup — network, routes, and configuration — using TrafficGym's
 built-in transformations.
 

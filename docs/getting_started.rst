@@ -267,3 +267,4 @@ fingerprint and an aggregation mode:
 
 The chart overlays all selected subscriptions on a single time-series plot,
 allowing you to compare metrics across different run requests side by side.
+

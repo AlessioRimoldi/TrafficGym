@@ -14,7 +14,7 @@ class RatioActuatorOutputs(TypedDict, total=False):
 
 @block("Green Time Ratio Actuator", extra_params=[BlockParam("duty_phase", "select", "Duty Phase", "0", ["0", "2"])])
 class RatioActuator:
-    """Actuates a four legged intersection traffic light such that phase i is active `duty`% of the time.
+    """Actuates a four legged intersection traffic light such that phase i is active `duty`\\% of the time.
     This actuator expects four phases. Phases 0 and 2 are traffic phases, whilst phases 1 and 3 are clearing phases (yellow aspects)."""
 
     def __init__(
