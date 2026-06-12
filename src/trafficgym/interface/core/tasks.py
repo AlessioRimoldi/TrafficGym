@@ -114,9 +114,9 @@ def on_task_failure(
 
     message = (
         "Worker process exited prematurely (WorkerLostError). "
-        "This is likely caused by sumo-gui attempting to open a display "
-        "in a headless environment. Use sumo instead of sumo-gui, or "
-        "provision a virtual display (Xvfb) in the worker container."
+        "This is likely caused either by sumo-gui attempting to open a display "
+        "in a headless environment, or that the sumo-gui was killed. Use sumo instead of sumo-gui, or "
+        "read the instructions in .env.example to allow docker to open interfaces."
     )
 
     try:

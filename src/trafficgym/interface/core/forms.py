@@ -149,14 +149,6 @@ class ScenarioForm(forms.ModelForm):
                     f"{preview_request.id} for scenario {scenario.id}"
                 )
 
-                preview_id = str(preview_request.id)
-                transaction.on_commit(lambda: safe_delay(
-                    derive_from_artefact, preview_id, scenario_id=sid,
-                    on_broker_error=lambda _: TransformationRequest.objects.filter(
-                        id=preview_id, status="PENDING"
-                    ).update(status="FAILED"),
-                ))
-
             inspect_request = TransformationRequest.objects.create(
                 method=inspect_spec.key,
                 spec_snapshot={
@@ -193,15 +185,6 @@ class ScenarioForm(forms.ModelForm):
                 f"Created inspect transform request "
                 f"{inspect_request.id} for scenario {scenario.id}"
             )
-
-            inspect_id = str(inspect_request.id)
-            transaction.on_commit(lambda: safe_delay(
-                derive_from_artefact, inspect_id, scenario_id=sid,
-                on_broker_error=lambda _: TransformationRequest.objects.filter(
-                    id=inspect_id, status="PENDING"
-                ).update(status="FAILED"),
-            ))
-
         return scenario, created, reused
 
 

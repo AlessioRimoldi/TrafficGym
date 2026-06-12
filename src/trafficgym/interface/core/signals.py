@@ -2,7 +2,7 @@ from django.db.models.signals import post_save
 from django.db import transaction
 from django.dispatch import receiver
 from django.utils import timezone
-from .models import RunRequest, RunStatus, RunExecution, TransformationRequest, WorkerLogEntryRunRequest
+from .models import RunRequest, RunStatus, RunExecution, TransformationRequest, WorkerLogEntryRunRequest, WorkerLogEntryTransformRequest
 from .utils import safe_delay
 from typing import Any
 import logging
@@ -48,8 +48,17 @@ def enqueue_transformation_request(
         return
 
     def on_error(e: Exception) -> None:
-        TransformationRequest.objects.filter(id=instance.id, status="PENDING").update(
-            status="FAILED", finished_at=timezone.now(),
+        now = timezone.now()
+        TransformationRequest.objects.filter(
+            id=instance.id, status="PENDING"
+        ).update(status="FAILED", finished_at=now)
+        WorkerLogEntryTransformRequest.objects.create(
+            transform_request_id=instance.id,
+            event_time=now,
+            level="ERROR",
+            message=str(e),
+            exception_type=type(e).__name__,
+            traceback=traceback.format_exc(),
         )
 
     transaction.on_commit(lambda: safe_delay(derive_from_artefact, str(instance.id), on_broker_error=on_error))
