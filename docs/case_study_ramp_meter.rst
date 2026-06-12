@@ -40,8 +40,12 @@ that produces:
 
 .. note::
 
-   **[SCREENSHOT: scenario card after upload, showing network preview thumbnail
-   and the inspect/preview status badges as COMPLETE]**
+    .. image:: _static/ramp_meter_scenario.png
+       :alt: Scenario card after upload, showing network preview thumbnail
+
+    .. image:: _static/ramp_meter_scenario_transforms.png
+       :alt: Transform Request Statuses for inspect and netpreview
+
 
 Finding the detector IDs with netedit
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,7 +86,8 @@ The pipeline we are building:
 
 .. note::
 
-   **[SCREENSHOT: completed graph with all nodes connected]**
+    .. image:: _static/ramp_meter_full_pipeline.png
+       :alt: Completed graph with all nodes connected
 
 Step 1 — Observer nodes
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -104,8 +109,8 @@ uniformly.
 
 .. note::
 
-   **[SCREENSHOT: observer node configuration panel showing domain/getter/id
-   dropdowns]**
+  .. image:: _static/ramp_meter_obs.png
+      :alt: Observer node configuration panel showing domain/getter/id dropdowns
 
 Step 2 — Max block
 ~~~~~~~~~~~~~~~~~~~
@@ -158,9 +163,9 @@ Connect the Cycle Actuator output into it.  This applies the ``G``/``r`` state
 string to the physical ramp meter signal each time the phase changes.
 
 .. note::
+    .. image:: _static/ramp_meter_full_pipeline.png
+       :alt: Completed graph with all nodes connected
 
-   **[SCREENSHOT: full pipeline from both observers through Max → Rolling Avg
-   → ALINEA-P → Cycle Actuator → TL0 actuator]**
 
 Recording intermediate results
 --------------------------------
@@ -184,9 +189,8 @@ Add the following record entries:
   is requesting.
 
 .. note::
-
-   **[SCREENSHOT: record section on ALINEA-P block with meter_rate entry
-   filled in]**
+  .. image:: _static/ramp_meter_store.png
+      :alt: record section on ALINEA-P block with meter_rate entry filled in
 
 Adding an unconnected observer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -244,9 +248,8 @@ Watch the ramp meter at junction ``TL0`` — you should see it cycling between
 green and red according to mainline congestion.
 
 .. note::
-
-   **[SCREENSHOT: sumo-gui showing the ramp meter scenario mid-run with
-   vehicles queued on the on-ramp]**
+  .. image:: _static/ramp_meter_sumo_midsim.png
+      :alt: sumo-gui showing the ramp meter scenario mid-run with vehicles queued on the on-ramp
 
 Full multi-seed run
 ~~~~~~~~~~~~~~~~~~~~
@@ -307,8 +310,11 @@ controller behaviour.
 
 .. note::
 
-   **[SCREENSHOT: analytics chart with smoothed_occupancy for three Kr
-   variants overlaid, avg mode, showing convergence differences]**
+  .. image:: _static/ramp_meter_avg_max_occ.png
+      :alt: Analytics graph showing average max occupancy for 20 runs.
+
+  .. image:: _static/ramp_meter_setrate.png
+      :alt: Analytics graph showing average meter rate setpoint for 20 runs.
 
 Downloading results
 ~~~~~~~~~~~~~~~~~~~~
