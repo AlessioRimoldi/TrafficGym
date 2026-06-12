@@ -117,14 +117,14 @@ class ALINEAProportional:
         self.o_hat = target_occupancy
         self.Kr = Kr
         self.last_meter_rate = self.r_max
-        self.saturation = up_saturation_per_s
+        self.up_saturation = up_saturation_per_s
 
     def step(self, adapter: SimulationPort, inputs: ALINEAProportionalInput) -> ALINEAProportionalOutput:
-        new_meter_rate = min(self.last_meter_rate + self.Kr * (self.o_hat - inputs["occupancy"]), self.saturation * adapter.seconds_per_step)
-        new_meter_rate = max(self.r_min, min(self.r_max, new_meter_rate))
+        correction = self.Kr * (self.o_hat - inputs["occupancy"])
+        correction = min(correction, self.up_saturation * adapter.seconds_per_step)
+        new_meter_rate = max(self.r_min, min(self.r_max, self.last_meter_rate + correction))
         self.last_meter_rate = new_meter_rate
         return {"meter_rate_veh_per_h": new_meter_rate}
-
 
 class ALINEAPDInput(TypedDict):
     occupancy: float
